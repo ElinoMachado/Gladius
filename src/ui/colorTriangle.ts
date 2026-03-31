@@ -58,7 +58,6 @@ export function mountColorTriangleEditor(
     <div class="color-triangle__popover" role="listbox" hidden></div>
   `;
 
-  const fillEl = root.querySelector(".color-triangle__fill") as HTMLElement;
   const synEl = root.querySelector("#ct-syn") as HTMLElement;
   const pop = root.querySelector(".color-triangle__popover") as HTMLElement;
   const vtxBtns = root.querySelectorAll(
@@ -131,9 +130,9 @@ export function mountColorTriangleEditor(
   const refresh = (): void => {
     const colors = opts.getColors();
     const [c0, c1, c2] = colors;
-    fillEl.style.setProperty("--ct-0", teamColorCss(c0!));
-    fillEl.style.setProperty("--ct-1", teamColorCss(c1!));
-    fillEl.style.setProperty("--ct-2", teamColorCss(c2!));
+    root.style.setProperty("--ct-0", teamColorCss(c0!));
+    root.style.setProperty("--ct-1", teamColorCss(c1!));
+    root.style.setProperty("--ct-2", teamColorCss(c2!));
     synEl.textContent = describeSynergy([...colors]);
     vtxBtns.forEach((b, i) => {
       const c = colors[i]!;

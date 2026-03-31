@@ -13,7 +13,14 @@ import { ShopStall3D } from "./render/ShopStall3D";
 import { CrystalShop3D } from "./render/CrystalShop3D";
 import { BunkerPreview3D } from "./render/BunkerPreview3D";
 import { ForgePiecePreview3D } from "./render/ForgePiecePreview3D";
-import type { GamePhase, HeroClassId, TeamColor, BiomeId, Unit } from "./game/types";
+import type {
+  GamePhase,
+  HeroClassId,
+  TeamColor,
+  BiomeId,
+  Unit,
+  WeaponLevel,
+} from "./game/types";
 import type { SkillDef } from "./game/data/heroes";
 import { HEROES } from "./game/data/heroes";
 import { BIOME_DESCRIPTIONS, BIOME_LABELS } from "./game/data/biomes";
@@ -43,6 +50,7 @@ import {
   mountReadOnlyColorTriangle,
 } from "./ui/colorTriangle";
 import { initMusicVolumeControl } from "./ui/musicVolumeControl";
+import { mountCrystalSelect } from "./ui/crystalSelect";
 import { axialKey, hexDistance } from "./game/hex";
 import { permPercent, nextMetaCost, nextInitialCardCost } from "./game/metaStore";
 import {
@@ -62,7 +70,6 @@ import {
   FINAL_VICTORY_WAVE,
   getEnemyArchetype,
   partyScaleMultiplier,
-  totalEnemyCountForWave,
   waveMultiplier,
 } from "./game/data/enemies";
 import {
@@ -134,6 +141,8 @@ import {
   ateMorteCooldownWaves,
   ateMorteDamageMult,
   ateMorteManaCost,
+  furacaoBleedPct,
+  furacaoBleedTurns,
   furacaoDamageMult,
   gladiadorDuelHpPerWin,
   paraisoManaShieldMult,
@@ -384,7 +393,6 @@ function heroSetupDifficultyBannerHtml(heroCount: number): string {
   if (heroCount <= 0) {
     return `<div class="hero-setup-difficulty" role="status">
       <div class="hero-setup-difficulty__title"><strong>Dificuldade e tamanho do grupo</strong></div>
-      <p class="hero-setup-difficulty__p">Cada herói extra deixa a run mais dura: os inimigos ganham mais vida, dano e defesa e aparecem em maior número por wave (na 1.ª wave, cerca de <strong>3 / 6 / 9</strong> inimigos para 1 / 2 / 3 heróis).</p>
       <div class="hero-setup-difficulty__attrs hero-setup-difficulty__attrs--preview">
         <div class="hero-setup-difficulty__attrs-head">Exemplos — atributos inimigos</div>
         <ul class="hero-setup-difficulty__stats hero-setup-difficulty__stats--compact">
@@ -396,7 +404,6 @@ function heroSetupDifficultyBannerHtml(heroCount: number): string {
     </div>`;
   }
   const mult = partyScaleMultiplier(heroCount);
-  const w1 = totalEnemyCountForWave(1, heroCount, 1);
   const warn =
     heroCount >= 3
       ? "hero-setup-difficulty--warn"
@@ -407,17 +414,15 @@ function heroSetupDifficultyBannerHtml(heroCount: number): string {
     return `<div class="hero-setup-difficulty ${warn}" role="status">
       <div class="hero-setup-difficulty__title"><strong>1 herói — dificuldade base.</strong></div>
       ${enemyAttrBlockHtml(mult)}
-      <p class="hero-setup-difficulty__p">Na 1.ª wave: cerca de <strong>${w1} inimigos</strong> (com vários biomas o total pode aumentar para manter o desafio por região).</p>
     </div>`;
   }
   const title =
     heroCount === 2
-      ? "2 heróis — run mais exigente."
-      : "3 heróis — run bem mais exigente.";
+      ? "2 heróis — Dificuldade moderada."
+      : "3 heróis — Dificuldade Alta.";
   return `<div class="hero-setup-difficulty ${warn}" role="status">
     <div class="hero-setup-difficulty__title"><strong>${title}</strong></div>
     ${enemyAttrBlockHtml(mult)}
-    <p class="hero-setup-difficulty__p">Na 1.ª wave: cerca de <strong>${w1} inimigos</strong>; nas waves normais também há mais inimigos do que em solo.</p>
   </div>`;
 }
 
@@ -439,26 +444,33 @@ function templateStatsStripHtml(cls: HeroClassId): string {
     cls === "sacerdotisa" ? "0%" : cls === "gladiador" ? "10%" : "25%";
   const critMultStr =
     cls === "sacerdotisa" ? "150%" : cls === "gladiador" ? "175%" : "200%";
-  const items: { sym: string; label: string; value: string }[] = [
-    { sym: "♥", label: "Vida máxima", value: String(t.maxHp) },
-    { sym: "◎", label: "Mana máxima", value: String(t.maxMana) },
-    { sym: "+", label: "Regeneração de vida", value: String(t.regenVida) },
-    { sym: "◇", label: "Regeneração de mana", value: String(t.regenMana) },
-    { sym: "⚔", label: "Dano", value: String(t.dano) },
-    { sym: "★", label: "Acerto crítico", value: critPct },
-    { sym: "✦", label: "Multiplicador de crítico", value: critMultStr },
-    { sym: "◼", label: "Defesa", value: String(t.defesa) },
-    { sym: "○", label: "Movimento", value: String(t.movimento) },
+  const items: { icon: StatIconId; label: string; value: string }[] = [
+    { icon: "regen_hp", label: "Vida máxima", value: String(t.maxHp) },
+    { icon: "regen_mp", label: "Mana máxima", value: String(t.maxMana) },
+    { icon: "regen_hp", label: "Regeneração de vida", value: String(t.regenVida) },
+    { icon: "regen_mp", label: "Regeneração de mana", value: String(t.regenMana) },
+    { icon: "dmg", label: "Dano", value: String(t.dano) },
+    { icon: "crit_hit", label: "Acerto crítico", value: critPct },
+    { icon: "crit_dmg", label: "Multiplicador de crítico", value: critMultStr },
+    { icon: "def", label: "Defesa", value: String(t.defesa) },
+    { icon: "mov", label: "Movimento", value: String(t.movimento) },
   ];
-  return `<div class="setup-stats-strip">${items
-    .map(
-      (it) =>
-        `<div class="setup-stat-cell" data-label="${escapeHtml(it.label)}" data-value="${escapeHtml(it.value)}"><span class="lol-stat-sym" aria-hidden="true">${escapeHtml(it.sym)}</span><span class="lol-stat-val">${escapeHtml(it.value)}</span></div>`,
-    )
-    .join("")}</div>`;
+  const cellHtml = (
+    it: { icon: StatIconId; label: string; value: string },
+    si: number,
+  ) =>
+    `<div class="setup-stat-cell" data-label="${escapeHtml(it.label)}" data-value="${escapeHtml(it.value)}">${statIconWrap(it.icon, si)}<span class="lol-stat-val">${escapeHtml(it.value)}</span></div>`;
+  const row1 = items.slice(0, 5).map((it, j) => cellHtml(it, j)).join("");
+  const row2 = items.slice(5).map((it, j) => cellHtml(it, j + 5)).join("");
+  return `<div class="setup-stats-strip"><div class="setup-stats-row">${row1}</div><div class="setup-stats-row">${row2}</div></div>`;
 }
 
 function bindSetupStatCells(container: HTMLElement): void {
+  container.querySelectorAll(".setup-stat-cell .lol-stat-ico[data-ico]").forEach((ico) => {
+    const sub = ico as HTMLElement;
+    const sid = sub.dataset.ico as StatIconId;
+    if (!sub.title) sub.title = HERO_STAT_TIP[sid] ?? sid;
+  });
   container.querySelectorAll(".setup-stat-cell").forEach((node) => {
     const el = node as HTMLElement;
     const label = el.dataset.label ?? "";
@@ -548,6 +560,14 @@ function goldShopStatIcon(id: GoldShopId): StatIconId {
     default:
       return "generic";
   }
+}
+
+/** SVG da moeda de ouro (mesmo desenho que o HUD de combate). */
+function combatGoldCoinSvgHtml(extraSvgClass = ""): string {
+  const svgCl = ["combat-bolsa-svg", "combat-bolsa-svg--coin", extraSvgClass]
+    .filter(Boolean)
+    .join(" ");
+  return `<svg class="${svgCl}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" focusable="false" aria-hidden="true"><circle cx="24" cy="24" r="14.5" fill="#e8b923" stroke="#7a5a10" stroke-width="1.4"/><ellipse cx="19" cy="18" rx="5" ry="3" fill="#fff8c4" opacity="0.42"/><path fill="#c9a010" d="M24 33.2a9.2 9.2 0 01-1.2-18.3 9.2 9.2 0 011.2 18.3z" opacity="0.22"/></svg>`;
 }
 
 const COMBAT_LOG_VISIBLE_LS = "gladiadores-combat-log-visible";
@@ -1350,7 +1370,7 @@ function showForge(): void {
       forgeEssenceBarHtml(m),
       `<div id="forge-synergy-panel" class="forge-synergy-panel-wrap"></div>`,
       `<div class="forge-slot-picker">
-        <label class="forge-slot-picker__label" for="forge-hero-sel">Slot de party</label>
+        <label class="forge-slot-picker__label" id="forge-hero-sel-lbl">Slot de party</label>
         <select id="forge-hero-sel" class="forge-slot-sel" aria-label="Escolher slot de party">${heroOpts.join("")}</select>
       </div>`,
       `<div id="forge-hero-pieces" class="forge-hero-pieces">${pieceRows}</div>`,
@@ -1416,6 +1436,12 @@ function showForge(): void {
         }
       });
     });
+
+    body
+      .querySelectorAll<HTMLSelectElement>(
+        "select.forge-biome-sel, select.forge-slot-sel",
+      )
+      .forEach((node) => mountCrystalSelect(node));
   };
   paint();
   shell.querySelector("#forge-back")!.addEventListener("click", () => {
@@ -1602,10 +1628,6 @@ function showCrystalShop(): void {
     if (model.buyInitialCards()) render();
   });
 
-  const wHead = el(
-    `<div class="shop-item crystal-shop-item crystal-shop-item--header shop-item--weapon-head" style="grid-column:1/-1"><strong>Melhorar arma principal</strong> — evolui skills principais e a ultimate da arma (níveis 2–5). Custos: 10 / 15 / 20 / 30 💎 por slot de party.</div>`,
-  );
-  grid.appendChild(wHead);
   for (let slot = 0; slot < 3; slot++) {
     const wl = m.weaponLevelByHeroSlot[slot as 0 | 1 | 2];
     const cost = weaponUpgradeCrystalCost(wl);
@@ -1615,7 +1637,7 @@ function showCrystalShop(): void {
       cost != null
         ? `Melhorar arma do slot ${slot + 1} por ${cost} cristais`
         : "Arma no nível máximo neste slot";
-    const div = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Slot party ${slot + 1}: arma nv <strong>${wl}</strong>/5${cost != null ? "" : " — <em>máximo</em>"}</span><button type="button" class="btn crystal-shop-buy-btn" data-weapon-slot="${slot}" ${!wCanBuy ? "disabled" : ""} aria-label="${escapeHtml(wAria)}">${wBtnLabel}</button></div>`);
+    const div = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Arma principal (Slot ${slot + 1}): nv <strong>${wl}</strong>/5${cost != null ? "" : " — <em>máximo</em>"}</span><button type="button" class="btn crystal-shop-buy-btn" data-weapon-slot="${slot}" ${!wCanBuy ? "disabled" : ""} aria-label="${escapeHtml(wAria)}">${wBtnLabel}</button></div>`);
     grid.appendChild(div);
     div.querySelector("button")!.addEventListener("click", () => {
       if (model.buyWeaponUpgrade(slot as 0 | 1 | 2)) render();
@@ -1637,14 +1659,15 @@ function showHeroSetup(): void {
   const heroes = selectedHeroes();
   const max = 3;
   const s = el(`
-    <div class="screen hero-setup-screen">
-      ${heroSetupDifficultyBannerHtml(heroes.length)}
-      <h1>Escolha até 3 heróis (${heroes.length}/${max})</h1>
-      <p class="hero-setup-hint">Cada menu é um slot; pode ficar vazio. Ordem = ordem na arena.</p>
-      <div class="hero-slots-grid" id="hero-slots"></div>
-      <div class="hero-setup-actions">
-        <button class="btn" id="btn-back">Voltar</button>
-        <button class="btn btn-primary" id="btn-next" ${heroes.length < 1 ? "disabled" : ""}>Selecionar</button>
+    <div class="screen screen--new-run-setup screen--hero-setup">
+      <div class="hero-setup-screen">
+        ${heroSetupDifficultyBannerHtml(heroes.length)}
+        <h1 class="hero-setup-main-title">Escolha até 3 heróis (${heroes.length}/${max})</h1>
+        <div class="hero-slots-grid" id="hero-slots"></div>
+        <div class="hero-setup-actions new-run-setup-actions">
+          <button type="button" class="btn" id="btn-back">Voltar ao menu</button>
+          <button type="button" class="btn btn-primary" id="btn-next" ${heroes.length < 1 ? "disabled" : ""}>Selecionar</button>
+        </div>
       </div>
     </div>
   `);
@@ -1677,6 +1700,7 @@ function showHeroSetup(): void {
     const card = el(`<div class="hero-slot-card"></div>`);
     wrap.appendChild(label);
     wrap.appendChild(sel);
+    mountCrystalSelect(sel);
     const forgeL = model.meta.forgeByHeroSlot[i as 0 | 1 | 2]!;
     const forgePanel = el(
       `<div class="hero-slot-forge" role="region" aria-label="Equipamentos forjados no slot ${i + 1} da party"></div>`,
@@ -1687,8 +1711,20 @@ function showHeroSetup(): void {
     slotsRoot.appendChild(wrap);
     const hid = setup.slots[i];
     if (hid) {
-      card.innerHTML = `${templateStatsStripHtml(hid)}<div class="hero-slot-model-host" data-slot-model="${i}"></div><div class="hero-slot-passive-wrap"><p class="hero-slot-passive"><small>${escapeHtml(HEROES[hid].passiveDescription)}</small></p></div>`;
+      const wl = model.meta.weaponLevelByHeroSlot[i as 0 | 1 | 2];
+      const baseD = HEROES[hid].dano;
+      card.innerHTML = `${templateStatsStripHtml(hid)}
+        <div class="hero-slot-weapon-row" tabindex="0" role="img" aria-label="Arma principal nível ${wl} de 5. Paira para ver skill e ultimate da arma.">
+          <span class="hero-slot-weapon-row__lbl">Arma principal</span>
+          <span class="hero-slot-weapon-row__nv">nv <strong>${wl}</strong>/5</span>
+          <span class="hero-slot-weapon-row__hint" aria-hidden="true">paira · skill e ultimate</span>
+        </div>
+        <div class="hero-slot-model-host" data-slot-model="${i}"></div><div class="hero-slot-passive-wrap"><p class="hero-slot-passive"><small>${escapeHtml(HEROES[hid].passiveDescription)}</small></p></div>`;
       bindSetupStatCells(card);
+      const weaponRow = card.querySelector(".hero-slot-weapon-row") as HTMLElement;
+      bindGameTooltip(weaponRow, () =>
+        heroSetupWeaponAbilitiesTooltipHtml(hid, wl, baseD),
+      );
       const host = card.querySelector(`[data-slot-model="${i}"]`) as HTMLElement;
       const prev = new HeroPreview3D(host, 200, 200);
       prev.setHero(hid, colorHintToDisplayColor(HEROES[hid].colorHint));
@@ -1740,8 +1776,8 @@ function showBiomeSetup(): void {
   const tmpl = HEROES[curHero];
 
   const s = el(`
-    <div class="screen biome-setup-screen">
-      <h1 class="biome-setup-title">Bioma inicial</h1>
+    <div class="screen screen--new-run-setup screen--biome-setup biome-setup-screen">
+      <h1 class="hero-setup-main-title">Bioma inicial</h1>
       <p class="hero-setup-hint">Vista de cima do coliseu: paira para ler · clica num bioma livre. Cada bioma só uma vez. Ícone = herói que já o escolheu.</p>
       <div class="biome-desc-panel biome-desc-panel--top" id="bio-desc-panel">
         <div class="biome-desc-title" id="bio-desc-title">Explora o mapa</div>
@@ -1761,7 +1797,7 @@ function showBiomeSetup(): void {
           </div>
         </div>
       </div>
-      <div class="biome-setup-actions biome-setup-actions--hero-row">
+      <div class="biome-setup-actions biome-setup-actions--hero-row new-run-setup-actions">
         <button type="button" class="btn" id="btn-bio-back">Voltar</button>
       </div>
     </div>
@@ -1855,11 +1891,14 @@ function showColorSetup(): void {
   while (setup.colors.length < 3) setup.colors.push("azul");
   setup.colors = setup.colors.slice(0, 3);
   const s = el(`
-    <div class="screen color-setup-screen" style="overflow-y:auto">
-      <h1>Sinergia do time</h1>
+    <div class="screen screen--new-run-setup screen--color-setup color-setup-screen">
+      <h1 class="hero-setup-main-title">Sinergia do time</h1>
       <p class="hero-setup-hint">As três cores definem a sinergia que afetará os heróis. Cada vértice é uma cor, clique para escolher sua combinação</p>
       <div id="color-triangle-host"></div>
-      <button class="btn btn-primary" id="btn-start">Iniciar partida</button>
+      <div class="hero-setup-actions color-setup-actions new-run-setup-actions">
+        <button type="button" class="btn" id="btn-color-back">Voltar</button>
+        <button type="button" class="btn btn-primary" id="btn-start">Iniciar partida</button>
+      </div>
     </div>
   `);
   uiRoot.appendChild(s);
@@ -1878,6 +1917,11 @@ function showColorSetup(): void {
       colors: [...setup.colors],
       partySlotByHero: partySlotByHeroFromSlots(),
     });
+    render();
+  });
+  s.querySelector("#btn-color-back")!.addEventListener("click", () => {
+    if (setup.biomes.length > 0) setup.biomes.pop();
+    model.phase = "setup_biomes";
     render();
   });
 }
@@ -1916,7 +1960,9 @@ function showGoldShop(isInitial: boolean): void {
     return;
   }
   const bgHost = el(`<div class="shop-screen__bg" aria-hidden="true"></div>`);
-  const panel = el(`<div class="shop-screen__panel"></div>`);
+  const panel = el(
+    `<div class="shop-screen__panel shop-screen__panel--gold"></div>`,
+  );
   shell.appendChild(bgHost);
   shell.appendChild(panel);
   goldShopStall3d = new ShopStall3D(bgHost);
@@ -1947,10 +1993,16 @@ function showGoldShop(isInitial: boolean): void {
     }).join("");
     panel.innerHTML = `
       <div class="shop-panel-inner">
-        <h1 class="shop-title">Loja do coliseu</h1>
-        <p class="hint-banner shop-hint">${isInitial ? "Cada herói gasta o <strong>ouro da bolsa</strong> na loja. Na arena há um <strong>estipêndio da wave</strong> (100/herói) para o dreno entre rodadas; o que sobrar passa para a bolsa ao vencer a wave. No último herói, use <strong>Começar wave 1</strong>." : "Use o ouro recebido no final das waves para comprar melhorias nos atributos de cada herói."}</p>
+        <h1 class="shop-title hero-setup-main-title">Loja do coliseu</h1>
         <h2 class="shop-hero-name">${escapeHtml(h.name)}</h2>
-        <p class="shop-hero-gold">Ouro atual (loja): <strong>${h.ouro}</strong> · Herói ${idx + 1}/${party.length}</p>
+        <div class="shop-hero-gold-row">
+          <span class="shop-hero-gold__coin-wrap" id="shop-gold-coin-tip" role="img" tabindex="0" aria-label="Ouro atual na loja: ${h.ouro}">
+            <span class="shop-hero-gold__icon" aria-hidden="true">${combatGoldCoinSvgHtml("shop-hero-gold__coin-svg")}</span>
+          </span>
+          <strong class="shop-hero-gold__value" id="shop-gold-value">${h.ouro}</strong>
+          <span class="shop-hero-gold__sep" aria-hidden="true">·</span>
+          <span class="shop-hero-gold__hero-idx">Herói ${idx + 1}/${party.length}</span>
+        </div>
         <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
           <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
           <div class="shop-hero-stats-col">
@@ -2004,6 +2056,16 @@ function showGoldShop(isInitial: boolean): void {
     if (bEv && bShop && bShop.tier < 2) {
       bindGameTooltip(bEv, () =>
         bunkerEvolveTooltipHtml(bShop.tier),
+      );
+    }
+    const goldTip = panel.querySelector(
+      "#shop-gold-coin-tip",
+    ) as HTMLElement | null;
+    if (goldTip) {
+      bindGameTooltip(
+        goldTip,
+        () =>
+          `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Ouro Atual</div></div>`,
       );
     }
     const prevHost = panel.querySelector("#bunker-preview-host");
@@ -2218,6 +2280,147 @@ function tooltipLineClass(k: TooltipLineKind): string {
   if (k === "range") return "tt-range";
   if (k === "dmg") return "tt-dmg";
   return "tt-fx";
+}
+
+/** Tooltip na seleção de herói: skill principal + ultimate da arma ao nível meta do slot. */
+function heroSetupWeaponAbilitiesTooltipHtml(
+  cls: HeroClassId,
+  w: WeaponLevel,
+  baseDano: number,
+): string {
+  const sk = HEROES[cls].skills[0]!;
+  const th = weaponUltThreshold(cls);
+  const tipLines = (
+    title: string,
+    lines: { label: string; value: string; kind: TooltipLineKind }[],
+  ): string => {
+    const body = lines
+      .map(
+        (L) =>
+          `<p class="game-ui-tooltip-line"><span class="tt-lbl">${escapeHtml(L.label)}</span> <span class="${tooltipLineClass(L.kind)}">${escapeHtml(L.value)}</span></p>`,
+      )
+      .join("");
+    return `<div class="hero-setup-weapon-tip-sec"><div class="game-ui-tooltip-title">${escapeHtml(title)}</div><div class="game-ui-tooltip-body">${body}</div></div>`;
+  };
+
+  let skillBlock: string;
+  if (cls === "pistoleiro") {
+    const cd = atirarCooldownWaves(w);
+    const mul = atirarDamageMult(w);
+    const approx = Math.floor(baseDano * mul);
+    skillBlock = tipLines(sk.name, [
+      { label: "Nível arma:", value: String(w), kind: "fx" },
+      { label: "CDR:", value: `${cd} onda(s)`, kind: "cdr" },
+      { label: "Mana:", value: "0", kind: "mana" },
+      {
+        label: "Dano:",
+        value: `${Math.round(mul * 100)}% do dano base (~${approx} bruto por alvo no nível 1)`,
+        kind: "dmg",
+      },
+    ]);
+  } else if (cls === "gladiador") {
+    const cd = ateMorteCooldownWaves(w);
+    const mul = ateMorteDamageMult(w);
+    const mc = ateMorteManaCost(w);
+    const approx = Math.floor(baseDano * mul);
+    skillBlock = tipLines(sk.name, [
+      { label: "Nível arma:", value: String(w), kind: "fx" },
+      { label: "CDR:", value: `${cd} onda(s)`, kind: "cdr" },
+      { label: "Mana:", value: String(mc), kind: "mana" },
+      {
+        label: "Dano:",
+        value: `${Math.round(mul * 100)}% do dano base no duelo (~${approx} bruto por teu golpe no nv. 1)`,
+        kind: "dmg",
+      },
+    ]);
+  } else {
+    const cd = sentencaCooldownWaves(w);
+    const mc = sentencaManaCost(w);
+    const dm = sentencaDamageMult(w);
+    const hm = sentencaHealMult(w);
+    const sh = sentencaShieldOverflowRatio(w);
+    const approx = Math.floor(baseDano * dm);
+    skillBlock = tipLines(sk.name, [
+      { label: "Nível arma:", value: String(w), kind: "fx" },
+      { label: "CDR:", value: `${cd} onda(s)`, kind: "cdr" },
+      { label: "Mana:", value: String(mc), kind: "mana" },
+      {
+        label: "Dano:",
+        value: `${Math.round(dm * 100)}% dano base inimigos no teu bioma (~${approx} bruto/alvo no nv. 1)`,
+        kind: "dmg",
+      },
+      {
+        label: "Cura aliados:",
+        value: `${Math.round(hm * 100)}% do dano causado`,
+        kind: "fx",
+      },
+      {
+        label: "Excesso → escudo:",
+        value: `${Math.round(sh * 100)}% da cura excedente`,
+        kind: "fx",
+      },
+    ]);
+  }
+
+  let ultBlock: string;
+  if (cls === "sacerdotisa") {
+    ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
+      { label: "Nível arma:", value: String(w), kind: "fx" },
+      {
+        label: "Carga:",
+        value: `Acumula ao curar e aplicar escudo em aliados vivos (${th} pontos no total; Sentença conta; o Paraíso não adiciona carga)`,
+        kind: "cdr",
+      },
+      {
+        label: "Efeito:",
+        value: `Escudo ${paraisoShieldFlat(w)} + ${Math.round(paraisoManaShieldMult(w) * 100)}% mana máx.; regen +${paraisoRegenBonus(w)} PV e mana por ${paraisoRegenTurns(w)} turnos (aliados)`,
+        kind: "fx",
+      },
+    ]);
+  } else if (cls === "pistoleiro") {
+    const mul = furacaoDamageMult(w);
+    const approx = Math.floor(baseDano * mul);
+    ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
+      { label: "Nível arma:", value: String(w), kind: "fx" },
+      {
+        label: "Carga:",
+        value: `${th} golpes que causem dano`,
+        kind: "cdr",
+      },
+      {
+        label: "Dano:",
+        value: `${Math.round(mul * 100)}% dano base em toda a arena (~${approx} bruto/alvo no nv. 1)`,
+        kind: "dmg",
+      },
+      {
+        label: "Crítico:",
+        value: `Sangramento ${Math.round(furacaoBleedPct(w) * 100)}% do dano em ${furacaoBleedTurns(w)} turno(s)`,
+        kind: "fx",
+      },
+    ]);
+  } else {
+    ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
+      { label: "Nível arma:", value: String(w), kind: "fx" },
+      {
+        label: "Carga:",
+        value: `${th} de dano sofrido (acumulado)`,
+        kind: "cdr",
+      },
+      {
+        label: "Efeito:",
+        value:
+          "+50% vida máxima e PV atuais, dano = 10% da vida máxima atual, 3 turnos; desbloqueia Pisotear",
+        kind: "fx",
+      },
+      {
+        label: "Pisotear (na Fúria):",
+        value: `Mana ${pisotearManaCost(w)}, CDR ${pisotearCooldownWaves(w)} onda(s), alcance 1–${pisotearMaxHexDistance(w)} hex, ${pisotearDamageMult(w)}× dano atual por alvo`,
+        kind: "fx",
+      },
+    ]);
+  }
+
+  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--hero-weapon">${skillBlock}${ultBlock}</div>`;
 }
 
 function tooltipAbilityHtml(
@@ -3326,13 +3529,7 @@ function showCombatHUD(): void {
       <div class="combat-bolsa-row">
       <div class="combat-bolsa-gold" title="Ouro na bolsa (soma do time). O estipêndio da wave é separado.">
         <span class="combat-bolsa-gold__label">Ouro</span>
-        <span class="combat-bolsa-gold__icon" aria-hidden="true">
-          <svg class="combat-bolsa-svg combat-bolsa-svg--coin" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" focusable="false" aria-hidden="true">
-            <circle cx="24" cy="24" r="14.5" fill="#e8b923" stroke="#7a5a10" stroke-width="1.4"/>
-            <ellipse cx="19" cy="18" rx="5" ry="3" fill="#fff8c4" opacity="0.42"/>
-            <path fill="#c9a010" d="M24 33.2a9.2 9.2 0 01-1.2-18.3 9.2 9.2 0 011.2 18.3z" opacity="0.22"/>
-          </svg>
-        </span>
+        <span class="combat-bolsa-gold__icon" aria-hidden="true">${combatGoldCoinSvgHtml()}</span>
         <span class="combat-bolsa-gold__value" id="party-ouro-sum">0</span>
       </div>
       <div class="combat-bolsa-gold combat-bolsa-crystals" title="Cristais obtidos nesta run. Ao vencer ou perder, somam-se à conta (meta).">
@@ -4780,13 +4977,13 @@ function render(): void {
     canvas.style.opacity = "0.35";
     showCrystalShop();
   } else if (model.phase === "setup_heroes") {
-    canvas.style.opacity = "0.35";
+    canvas.style.opacity = "0.62";
     showHeroSetup();
   } else if (model.phase === "setup_biomes") {
-    canvas.style.opacity = "0.35";
+    canvas.style.opacity = "0.62";
     showBiomeSetup();
   } else if (model.phase === "setup_colors") {
-    canvas.style.opacity = "0.35";
+    canvas.style.opacity = "0.62";
     showColorSetup();
   } else if (model.phase === "shop_initial") {
     canvas.style.opacity = "0.35";

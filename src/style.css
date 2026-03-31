@@ -90,6 +90,16 @@ body {
   padding-top: 1.05rem;
 }
 
+.game-ui-tooltip-inner--hero-weapon {
+  max-width: min(22rem, 92vw);
+}
+
+.hero-setup-weapon-tip-sec + .hero-setup-weapon-tip-sec {
+  margin-top: 0.65rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .game-ui-tooltip-badge {
   position: absolute;
   top: 0.38rem;
@@ -263,6 +273,490 @@ body {
   display: none;
 }
 
+/* Novo jogo: arena mais visível + véu azulado em ecrã inteiro */
+.screen.screen--new-run-setup {
+  justify-content: flex-start;
+  padding: 1.15rem 1rem 1.75rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  gap: 0.85rem;
+  background: linear-gradient(
+    180deg,
+    rgba(8, 32, 58, 0.38) 0%,
+    rgba(6, 22, 48, 0.32) 35%,
+    rgba(10, 36, 68, 0.4) 100%
+  );
+}
+
+.screen.screen--new-run-setup.screen--biome-setup > .hero-setup-main-title,
+.screen.screen--new-run-setup.screen--color-setup > .hero-setup-main-title {
+  flex-shrink: 0;
+}
+
+.hero-setup-screen > h1,
+.hero-setup-screen > .hero-setup-difficulty {
+  flex-shrink: 0;
+}
+
+.hero-setup-main-title {
+  width: 100%;
+  text-align: center;
+  margin: 0 0 0.5rem;
+  font-family: Palatino, "Palatino Linotype", Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(1.35rem, 3.8vw, 1.85rem);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #d4af37;
+  text-shadow:
+    0 1px 0 #5c4a1a,
+    0 3px 10px rgba(0, 0, 0, 0.65),
+    0 0 20px rgba(212, 175, 55, 0.35);
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .hero-setup-main-title {
+    background: linear-gradient(
+      155deg,
+      #8a6a2e 0%,
+      #c9a227 18%,
+      #f0e6a8 32%,
+      #ffd54f 42%,
+      #b8860b 52%,
+      #fff8dc 58%,
+      #c9a227 72%,
+      #e8c547 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: none;
+    filter: drop-shadow(0 1px 0 rgba(40, 28, 8, 0.9))
+      drop-shadow(0 3px 8px rgba(0, 0, 0, 0.55))
+      drop-shadow(0 0 22px rgba(212, 175, 55, 0.3));
+  }
+}
+
+/* Fundo do ecrã de heróis = véu da loja de cristais (arena visível por baixo) */
+.screen.screen--new-run-setup.screen--hero-setup,
+.screen.screen--new-run-setup.screen--biome-setup {
+  background: linear-gradient(
+    185deg,
+    rgba(14, 11, 18, 0.42) 0%,
+    rgba(22, 18, 28, 0.72) 35%,
+    rgba(18, 14, 22, 0.88) 70%,
+    rgba(12, 10, 16, 0.92) 100%
+  );
+}
+
+/* Sinergia do time: fundo quase preto + triângulo como cristal */
+.screen.screen--new-run-setup.screen--color-setup {
+  background: radial-gradient(
+      ellipse 85% 55% at 50% 44%,
+      rgba(28, 22, 42, 0.55) 0%,
+      transparent 62%
+    ),
+    #030205;
+}
+
+.color-setup-screen .hero-setup-hint {
+  max-width: min(640px, 94vw);
+  color: #a89878;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Cartões, campos e botões alinhados à loja de cristais */
+.hero-setup-screen .hero-slot-card {
+  background: linear-gradient(
+    168deg,
+    rgba(210, 214, 222, 0.14) 0%,
+    rgba(140, 148, 162, 0.12) 35%,
+    rgba(90, 96, 108, 0.16) 55%,
+    rgba(160, 168, 180, 0.1) 100%
+  );
+  border: 2px solid rgba(201, 162, 39, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -2px 8px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(40, 32, 18, 0.5),
+    0 4px 14px rgba(0, 0, 0, 0.35);
+  color: #d8a574;
+  text-shadow: 0 1px 0 rgba(20, 12, 8, 0.45);
+}
+
+.hero-setup-screen .hero-slot-select {
+  border: 2px solid rgba(201, 162, 39, 0.45);
+  border-radius: 8px;
+  background: linear-gradient(
+    168deg,
+    rgba(52, 48, 58, 0.95) 0%,
+    rgba(28, 26, 34, 0.98) 100%
+  );
+  color: #c4ccd8;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.hero-setup-screen .hero-slot-select:focus {
+  border-color: rgba(212, 175, 55, 0.78);
+  outline: none;
+  box-shadow:
+    0 0 0 1px rgba(201, 162, 39, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Dropdown custom (lista) — tema cristal; o &lt;select&gt; fica só para estado/JS */
+.crystal-select {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.crystal-select__native {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.crystal-select__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.crystal-select__trigger::after {
+  content: "";
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid rgba(201, 162, 39, 0.75);
+  margin-top: 2px;
+}
+
+.crystal-select__trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.crystal-select__list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 200;
+  margin: 0;
+  padding: 0.2rem 0;
+  list-style: none;
+  max-height: min(280px, 42vh);
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 2px solid rgba(201, 162, 39, 0.5);
+  background: linear-gradient(
+    168deg,
+    rgba(42, 36, 52, 0.98) 0%,
+    rgba(18, 14, 26, 0.99) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 28px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(40, 32, 18, 0.5);
+}
+
+.crystal-select__option {
+  padding: 0.45rem 0.65rem;
+  font-size: 0.88rem;
+  color: #c8c4d0;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.crystal-select__option:hover,
+.crystal-select__option:focus {
+  outline: none;
+  background: rgba(212, 175, 55, 0.14);
+  color: #f0e6c8;
+}
+
+.crystal-select__option--selected {
+  background: rgba(100, 72, 120, 0.35);
+  color: #f5ecd8;
+}
+
+.crystal-select__option--selected:hover {
+  background: rgba(120, 88, 140, 0.42);
+  color: #fff8e8;
+}
+
+.hero-setup-screen .crystal-select--hero .crystal-select__trigger {
+  border: 2px solid rgba(201, 162, 39, 0.45);
+  border-radius: 8px;
+  background: linear-gradient(
+    168deg,
+    rgba(52, 48, 58, 0.95) 0%,
+    rgba(28, 26, 34, 0.98) 100%
+  );
+  color: #c4ccd8;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  padding: 0.45rem 0.55rem;
+  font-size: 0.9rem;
+}
+
+.hero-setup-screen .crystal-select--hero .crystal-select__trigger:focus {
+  border-color: rgba(212, 175, 55, 0.78);
+  outline: none;
+  box-shadow:
+    0 0 0 1px rgba(201, 162, 39, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.forge-slot-picker .crystal-select--forge {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.forge-piece-block__controls .crystal-select--forge {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.crystal-select--forge .crystal-select__trigger {
+  font-size: 0.82rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(30, 26, 38, 0.95);
+  border: 1px solid rgba(100, 90, 130, 0.5);
+  color: #e8e0d8;
+}
+
+.forge-piece-block__controls .crystal-select--forge .crystal-select__trigger {
+  font-size: 0.8rem;
+}
+
+.crystal-select--forge .crystal-select__trigger:focus {
+  outline: 1px solid rgba(180, 160, 220, 0.45);
+  outline-offset: 1px;
+}
+
+.crystal-select--forge .crystal-select__list {
+  border-radius: 6px;
+  border-color: rgba(180, 160, 120, 0.45);
+}
+
+.crystal-select--default .crystal-select__trigger {
+  padding: 0.45rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #5a5048;
+  background: #1e1c22;
+  color: #eee;
+  font-size: 0.9rem;
+}
+
+.hero-setup-screen .hero-slot-label {
+  color: #d4af37;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+.hero-setup-screen .hero-slot-forge__title {
+  color: #b8a878;
+}
+
+.hero-setup-screen .hero-slot-forge__box {
+  border: 1px solid rgba(201, 162, 39, 0.38);
+  background: rgba(24, 20, 32, 0.82);
+}
+
+.hero-setup-screen .hero-slot-forge__k {
+  color: #a89878;
+}
+
+.hero-setup-screen .hero-slot-forge__v {
+  color: #c4ccd8;
+}
+
+.hero-setup-screen .hero-slot-weapon-row {
+  border-color: rgba(201, 162, 39, 0.5);
+  background: rgba(18, 14, 24, 0.55);
+  color: #d8c4a8;
+}
+
+.hero-setup-screen .hero-slot-weapon-row__lbl {
+  color: #e8c547;
+}
+
+.hero-setup-screen .hero-slot-model-host {
+  border-color: rgba(201, 162, 39, 0.38);
+  background: linear-gradient(180deg, rgba(18, 16, 26, 0.92), #0a0910);
+}
+
+.hero-setup-screen .hero-slot-model-host--placeholder {
+  border-color: rgba(201, 162, 39, 0.35);
+}
+
+.hero-setup-screen .hero-slot-placeholder__txt {
+  color: #9aa4b0;
+}
+
+.hero-setup-screen .hero-slot-passive,
+.hero-setup-screen .hero-slot-passive small {
+  color: #b8c0cc;
+}
+
+.hero-setup-screen .setup-stat-cell .lol-stat-val {
+  color: #d8dce4;
+}
+
+.hero-setup-screen .setup-stat-cell:hover {
+  background: rgba(212, 175, 55, 0.08);
+}
+
+.hero-setup-screen .hero-setup-difficulty {
+  border: 2px solid rgba(201, 162, 39, 0.55);
+  background: linear-gradient(
+    168deg,
+    rgba(210, 214, 222, 0.1) 0%,
+    rgba(60, 55, 72, 0.82) 45%,
+    rgba(28, 24, 36, 0.94) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -2px 8px rgba(0, 0, 0, 0.22),
+    0 4px 14px rgba(0, 0, 0, 0.35);
+  color: #c4ccd8;
+}
+
+.hero-setup-screen .hero-setup-difficulty strong {
+  color: #f0e6a8;
+}
+
+.hero-setup-screen .hero-setup-difficulty__attrs {
+  border-color: rgba(201, 162, 39, 0.25);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.hero-setup-screen .hero-setup-actions {
+  border-top-color: rgba(201, 162, 39, 0.22);
+}
+
+.color-setup-screen .hero-setup-actions {
+  border-top: 1px solid rgba(201, 162, 39, 0.22);
+  padding-top: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.hero-setup-screen .hero-setup-actions .btn,
+.screen--biome-setup .biome-setup-actions .btn,
+.color-setup-screen .hero-setup-actions .btn {
+  border: 2px solid rgba(201, 162, 39, 0.65);
+  background: linear-gradient(
+    168deg,
+    rgba(72, 68, 78, 0.92) 0%,
+    rgba(38, 36, 44, 0.96) 45%,
+    rgba(52, 50, 58, 0.9) 100%
+  );
+  color: #c9885a;
+  text-shadow:
+    0 1px 0 rgba(255, 214, 175, 0.22),
+    0 -1px 0 rgba(20, 10, 6, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.hero-setup-screen .hero-setup-actions .btn:hover:not(:disabled),
+.screen--biome-setup .biome-setup-actions .btn:hover:not(:disabled),
+.color-setup-screen .hero-setup-actions .btn:hover:not(:disabled) {
+  border-color: #d4af37;
+  color: #7a3d20;
+  background: linear-gradient(
+    162deg,
+    #f0f2f6 0%,
+    #d8dce4 30%,
+    #b8c0cc 50%,
+    #dce0e8 78%,
+    #f4f6f9 100%
+  );
+  text-shadow:
+    0 1px 0 rgba(255, 230, 200, 0.5),
+    0 -1px 0 rgba(40, 20, 12, 0.45);
+  box-shadow:
+    0 0 0 1px #2a2210,
+    0 0 0 2px #6b5416,
+    0 0 0 3px #c9a227,
+    inset 0 2px 3px rgba(255, 255, 255, 0.75),
+    0 6px 20px rgba(212, 175, 55, 0.28);
+  filter: none;
+}
+
+.hero-setup-screen .hero-setup-actions .btn-primary,
+.screen--biome-setup .biome-setup-actions .btn-primary,
+.color-setup-screen .hero-setup-actions .btn-primary {
+  border-color: rgba(212, 175, 55, 0.75);
+  background: linear-gradient(
+    168deg,
+    rgba(100, 78, 32, 0.95) 0%,
+    rgba(58, 44, 18, 0.98) 100%
+  );
+  color: #f5ecd8;
+  text-shadow:
+    0 1px 0 rgba(80, 60, 20, 0.6),
+    0 -1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.hero-setup-screen .hero-setup-actions .btn-primary:hover:not(:disabled),
+.screen--biome-setup .biome-setup-actions .btn-primary:hover:not(:disabled),
+.color-setup-screen .hero-setup-actions .btn-primary:hover:not(:disabled) {
+  border-color: #d4af37;
+  color: #4a3010;
+  background: linear-gradient(
+    162deg,
+    #fff8e8 0%,
+    #f0d878 28%,
+    #d4af37 52%,
+    #f5e6a8 100%
+  );
+  text-shadow:
+    0 1px 0 rgba(255, 230, 200, 0.55),
+    0 -1px 0 rgba(40, 20, 12, 0.35);
+  box-shadow:
+    0 0 0 1px #2a2210,
+    0 0 0 2px #6b5416,
+    0 0 0 3px #c9a227,
+    inset 0 2px 3px rgba(255, 255, 255, 0.75),
+    0 6px 20px rgba(212, 175, 55, 0.28);
+}
+
+.color-setup-screen.screen--new-run-setup {
+  align-items: center;
+}
+
+.color-setup-screen #color-triangle-host {
+  flex: 0 0 auto;
+}
+
+.color-setup-actions {
+  flex-shrink: 0;
+  margin-top: 0.35rem;
+}
+
 h1 {
   margin: 0 0 0.5rem;
   font-weight: 600;
@@ -325,9 +819,30 @@ h1 {
   line-height: 1.35;
 }
 
+/* Conteúdo do setup de heróis: separado de .screen para evitar conflito position/flex/max-width */
 .hero-setup-screen {
-  max-width: 920px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: min(1180px, 96vw);
   margin: 0 auto;
+  flex-shrink: 0;
+}
+
+.screen--new-run-setup .hero-setup-actions,
+.screen--new-run-setup .color-setup-actions {
+  width: 100%;
+  max-width: min(1180px, 96vw);
+}
+
+.screen--new-run-setup.biome-setup-screen .biome-setup-actions--hero-row {
+  width: 100%;
+  max-width: min(1100px, 96vw);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .hero-setup-hint {
@@ -345,7 +860,8 @@ h1 {
   align-items: stretch;
   gap: 1rem 1.25rem;
   width: 100%;
-  margin-bottom: 1.25rem;
+  flex-shrink: 0;
+  margin-bottom: 0.35rem;
 }
 
 .hero-slot {
@@ -354,6 +870,7 @@ h1 {
   align-items: stretch;
   gap: 0.4rem;
   min-width: 0;
+  min-height: 0;
   height: 100%;
   align-self: stretch;
 }
@@ -431,10 +948,10 @@ h1 {
 
 .hero-slot-card {
   flex: 1 1 auto;
+  min-height: min(440px, 48vh);
   display: flex;
   flex-direction: column;
   width: 100%;
-  min-height: calc(200px + 6.75rem + 5.75rem);
   margin-top: 0.35rem;
   padding: 0.5rem 0.45rem 0.55rem;
   border-radius: 8px;
@@ -442,17 +959,60 @@ h1 {
   background: linear-gradient(165deg, #25222c, #18161c);
 }
 
-.hero-slot-card--placeholder {
+.hero-slot-weapon-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
   justify-content: center;
+  gap: 0.35rem 0.5rem;
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(201, 168, 90, 0.35);
+  background: rgba(0, 0, 0, 0.22);
+  cursor: help;
+  font-size: 0.82rem;
+  color: #d8d0c4;
+}
+
+.hero-slot-weapon-row:focus-visible {
+  outline: 2px solid #e8c84a;
+  outline-offset: 2px;
+}
+
+.hero-slot-weapon-row__lbl {
+  font-weight: 650;
+  color: #c9a227;
+}
+
+.hero-slot-weapon-row__nv strong {
+  color: #8fd688;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-slot-weapon-row__hint {
+  flex: 1 1 100%;
+  font-size: 0.68rem;
+  color: #7a7288;
+  text-align: center;
+}
+
+.hero-slot-card--placeholder {
+  justify-content: flex-start;
 }
 
 .hero-slot-placeholder {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.55rem;
-  min-height: 100%;
+  min-height: 0;
+  width: 100%;
 }
 
 .hero-slot-model-host--placeholder {
@@ -487,9 +1047,13 @@ h1 {
 
 .hero-slot-model-host {
   flex: 0 0 auto;
-  margin: 0.45rem auto 0;
-  width: 200px;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0.45rem 0 0;
   height: 200px;
+  min-height: 200px;
   border-radius: 6px;
   overflow: hidden;
   background: radial-gradient(
@@ -511,27 +1075,77 @@ h1 {
   justify-content: space-between;
   align-items: center;
   gap: 0.6rem;
-  margin-top: 0.25rem;
+  flex-shrink: 0;
+  margin-top: 0.75rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .setup-stats-strip {
   flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.45rem;
+  flex-direction: column;
+  gap: 0.22rem;
+  align-items: stretch;
+  width: 100%;
+}
+
+.setup-stats-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.12rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.setup-stats-row .setup-stat-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
   justify-content: center;
+  padding-left: 0.06rem;
+  padding-right: 0.06rem;
 }
 
 .setup-stat-cell {
   display: inline-flex;
   flex-direction: row;
   align-items: center;
-  gap: 0.12rem;
-  font-size: 0.64rem;
+  gap: 0.14rem;
+  font-size: 0.62rem;
+  line-height: 1.2;
   cursor: help;
-  padding: 0.08rem 0.2rem;
+  padding: 0.08rem 0.12rem;
   border-radius: 4px;
   transition: background 0.15s ease;
+}
+
+.setup-stat-cell .lol-stat-ico {
+  flex: 0 0 auto;
+  width: 1.55rem;
+  height: 1.55rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.setup-stat-cell .lol-stat-ico svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.setup-stat-cell .lol-stat-val {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #e6e2da;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .setup-stat-cell:hover {
@@ -544,9 +1158,11 @@ h1 {
   }
 }
 
-/* Aviso de dificuldade conforme nº de heróis (setup) */
+/* Aviso de dificuldade conforme nº de heróis (setup) — largura fixa para não “saltar” ao mudar 1/2/3 heróis */
 .hero-setup-difficulty {
-  max-width: 540px;
+  box-sizing: border-box;
+  width: min(540px, calc(100vw - 2rem));
+  flex-shrink: 0;
   margin: 0 auto 1rem;
   padding: 0.65rem 0.9rem;
   border-radius: 8px;
@@ -902,11 +1518,116 @@ h1 {
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: filter 0.12s ease;
 }
 
 .color-triangle__pick:hover {
-  filter: brightness(1.12);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--pick) 52%, #2a2832),
+    #24222c
+  );
+}
+
+/* Sinergia: sem filter/anim no triângulo (drop-shadow empilhado e mix-blend custavam muito) */
+.color-setup-screen .color-triangle--setup .color-triangle__inner-wrap {
+  z-index: 0;
+}
+
+.color-setup-screen .color-triangle--setup .color-triangle__fill {
+  position: relative;
+  z-index: 0;
+  background:
+    linear-gradient(
+      128deg,
+      rgba(255, 255, 255, 0.2) 0%,
+      transparent 38%
+    ),
+    linear-gradient(
+      -38deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      transparent 45%
+    ),
+    radial-gradient(
+      ellipse 95% 55% at 50% 88%,
+      rgba(0, 0, 0, 0.55) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      circle at 50% 16%,
+      var(--ct-0) 0%,
+      transparent 54%
+    ),
+    radial-gradient(
+      circle at 18% 82%,
+      var(--ct-1) 0%,
+      transparent 54%
+    ),
+    radial-gradient(
+      circle at 82% 82%,
+      var(--ct-2) 0%,
+      transparent 54%
+    ),
+    #07060c;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -28px 48px rgba(0, 0, 0, 0.45),
+    inset 0 18px 36px rgba(255, 255, 255, 0.06);
+}
+
+.color-setup-screen .color-triangle--setup .color-triangle__synergy {
+  z-index: 1;
+  color: #f8f4ff;
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.95),
+    0 0 12px rgba(255, 255, 255, 0.2);
+}
+
+.color-setup-screen .color-triangle--setup .color-triangle__vtx {
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  background:
+    radial-gradient(
+      circle at 30% 25%,
+      rgba(255, 255, 255, 0.65) 0%,
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 70% 85%,
+      rgba(0, 0, 0, 0.45) 0%,
+      transparent 48%
+    ),
+    radial-gradient(
+      circle at 32% 28%,
+      color-mix(in srgb, var(--vtx) 52%, #fff),
+      var(--vtx)
+    );
+  box-shadow:
+    inset 0 2px 8px rgba(255, 255, 255, 0.22),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(201, 162, 39, 0.45),
+    0 4px 12px rgba(0, 0, 0, 0.55);
+}
+
+.color-setup-screen .color-triangle--setup .color-triangle__vtx[data-i="0"]:hover,
+.color-setup-screen .color-triangle--setup .color-triangle__vtx[data-i="0"]:focus-visible,
+.color-setup-screen .color-triangle--setup .color-triangle__vtx[data-i="1"]:hover,
+.color-setup-screen .color-triangle--setup .color-triangle__vtx[data-i="1"]:focus-visible,
+.color-setup-screen .color-triangle--setup .color-triangle__vtx[data-i="2"]:hover,
+.color-setup-screen .color-triangle--setup .color-triangle__vtx[data-i="2"]:focus-visible {
+  box-shadow:
+    inset 0 2px 10px rgba(255, 255, 255, 0.3),
+    inset 0 -3px 8px rgba(0, 0, 0, 0.4),
+    0 0 0 2px rgba(212, 175, 55, 0.6),
+    0 5px 14px rgba(0, 0, 0, 0.55);
+}
+
+.color-setup-screen .color-triangle__popover {
+  background: rgba(10, 8, 16, 0.97);
+  border: 1px solid rgba(201, 162, 39, 0.42);
+  box-shadow:
+    0 0 0 1px rgba(40, 32, 18, 0.5),
+    0 12px 36px rgba(0, 0, 0, 0.65),
+    0 0 28px rgba(212, 175, 55, 0.08);
 }
 
 .run-color-triangle-dock {
@@ -3101,6 +3822,212 @@ body.enemy-inspect--dragging-body {
   );
 }
 
+/* Loja do coliseu (ouro): véu escuro + cartões dourados */
+.shop-screen__panel--gold {
+  background: linear-gradient(
+    185deg,
+    rgba(14, 11, 18, 0.42) 0%,
+    rgba(22, 18, 28, 0.72) 35%,
+    rgba(18, 14, 22, 0.88) 70%,
+    rgba(12, 10, 16, 0.92) 100%
+  );
+}
+
+.shop-screen__panel--gold .shop-title.hero-setup-main-title {
+  width: 100%;
+  text-align: center;
+  margin-bottom: 0.35rem;
+}
+
+.shop-screen__panel--gold .shop-hero-name {
+  margin-top: 0.55rem;
+  color: #e8c547;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+}
+
+.shop-hero-gold-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin: 0 0 0.55rem;
+  font-size: 0.92rem;
+  color: #c4b8a8;
+}
+
+.shop-hero-gold__coin-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  cursor: help;
+  border-radius: 6px;
+  outline: none;
+}
+
+.shop-hero-gold__coin-wrap:focus-visible {
+  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.65);
+}
+
+.shop-hero-gold__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shop-hero-gold__coin-svg {
+  width: 2.15rem;
+  height: 2.15rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+}
+
+.shop-hero-gold__value {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #f2d56a;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+
+.shop-hero-gold__sep {
+  opacity: 0.55;
+  user-select: none;
+}
+
+.shop-hero-gold__hero-idx {
+  color: #a89878;
+  font-size: 0.88rem;
+}
+
+.shop-screen__panel--gold .shop-hero-viz {
+  background: linear-gradient(
+    168deg,
+    rgba(210, 214, 222, 0.12) 0%,
+    rgba(90, 96, 108, 0.1) 45%,
+    rgba(28, 26, 34, 0.55) 100%
+  );
+  border: 2px solid rgba(201, 162, 39, 0.48);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.shop-screen__panel--gold .gold-shop-hero-3d-host {
+  border: 2px solid rgba(201, 162, 39, 0.35);
+  background: linear-gradient(180deg, rgba(18, 16, 26, 0.9), #0a0910);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.shop-screen__panel--gold .shop-hero-stats-head {
+  color: #c9a85a;
+  font-weight: 800;
+}
+
+.shop-screen__panel--gold .shop-item {
+  background: linear-gradient(
+    168deg,
+    rgba(52, 48, 58, 0.88) 0%,
+    rgba(28, 26, 34, 0.92) 100%
+  );
+  border: 2px solid rgba(201, 162, 39, 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+.shop-screen__panel--gold .shop-item__buy:not(:disabled) {
+  border-color: rgba(201, 162, 39, 0.55);
+}
+
+.shop-screen__panel--gold .shop-nav {
+  border-top: 1px solid rgba(201, 162, 39, 0.22);
+  padding-top: 0.75rem;
+  margin-top: 1rem;
+}
+
+.shop-screen__panel--gold .shop-nav .btn {
+  border: 2px solid rgba(201, 162, 39, 0.65);
+  background: linear-gradient(
+    168deg,
+    rgba(72, 68, 78, 0.92) 0%,
+    rgba(38, 36, 44, 0.96) 45%,
+    rgba(52, 50, 58, 0.9) 100%
+  );
+  color: #c9885a;
+  text-shadow:
+    0 1px 0 rgba(255, 214, 175, 0.22),
+    0 -1px 0 rgba(20, 10, 6, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.shop-screen__panel--gold .shop-nav .btn:hover:not(:disabled) {
+  border-color: #d4af37;
+  color: #7a3d20;
+  background: linear-gradient(
+    162deg,
+    #f0f2f6 0%,
+    #d8dce4 30%,
+    #b8c0cc 50%,
+    #dce0e8 78%,
+    #f4f6f9 100%
+  );
+  text-shadow:
+    0 1px 0 rgba(255, 230, 200, 0.5),
+    0 -1px 0 rgba(40, 20, 12, 0.45);
+  box-shadow:
+    0 0 0 1px #2a2210,
+    0 0 0 2px #6b5416,
+    0 0 0 3px #c9a227,
+    inset 0 2px 3px rgba(255, 255, 255, 0.75),
+    0 6px 20px rgba(212, 175, 55, 0.28);
+  filter: none;
+}
+
+.shop-screen__panel--gold .shop-nav .btn-primary {
+  border-color: rgba(212, 175, 55, 0.75);
+  background: linear-gradient(
+    168deg,
+    rgba(100, 78, 32, 0.95) 0%,
+    rgba(58, 44, 18, 0.98) 100%
+  );
+  color: #f5ecd8;
+  text-shadow:
+    0 1px 0 rgba(80, 60, 20, 0.6),
+    0 -1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.shop-screen__panel--gold .shop-nav .btn-primary:hover:not(:disabled) {
+  border-color: #d4af37;
+  color: #4a3010;
+  background: linear-gradient(
+    162deg,
+    #fff8e8 0%,
+    #f0d878 28%,
+    #d4af37 52%,
+    #f5e6a8 100%
+  );
+  text-shadow:
+    0 1px 0 rgba(255, 230, 200, 0.55),
+    0 -1px 0 rgba(40, 20, 12, 0.35);
+  box-shadow:
+    0 0 0 1px #2a2210,
+    0 0 0 2px #6b5416,
+    0 0 0 3px #c9a227,
+    inset 0 2px 3px rgba(255, 255, 255, 0.75),
+    0 6px 20px rgba(212, 175, 55, 0.28);
+}
+
+.shop-screen__panel--gold .shop-bunker {
+  border-top-color: rgba(201, 162, 39, 0.28);
+}
+
+.shop-screen__panel--gold .shop-bunker__title {
+  color: #e8c547;
+}
+
 .crystal-shop-panel-inner {
   position: relative;
   z-index: 1;
@@ -3231,14 +4158,6 @@ body.enemy-inspect--dragging-body {
   gap: 0.65rem;
 }
 
-.crystal-shop-item--header {
-  display: block;
-  min-width: 0;
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-  hyphens: auto;
-}
-
 .crystal-shop-item__text {
   flex: 1 1 auto;
   min-width: 0;
@@ -3329,12 +4248,6 @@ body.enemy-inspect--dragging-body {
 .shop-hero-name {
   margin: 0.85rem 0 0.2rem;
   font-size: 1.05rem;
-}
-
-.shop-hero-gold {
-  margin: 0 0 0.5rem;
-  font-size: 0.92rem;
-  opacity: 0.95;
 }
 
 .shop-hero-viz {
@@ -3626,11 +4539,6 @@ body.enemy-inspect--dragging-body {
   --biome-stage-h: min(52vh, 520px);
 }
 
-.biome-setup-title {
-  text-align: center;
-  margin-bottom: 0.35rem;
-}
-
 .biome-setup-layout {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3779,6 +4687,89 @@ body.enemy-inspect--dragging-body {
   margin: 0.35rem auto 0;
   padding: 0 0.5rem;
   justify-content: flex-start;
+}
+
+/* Bioma inicial — cartões e tipografia alinhados à loja de cristais / setup de heróis */
+.screen--biome-setup .hero-setup-hint {
+  max-width: min(760px, 94vw);
+  margin-bottom: 0.65rem;
+  color: #b8a878;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.screen--biome-setup .biome-setup-actions--hero-row {
+  border-top: 1px solid rgba(201, 162, 39, 0.22);
+  padding-top: 0.65rem;
+  margin-top: 0.45rem;
+}
+
+.screen--biome-setup .biome-setup-left {
+  background: linear-gradient(
+    168deg,
+    rgba(210, 214, 222, 0.14) 0%,
+    rgba(140, 148, 162, 0.12) 35%,
+    rgba(90, 96, 108, 0.16) 55%,
+    rgba(160, 168, 180, 0.1) 100%
+  );
+  border: 2px solid rgba(201, 162, 39, 0.55);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -2px 8px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(40, 32, 18, 0.5),
+    0 4px 14px rgba(0, 0, 0, 0.35);
+  color: #d8a574;
+  text-shadow: 0 1px 0 rgba(20, 12, 8, 0.35);
+}
+
+.screen--biome-setup .biome-hero-name {
+  font-family: Palatino, "Palatino Linotype", Georgia, serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #e8c547;
+  text-shadow:
+    0 1px 0 rgba(60, 48, 12, 0.55),
+    0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+.screen--biome-setup .biome-hero-step {
+  color: #a89878;
+  opacity: 1;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.screen--biome-setup .biome-desc-panel {
+  background: linear-gradient(
+    168deg,
+    rgba(52, 48, 58, 0.92) 0%,
+    rgba(24, 20, 32, 0.94) 100%
+  );
+  border: 2px solid rgba(201, 162, 39, 0.42);
+  border-radius: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -2px 8px rgba(0, 0, 0, 0.22),
+    0 4px 14px rgba(0, 0, 0, 0.3);
+}
+
+.screen--biome-setup .biome-desc-title {
+  color: #f0e6a8;
+  text-shadow: 0 1px 0 rgba(20, 12, 8, 0.45);
+}
+
+.screen--biome-setup .biome-desc-body {
+  color: #c4ccd8;
+}
+
+.screen--biome-setup .biome-hero-model-wrap,
+.screen--biome-setup .biome-picker-wrap {
+  border: 2px solid rgba(201, 162, 39, 0.42);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(18, 16, 26, 0.95), #0a0910);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -4px 12px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(40, 32, 18, 0.4);
 }
 
 /* —— Forja / essências / modal equipamentos —— */
