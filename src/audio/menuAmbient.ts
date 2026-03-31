@@ -1,6 +1,6 @@
 import { getMusicVolumeFactor } from "../game/musicVolumePref";
 
-const THEME = "/audio/menu-theme.mp3";
+const THEME = `${import.meta.env.BASE_URL}audio/menu-theme.mp3`;
 /** Volume máximo do tema de menu (slider a 100%). */
 const BASE_MENU_VOLUME = 0.22;
 

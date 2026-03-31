@@ -24,7 +24,7 @@ const MOOD_AUDIO: Record<
   emperor: { playbackRate: 0.84, volume: 0.09 },
 };
 
-const TRACK = "/audio/rpg-battle-loop.mp3";
+const TRACK = `${import.meta.env.BASE_URL}audio/rpg-battle-loop.mp3`;
 
 let audioEl: HTMLAudioElement | null = null;
 let currentMood: CombatMusicMood | null = null;
