@@ -1,0 +1,14 @@
+---
+description: Após alterações no projeto, criar commit git com mensagem curta.
+alwaysApply: true
+---
+
+# Commits após mudanças
+
+Sempre que alterares ficheiros neste repositório (código, docs do projeto, config, etc.), no **final da tarefa**:
+
+1. Executa `git status` para ver o que mudou.
+2. Faz `git add` dos ficheiros relevantes (evita incluir lixo local acidental).
+3. Cria um commit com mensagem **curta e clara** (imperativo, estilo conventional commits se fizer sentido), por exemplo: `fix: corrige alvo dos inimigos`, `feat: atalhos QWE no combate`, `chore: atualiza dependências`.
+
+**Exceções:** não commits se o utilizador pedir explicitamente para não gravar em git, ou se não houver alterações reais.
