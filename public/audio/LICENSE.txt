@@ -1,0 +1,13 @@
+rpg-battle-loop.mp3
+  Título: "RPG Battle Loop"
+  Autor: iamoneabe
+  Licença: CC0 (domínio público — sem obrigação de atribuição)
+  https://creativecommons.org/publicdomain/zero/1.0/
+  Fonte: https://opengameart.org/content/rpg-battle-loop
+
+menu-theme.mp3
+  Título: "Town Theme RPG"
+  Autor: cynicmusic
+  Licença: CC0 (domínio público)
+  https://creativecommons.org/publicdomain/zero/1.0/
+  Fonte: https://opengameart.org/content/town-theme-rpg

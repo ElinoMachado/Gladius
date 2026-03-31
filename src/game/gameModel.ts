@@ -1,0 +1,3828 @@
+import { axialKey, hexNeighbors } from "./hex";
+import type {
+  BiomeId,
+  ForgeEssenceId,
+  GamePhase,
+  HeroClassId,
+  MetaProgress,
+  TeamColor,
+  Unit,
+  WeaponLevel,
+} from "./types";
+import { buildHexArena, getCell, type HexCell } from "./grid";
+import { findPath, reachableHexes } from "./pathfinding";
+import { getSkipEnemyMoveAnim } from "./combatPrefs";
+import { hexDistance } from "./hex";
+import {
+  computeMitigatedDamage,
+  rollCrit,
+  applyCritMultiplier,
+  effectiveDefenseForBiome,
+  effectiveAlcanceForBiome,
+  biomeVolcanicDamage,
+  unitIgnoresTerrain,
+  rulerMovementBonus,
+} from "./combatMath";
+import {
+  biomeToEssenceId,
+  essenceDropTotalPercent,
+  resolveEssenceDropCount,
+  FORGE_ESSENCE_LABELS,
+  forgeSynergyTier,
+} from "./forge";
+import { createEnemyUnit, createHeroUnit, xpCurve, biomeAt } from "./unitFactory";
+import {
+  ateMorteCooldownWaves,
+  ateMorteDamageMult,
+  ateMorteManaCost,
+  atirarCooldownWaves,
+  atirarDamageMult,
+  furacaoBleedPct,
+  furacaoBleedTurns,
+  furacaoDamageMult,
+  gladiadorDuelHpPerWin,
+  normalizeWeaponLevel,
+  paraisoManaShieldMult,
+  paraisoRegenBonus,
+  paraisoRegenTurns,
+  paraisoShieldFlat,
+  pistoleiroPassiveBonusPerProc,
+  pisotearCooldownWaves,
+  pisotearDamageMult,
+  pisotearManaCost,
+  pisotearMaxHexDistance,
+  priestPassivePotencialPoints,
+  sentencaCooldownWaves,
+  sentencaDamageMult,
+  sentencaHealMult,
+  sentencaManaCost,
+  sentencaShieldOverflowRatio,
+  weaponUltThreshold,
+  weaponUpgradeCrystalCost,
+} from "./weaponData";
+import {
+  countEnemiesForWave,
+  ENEMY_BY_ID,
+  ESCRAVO,
+  FINAL_VICTORY_WAVE,
+  getEnemyArchetype,
+  killXpScaleForParty,
+  pickBossForWave,
+  pickEliteForWave,
+  pickGruntForWave,
+  waveConfigFromIndex,
+} from "./data/enemies";
+import { COMBAT_BIOMES, BIOME_LABELS } from "./data/biomes";
+import { goldDrainPerTurn } from "./data/shops";
+import { loadMeta, permPercent, saveMeta } from "./metaStore";
+import { getArtifactMaxStacks, randomArtifactChoicesForHero } from "./artifactUi";
+import { ARTIFACT_POOL, artifactDefById } from "./data/artifacts";
+import {
+  DEV_TEST_ARTIFACT_COUNT,
+  DEV_TEST_CROWD_UI,
+  DEV_TEST_WAVE1_ENEMY_COUNT,
+} from "./devTestFlags";
+import { GOLD_SHOP } from "./data/shops";
+import { computePartyBonus } from "./colorSynergy";
+import {
+  clearCombatOutcomeQueue,
+  combatOutcomePriority,
+  enqueueCombatOutcome,
+  flushCombatOutcomeQueue,
+} from "./combatOutcomeQueue";
+import {
+  ATIRAR_FIRST_DAMAGE_MS,
+  ATIRAR_STAGGER_MS,
+  BASIC_MAGIC_FLIGHT_MS,
+  BASIC_PISTOL_FLIGHT_MS,
+  BUNKER_MINAS_RING_STAGGER_MS,
+  BUNKER_TIRO_FLIGHT_MS,
+  DUEL_FIRST_HIT_MS,
+  DUEL_HIT_MS,
+  SENTENCA_FIRST_DAMAGE_MS,
+  SENTENCA_HEAL_AFTER_LAST_HIT_MS,
+  SENTENCA_STAGGER_MS,
+  UNIT_MOVE_SEGMENT_MS,
+} from "./combatTiming";
+import {
+  BUNKER_EVOLVE_COSTS,
+  type BunkerState,
+  bunkerMinasCooldownWaves,
+  bunkerMinasDamageMult,
+  bunkerMinasMaxRing,
+  BUNKER_DAMAGE_TAKEN_MULT,
+  bunkerStatsForTier,
+  bunkerTiroCooldownWaves,
+  createInitialBunkerState,
+} from "./bunker";
+
+/** Dica única para VFX/sons no canvas (consumida pelo main após trySkill). */
+export type CombatVfxHint =
+  | null
+  | {
+      kind: "atirar_todo_lado";
+      heroId: string;
+      targetIds: string[];
+      shotCount: number;
+    }
+  | { kind: "duel_start"; gladiadorId: string; enemyId: string }
+  | { kind: "duel_end"; gladiadorId: string }
+  | {
+      kind: "sentenca";
+      priestId: string;
+      /** Ordem = ordem dos hits (mesmo bioma). */
+      targetIds: string[];
+      allyIds: string[];
+      enemyHitCount: number;
+    }
+  | {
+      kind: "basic_projectile";
+      fromId: string;
+      toId: string;
+      style: "bullet" | "magic";
+    }
+  | { kind: "basic_volley"; fromId: string; targetIds: string[] }
+  | {
+      kind: "bunker_minas";
+      centerQ: number;
+      centerR: number;
+      maxRing: number;
+      staggerMs: number;
+    }
+  | { kind: "bunker_mortar"; fromId: string; toId: string }
+  | {
+      kind: "enemy_strike";
+      attackerId: string;
+      targetId: string;
+      archetypeId: string | undefined;
+    };
+
+/** Id sintético para números flutuantes de dano no bunker (HUD / canvas). */
+export const BUNKER_COMBAT_FLOAT_ID = "__bunker__";
+
+/** Teto do A* na aproximação inimiga. `movimento * 2` impedia caminhos longos (mapa raio ~25), fazendo-os “parados” até o herói chegar perto. */
+const ENEMY_APPROACH_PATHFIND_MAX = 100;
+
+export interface RunSetup {
+  heroes: HeroClassId[];
+  /** Um bioma inicial por herói (mesma ordem) */
+  biomes: BiomeId[];
+  /** Cores dos três slots de party (triângulo); índice = slot 0–2. */
+  colors: TeamColor[];
+  /**
+   * Para cada entrada em `heroes`, o slot de party 0–2 (chave de `forgeByHeroSlot`
+   * e de `colors`). Mesma ordem que a lista densa de heróis escolhidos.
+   */
+  partySlotByHero: (0 | 1 | 2)[];
+}
+
+/** Resumo ao fechar wave (ouro base vs bónus meta, cristais e essências da wave). */
+export type WaveEndLootSummary = {
+  wave: number;
+  goldLines: { heroName: string; base: number; bonus: number; total: number }[];
+  crystalsGained: number;
+  essences: { id: ForgeEssenceId; n: number }[];
+  /** XP total ganho na wave (após multiplicadores), soma de todos os heróis. */
+  xpTotal: number;
+};
+
+export type CombatFloatKind =
+  | "damage"
+  | "shield_absorb"
+  | "shield_gain"
+  | "heal"
+  | "mana";
+
+/** Números flutuantes no canvas (dano, escudo, cura, mana). */
+export interface CombatFloatEvent {
+  unitId: string;
+  kind: CombatFloatKind;
+  amount: number;
+  crit?: boolean;
+  /** Vítima de dano / absorção (cor no float). */
+  targetIsPlayer?: boolean;
+  /** Atacante herói (SFX). */
+  sourceClass?: HeroClassId;
+  /** Golpe no duelo (VFX sangue + som de corte). */
+  duelCut?: boolean;
+  /** Dano absorvido pelo bunker (float vermelho próprio). */
+  bunkerDamage?: boolean;
+  /** Hex do bunker (vários bunkers na arena). */
+  bunkerHex?: { q: number; r: number };
+  /** Hex da unidade no momento do evento (fallback se a mesh já foi removida). */
+  floatHex?: { q: number; r: number };
+  /** Dano por veneno (tick); float roxo, não crita; ignora crítico de habilidades até haver efeito específico. */
+  poisonDot?: boolean;
+}
+
+export class GameModel {
+  meta: MetaProgress;
+  grid: Map<string, HexCell> = new Map();
+  units: Unit[] = [];
+  wave = 0;
+  phase: GamePhase = "main_menu";
+  partyOrder: string[] = [];
+  currentHeroIndex = 0;
+  movementLeft = 0;
+  basicLeft = 0;
+  /** Ataques básicos já usados no turno do herói atual (para `braco_forte` recontar ao ganhar stack). */
+  basicAttacksSpentThisTurn = 0;
+  crystalsRun = 0;
+  logLines: string[] = [];
+  pendingArtifacts: {
+    unitId: string;
+    choices: string[];
+    /** Mesmo número de cartas que no primeiro sorteio (para rerol). */
+    choiceCount: number;
+    /** 1 rerol gratuito por level-up; 0 após usar. */
+    rerollsLeft: number;
+  } | null = null;
+  pendingUltimate: { unitId: string } | null = null;
+  duel: { gladiatorId: string; enemyId: string } | null = null;
+  selectedUnitId: string | null = null;
+  victoryWave20 = false;
+  /** Cores da run (sinergia VVA escudo/turno) */
+  runColors: TeamColor[] = [];
+  /** % extra de XP do grupo (ex.: tricolor verde+azul+vermelho). */
+  partyXpBonusPct = 0;
+  /** Bioma inicial por herói (spawn de inimigos restrito a estes + presença do jogador). */
+  runHeroBiomes: BiomeId[] = [];
+  /** Um bunker por bioma de combate (hex próprio). */
+  bunkers: Partial<Record<BiomeId, BunkerState>> = {};
+  /** Após resumo de wave: loja ou ecrã de vitória. */
+  private pendingWaveSummaryNext: "shop" | "victory" | null = null;
+  /** Fase inimiga em curso (turnos escalonados no tempo). */
+  inEnemyPhase = false;
+  /** Nova wave: aguardar overlay da UI antes de iniciar a fase inimiga. */
+  private blockEnemyPhaseForWaveIntro = false;
+  /** Mensagem única (ex.: reentrada no bunker) consumida pela UI. */
+  pendingBunkerHint: { text: string; q: number; r: number } | null = null;
+  /** Mensagem única de movimento bloqueado (2+ inimigos adjacentes), consumida pela UI. */
+  private pendingMoveBlockedHint: { text: string; unitId: string } | null = null;
+  /** Último inimigo que agiu (foco de câmera / HUD). */
+  lastEnemyActedId: string | null = null;
+  /** UI: acabou de iniciar o turno de um herói (câmera + preview de movimento). */
+  private playerTurnJustStarted = false;
+  /** Consumido pelo render: animação hex-a-hex no canvas. */
+  pendingMoveAnim: {
+    unitId: string;
+    cells: { q: number; r: number }[];
+    /** Se definido, substitui `UNIT_MOVE_SEGMENT_MS` (ex.: inimigos acelerados). */
+    segmentMs?: number;
+  } | null = null;
+  /** 1 = normal; menor que 1 acelera movimento/pausa na fase inimiga (muitos inimigos). */
+  private enemyPhaseTimingMult = 1;
+
+  private combatFloats: CombatFloatEvent[] = [];
+
+  private listeners = new Set<() => void>();
+  private enemyTurnQueue: Unit[] = [];
+  /** Ações de combate escalonadas (dano alinhado a VFX). */
+  private combatSchedule: { at: number; fn: () => void }[] = [];
+  /**
+   * Sentença: cura em grupo agendada. Se a wave acabar no último hit, `onWaveCleared`
+   * limpa a fila antes do job de cura — aplicamos aqui antes de `clearCombatSchedule`.
+   */
+  private pendingSentencaPartyHeal: {
+    priestId: string;
+    heal: number;
+    priestBio: BiomeId;
+  } | null = null;
+  private duelNextIsGladiatorStrike = true;
+  private pendingCombatVfx: CombatVfxHint = null;
+  private waveCrystalsGained = 0;
+  private waveXpGained = 0;
+  private waveEssencesGained: Partial<Record<ForgeEssenceId, number>> = {};
+  private waveLootSummaryPending: WaveEndLootSummary | null = null;
+
+  constructor() {
+    this.meta = loadMeta();
+    /** ~10× mais hexes que raio 8 (área ~9,8×); mapa bem maior. */
+    this.grid = buildHexArena(25);
+  }
+
+  subscribe(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private emit(): void {
+    for (const l of this.listeners) l();
+  }
+
+  log(msg: string): void {
+    this.logLines.push(msg);
+    if (this.logLines.length > 80) this.logLines.shift();
+    this.emit();
+  }
+
+  saveMeta(): void {
+    saveMeta(this.meta);
+  }
+
+  /** Bónus % de ouro meta (loja de cristais) aplicado a qualquer ganho de ouro na run. */
+  metaGoldBonusOnRaw(raw: number): { base: number; bonus: number; total: number } {
+    const pct = permPercent(this.meta.permGold);
+    if (pct <= 0 || raw <= 0) return { base: raw, bonus: 0, total: raw };
+    const total = Math.round(raw * (1 + pct / 100));
+    return { base: raw, bonus: total - raw, total };
+  }
+
+  private addHeroOuroWithMetaBonus(h: Unit, raw: number): void {
+    if (raw <= 0) return;
+    const { total } = this.metaGoldBonusOnRaw(raw);
+    h.ouro += total;
+  }
+
+  private allBunkerStates(): BunkerState[] {
+    return COMBAT_BIOMES.map((id) => this.bunkers[id]).filter(
+      (x): x is BunkerState => !!x,
+    );
+  }
+
+  /** Bunker no hex (estrutura). */
+  bunkerAtHex(q: number, r: number): BunkerState | null {
+    for (const b of this.allBunkerStates()) {
+      if (b.q === q && b.r === r) return b;
+    }
+    return null;
+  }
+
+  bunkerForOccupant(heroId: string): BunkerState | null {
+    for (const b of this.allBunkerStates()) {
+      if (b.occupantId === heroId) return b;
+    }
+    return null;
+  }
+
+  /** Primeiro bunker (tiros/minas usam o do hex do herói). Loja: tier partilhado. */
+  bunkerForShop(): BunkerState | null {
+    for (const id of COMBAT_BIOMES) {
+      const b = this.bunkers[id];
+      if (b) return b;
+    }
+    return null;
+  }
+
+  /** Heróis registados como ocupantes de bunkers vivos (estrutura com PV > 0). */
+  bunkerOccupantIdsForSync(): Set<string> {
+    const s = new Set<string>();
+    for (const b of this.allBunkerStates()) {
+      if (b.hp <= 0 || !b.occupantId) continue;
+      s.add(b.occupantId);
+    }
+    return s;
+  }
+
+  /** Render 3D: bunkers com PV > 0. */
+  bunkersForRender(): { q: number; r: number; hp: number; maxHp: number }[] {
+    return this.allBunkerStates()
+      .filter((b) => b.hp > 0)
+      .map((b) => ({
+        q: b.q,
+        r: b.r,
+        hp: b.hp,
+        maxHp: b.maxHp,
+      }));
+  }
+
+  /** Resumo da wave (UI do overlay antes da loja / vitória). */
+  peekWaveLootSummary(): WaveEndLootSummary | null {
+    return this.waveLootSummaryPending;
+  }
+
+  dismissWaveSummary(): void {
+    if (this.phase !== "wave_summary") return;
+    this.waveLootSummaryPending = null;
+    const next = this.pendingWaveSummaryNext;
+    this.pendingWaveSummaryNext = null;
+    if (next === "victory") {
+      this.phase = "victory";
+      this.victoryWave20 = true;
+      this.meta.crystals += this.crystalsRun + 5;
+      this.saveMeta();
+    } else if (next === "shop") {
+      this.teleportPartyToHub();
+      this.phase = "shop_wave";
+    }
+    this.emit();
+  }
+
+  /** Sai da run na loja: guarda cristais da run na meta e volta ao menu. */
+  abandonRunFromShop(): void {
+    this.meta.crystals += this.crystalsRun;
+    this.crystalsRun = 0;
+    this.saveMeta();
+    this.units = [];
+    this.bunkers = {};
+    this.partyOrder = [];
+    this.phase = "main_menu";
+    this.wave = 0;
+    this.emit();
+  }
+
+  getParty(): Unit[] {
+    return this.partyOrder
+      .map((id) => this.units.find((u) => u.id === id))
+      .filter((u): u is Unit => !!u);
+  }
+
+  private partyHasForgeVulcanicTier(min: 2 | 3): boolean {
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      if (forgeSynergyTier(h.forgeLoadout, "vulcanico") >= min) return true;
+    }
+    return false;
+  }
+
+  private anyHeroSuppressesEnemyForestRange(): boolean {
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      if (biomeAt(this.grid, h.q, h.r) !== "floresta") continue;
+      if (forgeSynergyTier(h.forgeLoadout, "floresta") >= 1) return true;
+    }
+    return false;
+  }
+
+  /** Sorte efetiva (ex.: sinergia floresta nv3 dobra). */
+  effectiveSorte(u: Unit): number {
+    let s = u.sorte;
+    if (forgeSynergyTier(u.forgeLoadout, "floresta") >= 3) s *= 2;
+    return s;
+  }
+
+  takePendingMoveAnimation(): {
+    unitId: string;
+    cells: { q: number; r: number }[];
+    segmentMs?: number;
+  } | null {
+    const p = this.pendingMoveAnim;
+    this.pendingMoveAnim = null;
+    return p;
+  }
+
+  takeCombatFloats(): CombatFloatEvent[] {
+    const p = this.combatFloats;
+    this.combatFloats = [];
+    return p;
+  }
+
+  /** Chamado quando o overlay “Wave N” termina (fade + remoção). */
+  releaseEnemyPhaseAfterWaveIntro(): void {
+    if (!this.blockEnemyPhaseForWaveIntro) return;
+    if (this.phase !== "combat") return;
+    this.blockEnemyPhaseForWaveIntro = false;
+    this.runEnemyPhase();
+  }
+
+  takeCombatVfxHint(): CombatVfxHint {
+    const x = this.pendingCombatVfx;
+    this.pendingCombatVfx = null;
+    return x;
+  }
+
+  /** Fila de dano/efeitos alinhada ao tempo; chamar no loop do combate. */
+  tickCombatSchedule(): void {
+    if (this.phase !== "combat") return;
+    if (this.combatSchedule.length === 0) {
+      flushCombatOutcomeQueue({
+        hasPendingCombatSchedule: () => this.hasPendingCombatSchedule(),
+        getPhase: () => this.phase,
+      });
+      return;
+    }
+    const now = performance.now();
+    this.combatSchedule.sort((a, b) => a.at - b.at);
+    while (this.combatSchedule.length > 0 && this.combatSchedule[0]!.at <= now) {
+      const job = this.combatSchedule.shift()!;
+      try {
+        job.fn();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    flushCombatOutcomeQueue({
+      hasPendingCombatSchedule: () => this.hasPendingCombatSchedule(),
+      getPhase: () => this.phase,
+    });
+  }
+
+  private queueCombat(delayMs: number, fn: () => void): void {
+    this.combatSchedule.push({ at: performance.now() + delayMs, fn });
+  }
+
+  private clearCombatSchedule(): void {
+    this.combatSchedule = [];
+  }
+
+  /** Fila de dano/VFX ainda por executar (bloqueia “Encerrar turno”). */
+  hasPendingCombatSchedule(): boolean {
+    return this.combatSchedule.length > 0;
+  }
+
+  private pushCombatFloat(ev: CombatFloatEvent): void {
+    if (ev.amount <= 0) return;
+    this.combatFloats.push(ev);
+  }
+
+  currentHero(): Unit | null {
+    const id = this.partyOrder[this.currentHeroIndex];
+    return this.units.find((u) => u.id === id) ?? null;
+  }
+
+  /** Indica início de turno de herói; consome o sinal (uma vez). */
+  consumePlayerTurnJustStarted(): boolean {
+    if (!this.playerTurnJustStarted) return false;
+    this.playerTurnJustStarted = false;
+    return true;
+  }
+
+  startNewRun(setup: RunSetup): void {
+    this.playerTurnJustStarted = false;
+    this.inEnemyPhase = false;
+    this.lastEnemyActedId = null;
+    this.enemyTurnQueue = [];
+    this.units = [];
+    this.wave = 0;
+    this.crystalsRun = 0;
+    this.waveCrystalsGained = 0;
+    this.waveEssencesGained = {};
+    this.waveLootSummaryPending = null;
+    this.waveXpGained = 0;
+    this.logLines = [];
+    this.duel = null;
+    this.clearCombatSchedule();
+    clearCombatOutcomeQueue();
+    this.basicAttacksSpentThisTurn = 0;
+    this.pendingSentencaPartyHeal = null;
+    this.duelNextIsGladiatorStrike = true;
+    this.blockEnemyPhaseForWaveIntro = false;
+    this.victoryWave20 = false;
+    const colors = setup.colors;
+    this.runColors = [...colors];
+    this.partyXpBonusPct = computePartyBonus(colors).xpGainPct;
+    this.runHeroBiomes = [...setup.biomes];
+    this.bunkers = {};
+    this.pendingBunkerHint = null;
+    const spawnTaken = new Set<string>();
+    setup.heroes.forEach((cls, i) => {
+      const biome = setup.biomes[i]!;
+      const partySlot = setup.partySlotByHero[i]!;
+      const spawn =
+        this.nextPartyHexInBiome(biome, spawnTaken) ??
+        this.randomEmptyInBiome(biome);
+      spawnTaken.add(axialKey(spawn.q, spawn.r));
+      const forgeSlot = this.meta.forgeByHeroSlot[partySlot] ?? {};
+      const teamColor = colors[partySlot]!;
+      const wl = normalizeWeaponLevel(
+        this.meta.weaponLevelByHeroSlot[partySlot],
+      );
+      const u = createHeroUnit(
+        cls,
+        teamColor,
+        colors,
+        this.meta,
+        spawn.q,
+        spawn.r,
+        forgeSlot,
+        wl,
+      );
+      u.displayColor =
+        teamColor === "azul"
+          ? 0x4488ff
+          : teamColor === "verde"
+            ? 0x44cc66
+            : 0xcc4444;
+      u.partySlotIndex = partySlot;
+      this.units.push(u);
+    });
+    /** Não usar getParty() aqui: ele depende de partyOrder, ainda vazio neste ponto. */
+    this.partyOrder = this.units.filter((u) => u.isPlayer).map((u) => u.id);
+    if (DEV_TEST_CROWD_UI) {
+      const poolSlice = ARTIFACT_POOL.slice(0, DEV_TEST_ARTIFACT_COUNT);
+      for (const u of this.units) {
+        if (!u.isPlayer) continue;
+        for (const a of poolSlice) {
+          u.artifacts[a.id] = 1;
+        }
+      }
+    }
+    this.pendingArtifacts = null;
+    this.pendingUltimate = null;
+    this.phase = "shop_initial";
+    this.currentHeroIndex = 0;
+    this.emit();
+  }
+
+  finishInitialShop(): void {
+    this.phase = "combat";
+    this.startWave(1);
+  }
+
+  startWave(n: number): void {
+    this.playerTurnJustStarted = false;
+    this.clearCombatSchedule();
+    clearCombatOutcomeQueue();
+    this.pendingSentencaPartyHeal = null;
+    this.duel = null;
+    this.duelNextIsGladiatorStrike = true;
+    this.waveCrystalsGained = 0;
+    this.waveXpGained = 0;
+    this.waveEssencesGained = {};
+    this.wave = n;
+    this.inEnemyPhase = false;
+    this.lastEnemyActedId = null;
+    this.enemyTurnQueue = [];
+    this.clearDead();
+    for (const u of this.units) {
+      if (!u.isPlayer) continue;
+      u.ouroWave = 100;
+      if (u.hp <= 0) {
+        u.hp = Math.floor(u.maxHp * 0.5);
+        this.log(`${u.name} ressuscita com 50% vida.`);
+      } else {
+        u.hp = Math.min(u.hp, u.maxHp);
+        u.mana = Math.min(u.mana, u.maxMana);
+      }
+      u.skillCd = {};
+      u.pistoleiroBonusDanoWave = 0;
+      u.curandeiroDanoWave = 0;
+      u.shieldGGBlue = 0;
+      if ((u.furiaGiganteTurns ?? 0) > 0 || u.furiaExtraMaxHp) {
+        const extra = u.furiaExtraMaxHp ?? 0;
+        if (extra > 0) {
+          u.maxHp -= extra;
+          u.hp = Math.min(u.hp, u.maxHp);
+        }
+        if (u.furiaSavedDano != null) u.dano = u.furiaSavedDano;
+        u.furiaGiganteTurns = undefined;
+        u.furiaExtraMaxHp = undefined;
+        u.furiaSavedDano = undefined;
+      }
+      if (u.ultimateId === "fada_cura") {
+        u.flying = true;
+        for (const ally of this.getParty()) {
+          const shield = Math.floor(ally.maxHp * 0.5);
+          ally.shieldGGBlue += shield;
+        }
+      }
+    }
+    this.placePartyOnChosenBiomeFirstHexes();
+    this.spawnEnemiesForWave();
+    this.ensureBunkersPlaced();
+    this.currentHeroIndex = 0;
+    /** Fase inimiga só após o overlay da wave (ver `releaseEnemyPhaseAfterWaveIntro`). */
+    this.blockEnemyPhaseForWaveIntro = true;
+    const ec = this.enemies().length;
+    this.log(`— Wave ${n} — ${ec} inimigo(s) na arena (alvos laranja/vermelho).`);
+    this.emit();
+  }
+
+  private clearDead(): void {
+    this.units = this.units.filter((u) => u.isPlayer || u.hp > 0);
+  }
+
+  /** Distância axial do centro da arena (castelo/hub em 0,0) ao hex do bunker. */
+  private static readonly BUNKER_RING_FROM_CENTER = 8;
+
+  /** Melhor hex livre no bioma: preferência anel a 8 do centro; fallback ao mais próximo desse anel. */
+  private pickBunkerHexForBiome(
+    biome: BiomeId,
+    used: Set<string>,
+  ): { q: number; r: number } | null {
+    const origin = { q: 0, r: 0 };
+    const target = GameModel.BUNKER_RING_FROM_CENTER;
+    const scored = [...this.grid.values()]
+      .filter((c) => c.biome === biome)
+      .map((c) => ({
+        c,
+        err: Math.abs(hexDistance({ q: c.q, r: c.r }, origin) - target),
+      }));
+    scored.sort(
+      (a, b) => a.err - b.err || a.c.q - b.c.q || a.c.r - b.c.r,
+    );
+    const existing = this.allBunkerStates();
+    const usable = scored.filter(({ c }) => {
+      if (!this.bunkerHasEnemyUsableArea(c.q, c.r, biome, 3)) return false;
+      for (const b of existing) {
+        if (hexDistance({ q: c.q, r: c.r }, { q: b.q, r: b.r }) <= 3) {
+          return false;
+        }
+      }
+      return true;
+    });
+    const pool = usable.length > 0 ? usable : scored;
+    for (const { c } of pool) {
+      const k = axialKey(c.q, c.r);
+      if (used.has(k)) continue;
+      const occ = this.units.some(
+        (u) => u.hp > 0 && u.q === c.q && u.r === c.r,
+      );
+      if (occ) continue;
+      return { q: c.q, r: c.r };
+    }
+    return null;
+  }
+
+  /**
+   * Evita bunker em posição "morta": em raio `radius` todos os hexes devem existir e
+   * pertencer ao mesmo bioma do bunker (inclui adjacentes).
+   */
+  private bunkerHasEnemyUsableArea(
+    q: number,
+    r: number,
+    biome: BiomeId,
+    radius: number,
+  ): boolean {
+    for (let dq = -radius; dq <= radius; dq++) {
+      for (let dr = -radius; dr <= radius; dr++) {
+        const ds = -dq - dr;
+        if (Math.max(Math.abs(dq), Math.abs(dr), Math.abs(ds)) > radius) continue;
+        const cell = getCell(this.grid, q + dq, r + dr);
+        if (!cell) return false;
+        if (cell.biome !== biome) return false;
+      }
+    }
+    return true;
+  }
+
+  /** Um bunker por bioma de combate, no anel ~8 hex do centro (castelo). */
+  private ensureBunkersPlaced(): void {
+    const used = new Set<string>();
+    for (const b of this.allBunkerStates()) {
+      used.add(axialKey(b.q, b.r));
+    }
+    const origin = { q: 0, r: 0 };
+    for (const bi of COMBAT_BIOMES) {
+      const existing = this.bunkers[bi];
+      if (existing) {
+        const d = hexDistance({ q: existing.q, r: existing.r }, origin);
+        if (
+          d !== GameModel.BUNKER_RING_FROM_CENTER &&
+          !existing.occupantId
+        ) {
+          used.delete(axialKey(existing.q, existing.r));
+          const pos = this.pickBunkerHexForBiome(bi, used);
+          if (pos) {
+            existing.q = pos.q;
+            existing.r = pos.r;
+            used.add(axialKey(pos.q, pos.r));
+          } else {
+            used.add(axialKey(existing.q, existing.r));
+          }
+        }
+        continue;
+      }
+      const pos = this.pickBunkerHexForBiome(bi, used);
+      if (!pos) continue;
+      this.bunkers[bi] = createInitialBunkerState(pos.q, pos.r);
+      used.add(axialKey(pos.q, pos.r));
+    }
+  }
+
+  private randomEmptyInBiome(biome: BiomeId): { q: number; r: number } {
+    const origin = { q: 0, r: 0 };
+    const candidates: { q: number; r: number }[] = [];
+    for (const c of this.grid.values()) {
+      if (c.biome !== biome) continue;
+      const occ = this.units.some((u) => u.q === c.q && u.r === c.r);
+      if (!occ) candidates.push({ q: c.q, r: c.r });
+    }
+    if (!candidates.length) return { q: 0, r: 0 };
+    candidates.sort(
+      (a, b) => hexDistance(a, origin) - hexDistance(b, origin),
+    );
+    const best = hexDistance(candidates[0]!, origin);
+    const tier = candidates.filter(
+      (p) => hexDistance(p, origin) <= best + 0.001,
+    );
+    return tier[Math.floor(Math.random() * tier.length)]!;
+  }
+
+  /**
+   * Hexes do bioma do mais próximo ao centro da arena (castelo em 0,0) ao mais longe;
+   * empate por (q, r). É a ordem do “primeiro hex” do bioma para spawn da party.
+   */
+  private partyBiomeCellsSortedFromCenter(biome: BiomeId): HexCell[] {
+    const origin = { q: 0, r: 0 };
+    return [...this.grid.values()]
+      .filter((c) => c.biome === biome)
+      .sort((a, b) => {
+        const da = hexDistance({ q: a.q, r: a.r }, origin);
+        const db = hexDistance({ q: b.q, r: b.r }, origin);
+        if (da !== db) return da - db;
+        return a.q - b.q || a.r - b.r;
+      });
+  }
+
+  /** Próximo hex livre nessa ordem (vários heróis no mesmo bioma: anéis seguintes). */
+  private nextPartyHexInBiome(
+    biome: BiomeId,
+    taken: Set<string>,
+  ): { q: number; r: number } | null {
+    for (const c of this.partyBiomeCellsSortedFromCenter(biome)) {
+      const k = axialKey(c.q, c.r);
+      if (taken.has(k)) continue;
+      return { q: c.q, r: c.r };
+    }
+    return null;
+  }
+
+  /**
+   * Após a loja, cada herói vivo começa a wave no primeiro hex livre do bioma escolhido
+   * (mais próximo do centro; segundo herói no mesmo bioma: seguinte nessa ordem).
+   */
+  private placePartyOnChosenBiomeFirstHexes(): void {
+    const taken = new Set<string>();
+    for (const hero of this.getParty()) {
+      if (hero.hp <= 0) continue;
+      const hi = this.partyOrder.indexOf(hero.id);
+      const biome =
+        hi >= 0 && hi < this.runHeroBiomes.length
+          ? this.runHeroBiomes[hi]!
+          : (biomeAt(this.grid, hero.q, hero.r) as BiomeId);
+      const pos =
+        this.nextPartyHexInBiome(biome, taken) ??
+        this.randomEmptyInBiome(biome);
+      hero.q = pos.q;
+      hero.r = pos.r;
+      taken.add(axialKey(pos.q, pos.r));
+    }
+  }
+
+  /** Escravo #1, #2… quando o nome base se repete. */
+  private disambiguateEnemyDisplayNames(): void {
+    const strip = (s: string) => s.replace(/ #\d+$/, "");
+    const groups = new Map<string, Unit[]>();
+    for (const u of this.units) {
+      if (u.isPlayer) continue;
+      const base = strip(u.name);
+      const arr = groups.get(base) ?? [];
+      arr.push(u);
+      groups.set(base, arr);
+    }
+    for (const [, arr] of groups) {
+      arr.sort((a, b) => a.id.localeCompare(b.id));
+      if (arr.length <= 1) {
+        arr[0]!.name = strip(arr[0]!.name);
+        continue;
+      }
+      for (let i = 0; i < arr.length; i++) {
+        arr[i]!.name = `${strip(arr[i]!.name)} #${i + 1}`;
+      }
+    }
+  }
+
+  private spawnEnemiesForWave(): void {
+    this.units = this.units.filter((u) => u.isPlayer);
+    const cfg = waveConfigFromIndex(this.wave);
+    const partyN = this.partyOrder.length;
+    const taken = new Set<string>();
+    for (const h of this.getParty()) taken.add(axialKey(h.q, h.r));
+
+    if (this.wave === 1 && !cfg.isBoss && !cfg.isElite) {
+      if (DEV_TEST_CROWD_UI) {
+        for (let i = 0; i < DEV_TEST_WAVE1_ENEMY_COUNT; i++) {
+          const pos = this.randomSpawnEnemy(taken);
+          const spawnBio = biomeAt(this.grid, pos.q, pos.r) as BiomeId;
+          const e = createEnemyUnit(
+            ESCRAVO,
+            this.wave,
+            partyN,
+            pos.q,
+            pos.r,
+            spawnBio,
+          );
+          this.units.push(e);
+          taken.add(axialKey(pos.q, pos.r));
+        }
+        this.disambiguateEnemyDisplayNames();
+        return;
+      }
+      /** 3 escravos por herói, cada qual no bioma daquele herói (evita acumular longe de um só). */
+      for (const hero of this.getParty()) {
+        if (hero.hp <= 0) continue;
+        const hi = this.partyOrder.indexOf(hero.id);
+        const homeBiome =
+          hi >= 0 && hi < this.runHeroBiomes.length
+            ? this.runHeroBiomes[hi]!
+            : (biomeAt(this.grid, hero.q, hero.r) as BiomeId);
+        for (let k = 0; k < 3; k++) {
+          const pos = this.randomSpawnEnemyInSingleBiome(taken, homeBiome, [hero]);
+          const e = createEnemyUnit(
+            ESCRAVO,
+            this.wave,
+            this.partyOrder.length,
+            pos.q,
+            pos.r,
+            homeBiome,
+          );
+          this.units.push(e);
+          taken.add(axialKey(pos.q, pos.r));
+        }
+      }
+      this.disambiguateEnemyDisplayNames();
+      return;
+    }
+
+    const arch = cfg.isBoss
+      ? pickBossForWave(this.wave)
+      : cfg.isElite
+        ? pickEliteForWave(this.wave)
+        : pickGruntForWave(this.wave);
+    const allowedBio = this.enemySpawnAllowedBiomes();
+    const biomesList = [...allowedBio]
+      .filter((b) => b !== "hub")
+      .sort((a, b) => a.localeCompare(b));
+
+    if (biomesList.length === 0) {
+      const total = cfg.isBoss ? 1 : countEnemiesForWave(this.wave, partyN);
+      for (let i = 0; i < total; i++) {
+        const pos = this.randomSpawnEnemy(taken);
+        const spawnBio = biomeAt(this.grid, pos.q, pos.r) as BiomeId;
+        const e = createEnemyUnit(arch, this.wave, partyN, pos.q, pos.r, spawnBio);
+        this.units.push(e);
+        taken.add(axialKey(pos.q, pos.r));
+      }
+      this.disambiguateEnemyDisplayNames();
+      return;
+    }
+
+    /** Boss: um só (não replicar por bioma). */
+    if (cfg.isBoss) {
+      const biome = biomesList[0]!;
+      const refHeroes = this.heroesWithHomeBiome(biome);
+      const pos = this.randomSpawnEnemyInSingleBiome(taken, biome, refHeroes);
+      this.units.push(
+        createEnemyUnit(
+          pickBossForWave(this.wave),
+          this.wave,
+          partyN,
+          pos.q,
+          pos.r,
+          biome,
+        ),
+      );
+      this.disambiguateEnemyDisplayNames();
+      return;
+    }
+
+    /**
+     * Igualdade estrita: cada bioma permitido recebe o mesmo número de inimigos.
+     * `⌈raw / B⌉` por bioma garante total ≥ o desejado pela curva quando raw não é múltiplo de B
+     * (ex.: 5 inimigos, 3 biomas → 2+2+2 em vez de 2+2+1).
+     */
+    const rawCount = countEnemiesForWave(this.wave, partyN);
+    const nEach = Math.ceil(rawCount / biomesList.length);
+
+    for (const biome of biomesList) {
+      const refHeroes = this.heroesWithHomeBiome(biome);
+      for (let k = 0; k < nEach; k++) {
+        const pos = this.randomSpawnEnemyInSingleBiome(taken, biome, refHeroes);
+        const e = createEnemyUnit(arch, this.wave, partyN, pos.q, pos.r, biome);
+        this.units.push(e);
+        taken.add(axialKey(pos.q, pos.r));
+      }
+    }
+    this.disambiguateEnemyDisplayNames();
+  }
+
+  /** Bioma escolhido na run para o herói (fallback: hex atual). */
+  private heroHomeBiome(hero: Unit): BiomeId {
+    const hi = this.partyOrder.indexOf(hero.id);
+    return hi >= 0 && hi < this.runHeroBiomes.length
+      ? this.runHeroBiomes[hi]!
+      : (biomeAt(this.grid, hero.q, hero.r) as BiomeId);
+  }
+
+  /** Heróis vivos cujo bioma inicial da run (`runHeroBiomes`) é `biome`. */
+  private heroesWithHomeBiome(biome: BiomeId): Unit[] {
+    const out: Unit[] = [];
+    for (const hero of this.getParty()) {
+      if (hero.hp <= 0) continue;
+      if (this.heroHomeBiome(hero) === biome) out.push(hero);
+    }
+    return out;
+  }
+
+  /** Todos os heróis da party (vivos ou mortos) com bioma inicial `biome`. */
+  private partyHeroesWithChosenBiomeAll(biome: BiomeId): Unit[] {
+    if (biome === "hub") return [];
+    return this.getParty().filter((h) => this.heroHomeBiome(h) === biome);
+  }
+
+  /**
+   * Inimigos priorizam o(s) herói(s) que escolheram o bioma de spawn do inimigo;
+   * só mudam de alvo quando esse(s) morre(m) (fallback: outros vivos).
+   */
+  private pickEnemyHeroTarget(e: Unit): Unit | null {
+    const party = this.getParty().filter((u) => u.hp > 0);
+    if (!party.length) return null;
+    const bio =
+      e.enemySpawnBiome && e.enemySpawnBiome !== "hub"
+        ? e.enemySpawnBiome
+        : (biomeAt(this.grid, e.q, e.r) as BiomeId);
+    if (bio === "hub") {
+      party.sort((a, b) => a.hp - b.hp || a.defesa - b.defesa);
+      return party[0]!;
+    }
+    const owners = party.filter((h) => this.heroHomeBiome(h) === bio);
+    if (owners.length > 0) {
+      owners.sort((a, b) => a.hp - b.hp || a.defesa - b.defesa);
+      return owners[0]!;
+    }
+    party.sort((a, b) => a.hp - b.hp || a.defesa - b.defesa);
+    return party[0]!;
+  }
+
+  /**
+   * Hex livre só em `biome`, entre os mais “longe” do herói mais próximo em `referenceHeroes`
+   * (igual ao critério global de spawn). Sem referência, usa distância ao centro.
+   */
+  private randomSpawnEnemyInSingleBiome(
+    taken: Set<string>,
+    biome: BiomeId,
+    referenceHeroes: Unit[],
+  ): { q: number; r: number } {
+    const heroes =
+      referenceHeroes.length > 0
+        ? referenceHeroes
+        : this.getParty().filter((h) => h.hp > 0);
+    const origin = { q: 0, r: 0 };
+    type Scored = { q: number; r: number; near: number };
+    const scored: Scored[] = [];
+    for (const c of this.grid.values()) {
+      if (c.biome !== biome || c.biome === "hub") continue;
+      const k = axialKey(c.q, c.r);
+      if (taken.has(k)) continue;
+      const cell = { q: c.q, r: c.r };
+      let near: number;
+      if (heroes.length > 0) {
+        near = Infinity;
+        for (const h of heroes) {
+          near = Math.min(near, hexDistance(cell, h));
+        }
+      } else {
+        near = hexDistance(cell, origin);
+      }
+      scored.push({ q: c.q, r: c.r, near });
+    }
+    if (scored.length === 0) {
+      return this.randomSpawnEnemyRelaxed(taken, new Set([biome]));
+    }
+    scored.sort((a, b) => b.near - a.near);
+    const best = scored[0]!.near;
+    const pool = scored.filter((s) => s.near >= best - 1);
+    return pool[Math.floor(Math.random() * pool.length)]!;
+  }
+
+  /**
+   * Biomas onde inimigos podem nascer: interseção entre biomas escolhidos na run e biomas
+   * onde existe pelo menos um herói vivo. Se vazio (ex.: todos no hub), usa só os escolhidos.
+   */
+  private enemySpawnAllowedBiomes(): Set<BiomeId> {
+    const selected = new Set<BiomeId>(this.runHeroBiomes);
+    if (selected.size === 0) return new Set(COMBAT_BIOMES);
+    const present = new Set<BiomeId>();
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      present.add(biomeAt(this.grid, h.q, h.r) as BiomeId);
+    }
+    const inter = new Set<BiomeId>();
+    for (const b of selected) {
+      if (present.has(b)) inter.add(b);
+    }
+    if (inter.size > 0) return inter;
+    return selected;
+  }
+
+  private randomSpawnEnemy(taken: Set<string>): { q: number; r: number } {
+    const allowedBio = this.enemySpawnAllowedBiomes();
+    const heroes = this.getParty()
+      .filter((h) => h.hp > 0)
+      .map((h) => ({ q: h.q, r: h.r }));
+    const origin = { q: 0, r: 0 };
+    type Scored = { q: number; r: number; near: number };
+    const scored: Scored[] = [];
+    for (const c of this.grid.values()) {
+      if (c.biome === "hub") continue;
+      if (!allowedBio.has(c.biome)) continue;
+      const k = axialKey(c.q, c.r);
+      if (taken.has(k)) continue;
+      const cell = { q: c.q, r: c.r };
+      let near: number;
+      if (heroes.length > 0) {
+        near = Infinity;
+        for (const h of heroes) {
+          near = Math.min(near, hexDistance(cell, h));
+        }
+      } else {
+        near = hexDistance(cell, origin);
+      }
+      scored.push({ q: c.q, r: c.r, near });
+    }
+    if (scored.length === 0) {
+      return this.randomSpawnEnemyRelaxed(taken, allowedBio);
+    }
+    scored.sort((a, b) => b.near - a.near);
+    const best = scored[0]!.near;
+    const pool = scored.filter((s) => s.near >= best - 1);
+    const pick = pool[Math.floor(Math.random() * pool.length)]!;
+    return { q: pick.q, r: pick.r };
+  }
+
+  /** Último recurso: qualquer hex livre nos biomas permitidos (ignora anel de distância). */
+  private randomSpawnEnemyRelaxed(
+    taken: Set<string>,
+    allowedBio: Set<BiomeId>,
+  ): { q: number; r: number } {
+    const pool: { q: number; r: number }[] = [];
+    for (const c of this.grid.values()) {
+      if (c.biome === "hub" || !allowedBio.has(c.biome)) continue;
+      const k = axialKey(c.q, c.r);
+      if (!taken.has(k)) pool.push({ q: c.q, r: c.r });
+    }
+    if (pool.length > 0) {
+      return pool[Math.floor(Math.random() * pool.length)]!;
+    }
+    for (const c of this.grid.values()) {
+      if (c.biome === "hub" || !allowedBio.has(c.biome)) continue;
+      const k = axialKey(c.q, c.r);
+      if (!taken.has(k)) return { q: c.q, r: c.r };
+    }
+    return { q: 0, r: 0 };
+  }
+
+  beginHeroTurn(): void {
+    const h = this.currentHero();
+    if (!h || h.hp <= 0) {
+      this.advanceHeroOrRound();
+      return;
+    }
+    h.bunkerReentryBlocked = false;
+    let mov = h.movimento + rulerMovementBonus(h);
+    this.movementLeft = mov;
+    this.basicAttacksSpentThisTurn = 0;
+    this.syncBasicLeftFromSpent(h);
+    h.immobileThisTurn = true;
+    this.playerTurnJustStarted = true;
+    this.emit();
+  }
+
+  advanceHeroOrRound(): void {
+    this.currentHeroIndex++;
+    if (this.currentHeroIndex >= this.partyOrder.length) {
+      this.maybeApplyGoldDrainAfterPlayerCycle();
+      this.runEnemyPhase();
+      return;
+    }
+    this.beginHeroTurn();
+  }
+
+  endHeroTurn(): void {
+    const h = this.currentHero();
+    if (h) {
+      for (const k of Object.keys(h.skillCd)) {
+        const v = h.skillCd[k] ?? 0;
+        if (v > 0) h.skillCd[k] = v - 1;
+      }
+      this.applyEndTurnEffects(h);
+      if (h.ultimateId === "rainha_desespero") {
+        this.rainhaEndTurn(h);
+      }
+      this.applyVolcanicAtEndOfTurn(h);
+      if (h.furiaGiganteTurns && h.furiaGiganteTurns > 0) {
+        h.furiaGiganteTurns--;
+        if (h.furiaGiganteTurns <= 0) {
+          this.endFuriaGigante(h);
+        }
+      }
+    }
+    if (this.phase !== "combat") {
+      this.emit();
+      return;
+    }
+    if (this.getParty().every((u) => u.hp <= 0)) {
+      this.phase = "defeat";
+      this.meta.crystals += this.crystalsRun;
+      this.saveMeta();
+      this.log("Derrota.");
+      this.emit();
+      return;
+    }
+    this.currentHeroIndex++;
+    if (this.currentHeroIndex >= this.partyOrder.length) {
+      this.maybeApplyGoldDrainAfterPlayerCycle();
+      this.runEnemyPhase();
+      return;
+    }
+    this.beginHeroTurn();
+  }
+
+  /** Dreno só com inimigos vivos; afeta só `ouroWave`. Se a wave já foi limpa, não drena. */
+  private maybeApplyGoldDrainAfterPlayerCycle(): void {
+    if (!this.hasLivingEnemies()) return;
+    this.applyPlayerRoundGoldDrain();
+  }
+
+  private hasLivingEnemies(): boolean {
+    return this.units.some((u) => !u.isPlayer && u.hp > 0);
+  }
+
+  private rainhaEndTurn(priest: Unit): void {
+    const dmgRaw =
+      Math.floor(priest.dano * (1 + priest.potencialCuraEscudo / 100) * 2) +
+      this.artifactGarraFerroRawBonus(priest);
+    let healed = 0;
+    for (const e of [...this.enemies()]) {
+      if (e.hp <= 0) continue;
+      const prev = e.hp;
+      this.dealDamage(priest, e, dmgRaw, false, true, false);
+      healed += Math.max(0, prev - e.hp);
+      if (this.phase !== "combat") {
+        const h1 = priest.hp;
+        priest.hp = Math.min(priest.maxHp, priest.hp + healed);
+        const g1 = priest.hp - h1;
+        if (g1 > 0) {
+          this.pushCombatFloat({
+            unitId: priest.id,
+            kind: "heal",
+            amount: g1,
+          });
+          this.applySedaVampiraSplash(priest, g1);
+        }
+        this.flushCombatLevelUp(priest);
+        return;
+      }
+    }
+    const h0 = priest.hp;
+    priest.hp = Math.min(priest.maxHp, priest.hp + healed);
+    const pg = priest.hp - h0;
+    if (pg > 0) {
+      this.pushCombatFloat({
+        unitId: priest.id,
+        kind: "heal",
+        amount: pg,
+      });
+      this.applySedaVampiraSplash(priest, pg);
+    }
+    this.flushCombatLevelUp(priest);
+    if (this.phase === "combat") {
+      this.tryResolveWaveClearAfterCombatResume();
+    }
+  }
+
+  private executeSentenca(p: Unit): void {
+    const priestBio = biomeAt(this.grid, p.q, p.r) as BiomeId;
+    const dmg = this.computeSentencaDamagePerEnemy(p);
+    const heal = this.computeSentencaHealParty(p);
+    const targets = [...this.enemies()].filter((e) => {
+      if (e.hp <= 0) return false;
+      const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
+      return eb === priestBio;
+    });
+    const alliesToHeal = this.getParty().filter((a) => a.hp > 0);
+
+    this.pendingSentencaPartyHeal = {
+      priestId: p.id,
+      heal,
+      priestBio,
+    };
+
+    this.pendingCombatVfx = {
+      kind: "sentenca",
+      priestId: p.id,
+      targetIds: targets.map((t) => t.id),
+      allyIds: alliesToHeal.map((a) => a.id),
+      enemyHitCount: targets.length,
+    };
+
+    targets.forEach((e, i) => {
+      const delay = SENTENCA_FIRST_DAMAGE_MS + i * SENTENCA_STAGGER_MS;
+      this.queueCombat(delay, () => {
+        const att = this.units.find((u) => u.id === p.id);
+        const tg = this.units.find((u) => u.id === e.id);
+        if (!att || !tg || tg.hp <= 0 || this.phase !== "combat") return;
+        this.dealDamage(att, tg, dmg, false, true, false);
+      });
+    });
+
+    const n = targets.length;
+    const lastHit =
+      n === 0 ? 0 : SENTENCA_FIRST_DAMAGE_MS + (n - 1) * SENTENCA_STAGGER_MS;
+    const healAt = lastHit + SENTENCA_HEAL_AFTER_LAST_HIT_MS;
+
+    this.queueCombat(healAt, () => {
+      this.applySentencaPartyHeal({ resumeCombat: true });
+    });
+  }
+
+  private applySentencaPartyHeal(opts: { resumeCombat: boolean }): void {
+    const pending = this.pendingSentencaPartyHeal;
+    if (!pending) return;
+    const priest = this.units.find((u) => u.id === pending.priestId);
+    if (!priest || this.phase !== "combat") {
+      this.pendingSentencaPartyHeal = null;
+      return;
+    }
+    this.pendingSentencaPartyHeal = null;
+    const { heal, priestBio } = pending;
+    for (const ally of this.getParty()) {
+      if (ally.hp <= 0) continue;
+      this.healUnit(ally, heal, priest, {
+        overflowToShieldHalf: true,
+        overflowShieldRatio: sentencaShieldOverflowRatio(priest.weaponLevel),
+      });
+    }
+    this.log(`${priest.name}: Sentença (${BIOME_LABELS[priestBio]}).`);
+    this.flushCombatLevelUp(priest);
+    if (opts.resumeCombat && this.phase === "combat") {
+      this.tryResolveWaveClearAfterCombatResume();
+    }
+    if (opts.resumeCombat) {
+      this.emit();
+    }
+  }
+
+  private applyPlayerRoundGoldDrain(): void {
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      const d = goldDrainPerTurn(h, this.partyOrder.length);
+      h.ouroWave = Math.max(0, h.ouroWave - d);
+    }
+    this.log(`Fim do ciclo dos heróis: ouro da wave reduzido (base 5 por herói, menos reduções).`);
+  }
+
+  private runEnemyPhase(): void {
+    this.inEnemyPhase = true;
+    this.lastEnemyActedId = null;
+    const aliveN = this.enemies().filter((e) => e.hp > 0).length;
+    this.enemyPhaseTimingMult =
+      aliveN <= 3 ? 1 : Math.max(0.08, Math.min(1, 3 / aliveN));
+    this.enemyTurnQueue = this.enemies().filter((e) => e.hp > 0);
+    this.emit();
+    if (this.enemyTurnQueue.length === 0) {
+      this.finishEnemyPhaseAfterAllMoves();
+      return;
+    }
+    const t0 = Math.round(220 * this.enemyPhaseTimingMult);
+    this.queueCombat(t0, () => {
+      if (this.phase !== "combat" || !this.inEnemyPhase) return;
+      this.processNextEnemyTurn();
+    });
+  }
+
+  private processNextEnemyTurn(): void {
+    if (this.phase !== "combat" || !this.inEnemyPhase) return;
+    while (this.enemyTurnQueue.length > 0) {
+      const ref = this.enemyTurnQueue[0]!;
+      const live = this.units.find((u) => u.id === ref.id);
+      if (!live || live.hp <= 0) {
+        this.enemyTurnQueue.shift();
+        continue;
+      }
+      break;
+    }
+    const next = this.enemyTurnQueue.shift();
+    if (!next) {
+      this.finishEnemyPhaseAfterAllMoves();
+      return;
+    }
+    const e = this.units.find((u) => u.id === next.id);
+    if (!e || e.hp <= 0) {
+      const mult = this.enemyPhaseTimingMult;
+      this.queueCombat(Math.round(50 * mult), () => {
+        if (this.phase !== "combat" || !this.inEnemyPhase) return;
+        this.processNextEnemyTurn();
+      });
+      return;
+    }
+    this.lastEnemyActedId = e.id;
+    const enemyId = e.id;
+    const moveMs = this.runEnemyAI(e);
+    this.emit();
+    const pauseAfterTurn = Math.round(300 * this.enemyPhaseTimingMult);
+    /** Mesma fila que o golpe (`queueCombat` em runEnemyAI): garante ordem e todos os turnos. */
+    this.queueCombat(moveMs + pauseAfterTurn, () => {
+      if (this.phase !== "combat" || !this.inEnemyPhase) return;
+      const u = this.units.find((x) => x.id === enemyId);
+      if (u && !u.isPlayer && u.hp > 0) {
+        this.applyPoisonAndHotTick(u);
+        this.onDeaths();
+      }
+      this.processNextEnemyTurn();
+    });
+  }
+
+  private finishEnemyPhaseAfterAllMoves(): void {
+    this.inEnemyPhase = false;
+    this.lastEnemyActedId = null;
+    this.enemyTurnQueue = [];
+    this.currentHeroIndex = 0;
+    if (this.enemies().every((x) => x.hp <= 0)) {
+      // Não avançar para resumo de wave / loja enquanto o jogador escolhe artefato ou ultimate.
+      if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") {
+        return;
+      }
+      const runWaveClear = (): void => {
+        if (this.hasLivingEnemies()) return;
+        if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") {
+          enqueueCombatOutcome(
+            combatOutcomePriority.waveClear,
+            "wave-clear",
+            runWaveClear,
+          );
+          return;
+        }
+        if (this.phase === "combat") this.onWaveCleared();
+      };
+      if (this.hasPendingCombatSchedule()) {
+        enqueueCombatOutcome(
+          combatOutcomePriority.waveClear,
+          "wave-clear",
+          runWaveClear,
+        );
+      } else {
+        runWaveClear();
+      }
+      return;
+    }
+    if (this.getParty().every((u) => u.hp <= 0)) {
+      this.phase = "defeat";
+      this.meta.crystals += this.crystalsRun;
+      this.saveMeta();
+      this.log("Derrota.");
+      this.emit();
+      return;
+    }
+    this.beginHeroTurn();
+  }
+
+  /** Vulcânico: dano no fim do turno. Forja vulcânica + Ruler: cura em vez de perder. */
+  private applyVolcanicAtEndOfTurn(u: Unit): void {
+    if (u.hp <= 0) return;
+    if (biomeAt(this.grid, u.q, u.r) !== "vulcanico") return;
+    const fv = u.isPlayer ? forgeSynergyTier(u.forgeLoadout, "vulcanico") : 0;
+    if (u.isPlayer && fv >= 1) {
+      if (unitIgnoresTerrain(u)) {
+        const h0 = u.hp;
+        u.hp = Math.min(u.maxHp, u.hp + 10);
+        const g = u.hp - h0;
+        if (g > 0) {
+          this.pushCombatFloat({
+            unitId: u.id,
+            kind: "heal",
+            amount: g,
+          });
+        }
+      }
+      return;
+    }
+    if (unitIgnoresTerrain(u)) return;
+    const volcanicWasAlive = u.hp > 0;
+    let d = biomeVolcanicDamage();
+    if (
+      !u.isPlayer &&
+      this.partyHasForgeVulcanicTier(2)
+    ) {
+      d *= 2;
+    }
+    let shieldAbsorb = 0;
+    let dmgHp = d;
+    if (u.shieldGGBlue > 0) {
+      const absorbed = Math.min(u.shieldGGBlue, d);
+      shieldAbsorb = absorbed;
+      u.shieldGGBlue -= absorbed;
+      dmgHp = d - absorbed;
+    }
+    u.hp = Math.max(0, u.hp - dmgHp);
+    if (shieldAbsorb > 0) {
+      this.pushCombatFloat({
+        unitId: u.id,
+        kind: "shield_absorb",
+        amount: shieldAbsorb,
+        targetIsPlayer: u.isPlayer,
+        floatHex: { q: u.q, r: u.r },
+      });
+    }
+    if (dmgHp > 0) {
+      this.pushCombatFloat({
+        unitId: u.id,
+        kind: "damage",
+        amount: dmgHp,
+        crit: false,
+        targetIsPlayer: u.isPlayer,
+        floatHex: { q: u.q, r: u.r },
+      });
+    }
+    let volcanicEnvKill = false;
+    if (!u.isPlayer && volcanicWasAlive && u.hp <= 0) {
+      this.onEnemyKilled(null, u);
+      volcanicEnvKill = true;
+    }
+    this.onDeaths();
+    if (volcanicEnvKill) {
+      for (const hero of this.getParty()) {
+        if (hero.hp > 0) this.flushCombatLevelUp(hero);
+      }
+    }
+  }
+
+  enemies(): Unit[] {
+    return this.units.filter((u) => !u.isPlayer && u.hp > 0);
+  }
+
+  /**
+   * Todos os inimigos morreram durante ação de herói: aplica o mesmo fecho que o fim da fase inimiga
+   * (vitória/loja). Chamado após Sentença/AoE ou ao voltar do level-up com arena limpa.
+   */
+  private tryResolveWaveClearAfterCombatResume(): void {
+    if (this.phase !== "combat") return;
+    if (this.hasLivingEnemies()) return;
+    this.finishEnemyPhaseAfterAllMoves();
+  }
+
+  private onWaveCleared(): void {
+    this.applySentencaPartyHeal({ resumeCombat: false });
+    this.clearCombatSchedule();
+    this.duel = null;
+    this.duelNextIsGladiatorStrike = true;
+    this.blockEnemyPhaseForWaveIntro = false;
+    this.log(`Wave ${this.wave} vencida!`);
+    this.liquidateWaveGoldToShop();
+    if (this.wave >= FINAL_VICTORY_WAVE) {
+      this.pendingWaveSummaryNext = "victory";
+    } else {
+      this.pendingWaveSummaryNext = "shop";
+    }
+    this.phase = "wave_summary";
+    this.emit();
+  }
+
+  /** Soma o ouro restante da wave (`ouroWave`) ao ouro atual de cada herói antes da loja. */
+  private liquidateWaveGoldToShop(): void {
+    const goldLines: WaveEndLootSummary["goldLines"] = [];
+    for (const h of this.getParty()) {
+      const raw = h.ouroWave;
+      const { base, bonus, total } = this.metaGoldBonusOnRaw(raw);
+      goldLines.push({ heroName: h.name, base, bonus, total });
+      h.ouro += total;
+      h.ouroWave = 0;
+      h.shieldGGBlue = 0;
+    }
+    const essences: { id: ForgeEssenceId; n: number }[] = [];
+    for (const id of Object.keys(this.waveEssencesGained) as ForgeEssenceId[]) {
+      const n = this.waveEssencesGained[id];
+      if (n && n > 0) essences.push({ id, n });
+    }
+    this.waveLootSummaryPending = {
+      wave: this.wave,
+      goldLines,
+      crystalsGained: this.waveCrystalsGained,
+      essences,
+      xpTotal: this.waveXpGained,
+    };
+    this.waveCrystalsGained = 0;
+    this.waveXpGained = 0;
+    this.waveEssencesGained = {};
+  }
+
+  teleportPartyToHub(): void {
+    for (const b of this.allBunkerStates()) {
+      b.occupantId = null;
+    }
+    const hub = [...this.grid.values()].find((c) => c.biome === "hub");
+    if (!hub) return;
+    let i = 0;
+    for (const h of this.getParty()) {
+      const off = hexNeighborsOffset(i++);
+      h.q = hub.q + off.q;
+      h.r = hub.r + off.r;
+      const cell = getCell(this.grid, h.q, h.r);
+      if (!cell) {
+        h.q = hub.q;
+        h.r = hub.r;
+      }
+    }
+  }
+
+  finishWaveShop(): void {
+    this.phase = "combat";
+    this.startWave(this.wave + 1);
+  }
+
+  tryMoveHero(toQ: number, toR: number): boolean {
+    const h = this.currentHero();
+    if (!h || h.hp <= 0) return false;
+    if (this.duel) return false;
+    let adjEnemy = 0;
+    for (const e of this.enemies()) {
+      if (hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r }) === 1) {
+        adjEnemy++;
+      }
+    }
+    if (adjEnemy >= 2) {
+      this.pendingMoveBlockedHint = {
+        text: "2 ou mais inimigos me bloqueiam! Preciso me livrar deles!",
+        unitId: h.id,
+      };
+      this.emit();
+      return false;
+    }
+    const fly = h.flying;
+    const ign = unitIgnoresTerrain(h);
+    const blocked = this.occupiedHexKeysExcluding(h.id);
+    const fromQ = h.q;
+    const fromR = h.r;
+    const reach = reachableHexes(
+      this.grid,
+      { q: fromQ, r: fromR },
+      this.movementLeft,
+      fly,
+      ign,
+      blocked,
+    );
+    const k = axialKey(toQ, toR);
+    const cost = reach.get(k);
+    if (cost === undefined) return false;
+    const bPre = this.bunkerAtHex(toQ, toR);
+    if (
+      bPre &&
+      bPre.hp > 0 &&
+      toQ === bPre.q &&
+      toR === bPre.r &&
+      !bPre.occupantId &&
+      h.bunkerReentryBlocked
+    ) {
+      this.pendingBunkerHint = {
+        text: "Aguarda 1 turno para voltares a entrar no bunker.",
+        q: toQ,
+        r: toR,
+      };
+      this.emit();
+      return false;
+    }
+    const path = findPath(
+      this.grid,
+      { q: fromQ, r: fromR },
+      { q: toQ, r: toR },
+      fly,
+      ign,
+      cost,
+      blocked,
+    );
+    if (path && path.length > 1) {
+      this.pendingMoveAnim = {
+        unitId: h.id,
+        cells: path.map((p) => ({ q: p.q, r: p.r })),
+      };
+    }
+    this.movementLeft -= cost;
+    const bFrom = this.bunkerAtHex(fromQ, fromR);
+    const leftBunker =
+      bFrom &&
+      bFrom.occupantId === h.id &&
+      fromQ === bFrom.q &&
+      fromR === bFrom.r &&
+      (toQ !== bFrom.q || toR !== bFrom.r);
+    h.q = toQ;
+    h.r = toR;
+    if (leftBunker) {
+      bFrom!.occupantId = null;
+      h.bunkerReentryBlocked = true;
+    }
+    const bTo = this.bunkerAtHex(toQ, toR);
+    if (
+      bTo &&
+      bTo.hp > 0 &&
+      toQ === bTo.q &&
+      toR === bTo.r &&
+      !bTo.occupantId
+    ) {
+      bTo.occupantId = h.id;
+    }
+    h.immobileThisTurn = false;
+    this.log(`${h.name} move para (${toQ},${toR}).`);
+    this.emit();
+    return true;
+  }
+
+  /** Dano bruto do ataque básico (antes de crítico/defesa). Inclui bônus do motor da morte se ativo. */
+  /** Garra de ferro: % da defesa viram dano bruto (30% por acúmulo, máx. 6). */
+  private artifactGarraFerroRawBonus(u: Unit): number {
+    if (!u.isPlayer) return 0;
+    const s = Math.min(6, u.artifacts["garra_ferro"] ?? 0);
+    if (s <= 0) return 0;
+    return Math.floor(u.defesa * 0.3 * s);
+  }
+
+  computeBasicAttackRawDamage(h: Unit): number {
+    let raw = h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+    if (h.heroClass === "gladiador" && h.ultimateId === "campeao") {
+      raw = Math.floor(raw * (1 + 0.05 * h.gladiadorKills));
+    }
+    if (h.ultimateId === "estrategista_nato") {
+      const ouroTotal = h.ouro + h.ouroWave;
+      raw = Math.floor(raw * (1 + Math.min(2, ouroTotal * 0.005)));
+    }
+    if (h.motorMorteNextBasicPct > 0) {
+      raw = Math.floor(raw * (1 + h.motorMorteNextBasicPct / 100));
+    }
+    return raw + this.artifactGarraFerroRawBonus(h);
+  }
+
+  computeAtirarTodoLadoDamagePerHit(h: Unit): number {
+    const mult = atirarDamageMult(h.weaponLevel);
+    return (
+      Math.floor((h.dano + h.pistoleiroBonusDanoWave) * mult) +
+      this.artifactGarraFerroRawBonus(h)
+    );
+  }
+
+  computeDuelGladiatorHitDamage(h: Unit): number {
+    const mult = ateMorteDamageMult(h.weaponLevel);
+    return Math.floor(h.dano * mult) + this.artifactGarraFerroRawBonus(h);
+  }
+
+  computeSentencaDamagePerEnemy(h: Unit): number {
+    const mult = sentencaDamageMult(h.weaponLevel);
+    return Math.floor(h.dano * mult) + this.artifactGarraFerroRawBonus(h);
+  }
+
+  computeSentencaHealParty(h: Unit): number {
+    const mult = sentencaHealMult(h.weaponLevel);
+    return Math.floor(h.dano * mult);
+  }
+
+  computeEspecialistaDestruicaoRaw(h: Unit): number {
+    return Math.floor(h.dano * 7) + this.artifactGarraFerroRawBonus(h);
+  }
+
+  private maxBasicAttacksForHero(h: Unit): number {
+    return 1 + (h.artifacts["braco_forte"] ?? 0);
+  }
+
+  private syncBasicLeftFromSpent(h: Unit): void {
+    const cap = this.maxBasicAttacksForHero(h);
+    this.basicLeft = Math.max(0, cap - this.basicAttacksSpentThisTurn);
+  }
+
+  tryBasicAttack(targetId: string): boolean {
+    const h = this.currentHero();
+    if (!h || h.hp <= 0 || this.basicLeft <= 0) return false;
+    if (this.duel) return false;
+    const tgt = this.units.find((u) => u.id === targetId);
+    if (!tgt || tgt.isPlayer || tgt.hp <= 0) return false;
+    const dist = hexDistance({ q: h.q, r: h.r }, { q: tgt.q, r: tgt.r });
+    const alc = this.effectiveAlcanceForHero(h);
+    if (dist > alc) return false;
+
+    const runStrikeAndFinish = (att: Unit): void => {
+      let raw = this.computeBasicAttackRawDamage(att);
+      if (att.motorMorteNextBasicPct > 0) {
+        att.motorMorteNextBasicPct = 0;
+      }
+      if (att.heroClass === "pistoleiro" && att.ultimateId === "arauto_caos") {
+        const alc2 = this.effectiveAlcanceForHero(att);
+        for (const e of [...this.enemies()]) {
+          if (e.hp <= 0) continue;
+          if (hexDistance({ q: att.q, r: att.r }, { q: e.q, r: e.r }) <= alc2) {
+            this.strike(att, e, raw);
+            if (this.phase !== "combat") break;
+          }
+        }
+      } else {
+        const t2 = this.units.find((u) => u.id === targetId);
+        if (t2 && !t2.isPlayer && t2.hp > 0) {
+          this.strike(att, t2, raw);
+        }
+      }
+      this.flushCombatLevelUp(att);
+      if (this.phase === "combat") {
+        this.tryResolveWaveClearAfterCombatResume();
+      }
+      this.emit();
+    };
+
+    if (h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos") {
+      const inRange = [...this.enemies()].filter(
+        (e) =>
+          e.hp > 0 &&
+          hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r }) <= alc,
+      );
+      this.pendingCombatVfx = {
+        kind: "basic_volley",
+        fromId: h.id,
+        targetIds: inRange.map((e) => e.id),
+      };
+      this.basicAttacksSpentThisTurn++;
+      this.syncBasicLeftFromSpent(h);
+      const volleyStagger = 95;
+      inRange.forEach((e, i) => {
+        this.queueCombat(i * volleyStagger, () => {
+          const att = this.units.find((u) => u.id === h.id);
+          if (!att || att.hp <= 0 || this.phase !== "combat") return;
+          let raw = this.computeBasicAttackRawDamage(att);
+          if (att.motorMorteNextBasicPct > 0) att.motorMorteNextBasicPct = 0;
+          const tg = this.units.find((u) => u.id === e.id);
+          if (tg && tg.hp > 0) this.strike(att, tg, raw);
+        });
+      });
+      const tail =
+        inRange.length === 0 ? 0 : (inRange.length - 1) * volleyStagger + 30;
+      this.queueCombat(tail, () => {
+        const att = this.units.find((u) => u.id === h.id);
+        if (att) this.flushCombatLevelUp(att);
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
+      });
+      this.emit();
+      return true;
+    }
+
+    if (h.heroClass === "pistoleiro") {
+      this.pendingCombatVfx = {
+        kind: "basic_projectile",
+        fromId: h.id,
+        toId: tgt.id,
+        style: "bullet",
+      };
+      this.basicAttacksSpentThisTurn++;
+      this.syncBasicLeftFromSpent(h);
+      this.queueCombat(BASIC_PISTOL_FLIGHT_MS, () => {
+        const att = this.units.find((u) => u.id === h.id);
+        if (!att || att.hp <= 0 || this.phase !== "combat") return;
+        runStrikeAndFinish(att);
+      });
+      this.emit();
+      return true;
+    }
+
+    if (h.heroClass === "sacerdotisa") {
+      this.pendingCombatVfx = {
+        kind: "basic_projectile",
+        fromId: h.id,
+        toId: tgt.id,
+        style: "magic",
+      };
+      this.basicAttacksSpentThisTurn++;
+      this.syncBasicLeftFromSpent(h);
+      this.queueCombat(BASIC_MAGIC_FLIGHT_MS, () => {
+        const att = this.units.find((u) => u.id === h.id);
+        if (!att || att.hp <= 0 || this.phase !== "combat") return;
+        runStrikeAndFinish(att);
+      });
+      this.emit();
+      return true;
+    }
+
+    let raw = this.computeBasicAttackRawDamage(h);
+    if (h.motorMorteNextBasicPct > 0) {
+      h.motorMorteNextBasicPct = 0;
+    }
+    this.strike(h, tgt, raw);
+
+    this.basicAttacksSpentThisTurn++;
+    this.syncBasicLeftFromSpent(h);
+    this.flushCombatLevelUp(h);
+    if (this.phase === "combat") {
+      this.tryResolveWaveClearAfterCombatResume();
+    }
+    this.emit();
+    return true;
+  }
+
+  trySkill(skillId: string, targetId?: string): boolean {
+    const h = this.currentHero();
+    if (!h || h.hp <= 0) return false;
+
+    if (skillId === "bunker_minas") {
+      if ((h.skillCd[skillId] ?? 0) > 0) return false;
+      const b = this.bunkerAtHex(h.q, h.r);
+      if (!b || b.hp <= 0 || b.occupantId !== h.id) return false;
+      const tier = b.tier;
+      const mult = bunkerMinasDamageMult(tier);
+      const maxR = bunkerMinasMaxRing(tier);
+      h.skillCd[skillId] = bunkerMinasCooldownWaves(tier);
+      const fromQ = b.q;
+      const fromR = b.r;
+      const stag = BUNKER_MINAS_RING_STAGGER_MS;
+      this.pendingCombatVfx = {
+        kind: "bunker_minas",
+        centerQ: fromQ,
+        centerR: fromR,
+        maxRing: maxR,
+        staggerMs: stag,
+      };
+      const baseDano =
+        h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+      for (let ring = 1; ring <= maxR; ring++) {
+        const delay = (ring - 1) * stag;
+        this.queueCombat(delay, () => {
+          const att = this.units.find((u) => u.id === h.id);
+          if (!att || att.hp <= 0 || this.phase !== "combat") return;
+          for (const e of this.enemies()) {
+            if (e.hp <= 0) continue;
+            if (
+              hexDistance({ q: fromQ, r: fromR }, { q: e.q, r: e.r }) !==
+              ring
+            )
+              continue;
+            const raw = Math.floor(baseDano * mult);
+            this.dealDamage(
+              att,
+              e,
+              raw,
+              rollCrit(att.acertoCritico + roninCritBonus(att)),
+              true,
+              false,
+            );
+          }
+          this.emit();
+        });
+      }
+      const tail = maxR <= 0 ? 0 : (maxR - 1) * stag + 40;
+      this.queueCombat(tail, () => {
+        const att = this.units.find((u) => u.id === h.id);
+        if (att) this.flushCombatLevelUp(att);
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
+      });
+      this.log(`${h.name}: Minas terrestres!`);
+      this.emit();
+      return true;
+    }
+
+    if (skillId === "bunker_tiro_preciso") {
+      if ((h.skillCd[skillId] ?? 0) > 0) return false;
+      const b = this.bunkerAtHex(h.q, h.r);
+      if (!b || b.occupantId !== h.id || b.tier < 2) return false;
+      if (!targetId) return false;
+      const tgt = this.units.find((u) => u.id === targetId);
+      if (!tgt || tgt.isPlayer || tgt.hp <= 0) return false;
+      const baseDano =
+        h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+      const raw = Math.floor(baseDano * 10);
+      h.skillCd[skillId] = bunkerTiroCooldownWaves();
+      this.pendingCombatVfx = {
+        kind: "bunker_mortar",
+        fromId: h.id,
+        toId: targetId,
+      };
+      this.queueCombat(BUNKER_TIRO_FLIGHT_MS, () => {
+        const att = this.units.find((u) => u.id === h.id);
+        const tg = this.units.find((u) => u.id === targetId);
+        if (!att || !tg || tg.hp <= 0 || this.phase !== "combat") return;
+        this.dealDamage(
+          att,
+          tg,
+          raw,
+          rollCrit(att.acertoCritico + roninCritBonus(att)),
+          true,
+          false,
+        );
+        this.flushCombatLevelUp(att);
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
+      });
+      this.log(`${h.name}: Tiro preciso!`);
+      this.emit();
+      return true;
+    }
+
+    if ((h.skillCd[skillId] ?? 0) > 0) return false;
+    if (this.bunkerAtHex(h.q, h.r)?.occupantId === h.id) return false;
+
+    if (skillId === "atirar_todo_lado" && h.heroClass === "pistoleiro") {
+      const alc = this.effectiveAlcanceForHero(h);
+      const dmg = this.computeAtirarTodoLadoDamagePerHit(h);
+      const targets = [...this.enemies()].filter(
+        (e) =>
+          e.hp > 0 &&
+          hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r }) <= alc,
+      );
+      const targetIds = targets.map((t) => t.id);
+      const shotCount = Math.max(14, targetIds.length * 4);
+      this.pendingCombatVfx = {
+        kind: "atirar_todo_lado",
+        heroId: h.id,
+        targetIds,
+        shotCount,
+      };
+      h.skillCd[skillId] = atirarCooldownWaves(h.weaponLevel);
+      this.log(`${h.name}: Atirar pra todo lado!`);
+
+      targets.forEach((e, i) => {
+        const delay = ATIRAR_FIRST_DAMAGE_MS + i * ATIRAR_STAGGER_MS;
+        this.queueCombat(delay, () => {
+          const att = this.units.find((u) => u.id === h.id);
+          const tg = this.units.find((u) => u.id === e.id);
+          if (!att || !tg || tg.hp <= 0 || this.phase !== "combat") return;
+          this.dealDamage(
+            att,
+            tg,
+            dmg,
+            rollCrit(att.acertoCritico + roninCritBonus(att)),
+            true,
+            false,
+          );
+        });
+      });
+
+      const last =
+        targets.length === 0
+          ? 0
+          : ATIRAR_FIRST_DAMAGE_MS + (targets.length - 1) * ATIRAR_STAGGER_MS;
+      this.queueCombat(last + 60, () => {
+        const att = this.units.find((u) => u.id === h.id);
+        if (att) this.flushCombatLevelUp(att);
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
+      });
+      this.emit();
+      return true;
+    }
+
+    if (skillId === "pisotear" && h.heroClass === "gladiador") {
+      if (!h.furiaGiganteTurns || h.furiaGiganteTurns <= 0) return false;
+      if ((h.skillCd["pisotear"] ?? 0) > 0) return false;
+      const mc = pisotearManaCost(h.weaponLevel);
+      if (mc > 0 && h.maxMana > 0 && h.mana < mc) return false;
+      const maxD = pisotearMaxHexDistance(h.weaponLevel);
+      const mult = pisotearDamageMult(h.weaponLevel);
+      const raw =
+        Math.floor(h.dano * mult) + this.artifactGarraFerroRawBonus(h);
+      let hitAny = false;
+      for (const e of this.enemies()) {
+        if (e.hp <= 0) continue;
+        const d = hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r });
+        if (d < 1 || d > maxD) continue;
+        this.dealDamage(
+          h,
+          e,
+          raw,
+          rollCrit(h.acertoCritico + roninCritBonus(h)),
+          true,
+          false,
+        );
+        hitAny = true;
+      }
+      if (!hitAny) return false;
+      if (mc > 0 && h.maxMana > 0) h.mana -= mc;
+      h.skillCd["pisotear"] = pisotearCooldownWaves(h.weaponLevel);
+      this.flushCombatLevelUp(h);
+      if (this.phase === "combat") {
+        this.tryResolveWaveClearAfterCombatResume();
+      }
+      this.emit();
+      return true;
+    }
+
+    if (skillId === "ate_a_morte" && h.heroClass === "gladiador") {
+      if (h.furiaGiganteTurns && h.furiaGiganteTurns > 0) return false;
+      const mc = ateMorteManaCost(h.weaponLevel);
+      if (mc > 0 && h.maxMana > 0 && h.mana < mc) return false;
+      const tgt = this.units.find((u) => u.id === targetId);
+      if (!tgt || tgt.isPlayer) return false;
+      if (hexDistance({ q: h.q, r: h.r }, { q: tgt.q, r: tgt.r }) > 1)
+        return false;
+      if (mc > 0 && h.maxMana > 0) h.mana -= mc;
+      this.startDuel(h, tgt);
+      h.skillCd[skillId] = ateMorteCooldownWaves(h.weaponLevel);
+      return true;
+    }
+
+    if (skillId === "sentenca" && h.heroClass === "sacerdotisa") {
+      const sm = sentencaManaCost(h.weaponLevel);
+      if (h.mana < sm) return false;
+      h.mana -= sm;
+      this.executeSentenca(h);
+      h.skillCd[skillId] = sentencaCooldownWaves(h.weaponLevel);
+      this.emit();
+      return true;
+    }
+
+    if (skillId === "especialista_destruicao" && h.ultimateId === "especialista_destruicao") {
+      const tgt = this.units.find((u) => u.id === targetId);
+      if (!tgt || tgt.isPlayer) return false;
+      const raw = this.computeEspecialistaDestruicaoRaw(h);
+      this.dealDamage(h, tgt, raw, false, true, false);
+      this.log(`Especialista da destruição!`);
+      this.flushCombatLevelUp(h);
+      if (this.phase === "combat") {
+        this.tryResolveWaveClearAfterCombatResume();
+      }
+      this.emit();
+      return true;
+    }
+
+    return false;
+  }
+
+  private startDuel(g: Unit, e: Unit): void {
+    this.duel = { gladiatorId: g.id, enemyId: e.id };
+    this.duelNextIsGladiatorStrike = true;
+    this.pendingCombatVfx = { kind: "duel_start", gladiadorId: g.id, enemyId: e.id };
+    this.log(`Duelo mortal: ${g.name} vs ${e.name}`);
+    this.emit();
+    this.queueCombat(DUEL_FIRST_HIT_MS, () => this.duelTick());
+  }
+
+  private duelTick(): void {
+    if (!this.duel || this.phase !== "combat") return;
+    const { gladiatorId, enemyId } = this.duel;
+    const g = this.units.find((u) => u.id === gladiatorId);
+    const e = this.units.find((u) => u.id === enemyId);
+    if (!g || !e || g.hp <= 0 || e.hp <= 0) {
+      this.finishDuel();
+      return;
+    }
+
+    if (this.duelNextIsGladiatorStrike) {
+      this.dealDamage(
+        g,
+        e,
+        this.computeDuelGladiatorHitDamage(g),
+        rollCrit(g.acertoCritico),
+        true,
+        false,
+      );
+      this.duelNextIsGladiatorStrike = false;
+    } else {
+      this.dealDamage(e, g, e.dano, rollCrit(e.acertoCritico), true, true);
+      this.duelNextIsGladiatorStrike = true;
+    }
+
+    const g2 = this.units.find((u) => u.id === gladiatorId);
+    const e2 = this.units.find((u) => u.id === enemyId);
+    if (!g2 || !e2 || g2.hp <= 0 || e2.hp <= 0) {
+      this.finishDuel();
+      return;
+    }
+    this.emit();
+    this.queueCombat(DUEL_HIT_MS, () => this.duelTick());
+  }
+
+  private finishDuel(): void {
+    const ref = this.duel;
+    const gladId = ref?.gladiatorId;
+    this.duel = null;
+    this.duelNextIsGladiatorStrike = true;
+    if (gladId) {
+      this.pendingCombatVfx = { kind: "duel_end", gladiadorId: gladId };
+    }
+    const gladiator = gladId ? this.units.find((u) => u.id === gladId) : undefined;
+    if (gladiator && gladiator.hp > 0) {
+      gladiator.gladiadorDuelWins = (gladiator.gladiadorDuelWins ?? 0) + 1;
+      this.syncGladiadorDuelPassiveHp(gladiator);
+      this.log(`${gladiator.name} vence o duelo!`);
+    }
+    if (gladiator) this.flushCombatLevelUp(gladiator);
+    this.onDeaths();
+    if (
+      this.phase === "combat" &&
+      this.getParty().every((x) => x.hp <= 0)
+    ) {
+      this.phase = "defeat";
+      this.meta.crystals += this.crystalsRun;
+      this.saveMeta();
+      this.log("Derrota.");
+    }
+    this.emit();
+  }
+
+  private strike(att: Unit, def: Unit, raw: number): void {
+    const crit = rollCrit(att.acertoCritico + roninCritBonus(att));
+    const hpDmg = this.dealDamage(att, def, raw, crit, true, true);
+    if (
+      hpDmg > 0 &&
+      crit &&
+      att.isPlayer &&
+      forgeSynergyTier(att.forgeLoadout, "vulcanico") >= 3
+    ) {
+      const splash = Math.max(1, Math.floor(hpDmg * 0.5));
+      for (const e of this.enemies()) {
+        if (e.id === def.id || e.hp <= 0) continue;
+        this.dealDamage(att, e, splash, false, false, false);
+      }
+    }
+  }
+
+  private dealDamage(
+    src: Unit,
+    tgt: Unit,
+    raw: number,
+    crit: boolean,
+    canProc: boolean,
+    fromBasicAttack: boolean,
+  ): number {
+    if (tgt.hp <= 0) return 0;
+    let rawUse = raw;
+    if (
+      !fromBasicAttack &&
+      src.isPlayer &&
+      src.heroClass &&
+      !tgt.isPlayer
+    ) {
+      const v = src.artifacts["vendaval_arcana"] ?? 0;
+      const c = src.artifacts["ceu_partido"] ?? 0;
+      if (v > 0 || c > 0) {
+        rawUse = Math.floor(rawUse * (1 + 0.08 * v + 0.15 * c));
+      }
+    }
+    const defBio = biomeAt(this.grid, tgt.q, tgt.r) as BiomeId;
+    const atkBio = biomeAt(this.grid, src.q, src.r) as BiomeId;
+    const bunkerHere = this.bunkerAtHex(tgt.q, tgt.r);
+    const bkOcc =
+      bunkerHere &&
+      bunkerHere.hp > 0 &&
+      bunkerHere.occupantId === tgt.id &&
+      tgt.isPlayer;
+    const useBunkerDefense = !!bkOcc && !src.isPlayer;
+    let defStat = effectiveDefenseForBiome(
+      useBunkerDefense ? bunkerHere!.defesa : tgt.defesa,
+      defBio,
+      unitIgnoresTerrain(tgt),
+    );
+    let mit = computeMitigatedDamage(rawUse, defStat, src.penetracao);
+    const rochoso =
+      atkBio === "rochoso" && !unitIgnoresTerrain(src);
+    const totalCrit = src.acertoCritico + roninCritBonus(src);
+    if (totalCrit > 100) {
+      mit = Math.floor(mit * (1 + (totalCrit - 100) * 0.02));
+    }
+    let useCrit = crit;
+    let critMultExtra = 0;
+    if (!fromBasicAttack && src.isPlayer && src.heroClass) {
+      const lm = src.artifacts["lamina_magica"] ?? 0;
+      if (lm <= 0) useCrit = false;
+      else {
+        useCrit = rollCrit(src.acertoCritico + roninCritBonus(src));
+        critMultExtra = 0.25 * lm;
+      }
+    }
+    mit = applyCritMultiplier(
+      mit,
+      src.danoCritico + critMultExtra,
+      useCrit,
+      rochoso,
+    );
+    let dmg = mit;
+    if (useBunkerDefense) {
+      dmg = Math.max(1, Math.floor(dmg * BUNKER_DAMAGE_TAKEN_MULT));
+    }
+    let shieldAbsorb = 0;
+    if (tgt.shieldGGBlue > 0) {
+      const absorbed = Math.min(tgt.shieldGGBlue, dmg);
+      shieldAbsorb = absorbed;
+      tgt.shieldGGBlue -= absorbed;
+      dmg -= absorbed;
+      const stacks = src.artifacts["escudo_sangue"] ?? 0;
+      if (stacks > 0 && absorbed > 0) {
+        const ret = Math.floor(absorbed * 0.75 * stacks);
+        if (ret > 0) src.hp = Math.max(0, src.hp - ret);
+      }
+    }
+    let dmgToHero = dmg;
+    let bunkerAbsorbed = 0;
+    const bk = bunkerHere;
+    if (
+      tgt.isPlayer &&
+      bk &&
+      bk.hp > 0 &&
+      bk.occupantId === tgt.id &&
+      dmgToHero > 0
+    ) {
+      const absorb = Math.min(dmgToHero, bk.hp);
+      bunkerAbsorbed = absorb;
+      bk.hp -= absorb;
+      dmgToHero -= absorb;
+      if (absorb > 0) {
+        this.pushCombatFloat({
+          unitId: BUNKER_COMBAT_FLOAT_ID,
+          kind: "damage",
+          amount: absorb,
+          bunkerDamage: true,
+          targetIsPlayer: true,
+          bunkerHex: { q: bk.q, r: bk.r },
+        });
+      }
+      if (bk.hp <= 0) {
+        this.catapultHeroOutOfDestroyedBunker(tgt);
+      }
+    }
+    const wasAlive = tgt.hp > 0;
+    tgt.hp = Math.max(0, tgt.hp - dmgToHero);
+    if (!src.isPlayer && tgt.isPlayer && src.hp > 0) {
+      const sp = tgt.artifacts["espinhos_reais"] ?? 0;
+      if (sp > 0 && dmgToHero > 0) {
+        const ref = Math.floor(dmgToHero * 0.08 * sp);
+        if (ref > 0) {
+          src.hp = Math.max(0, src.hp - ref);
+          this.pushCombatFloat({
+            unitId: src.id,
+            kind: "damage",
+            amount: ref,
+            crit: false,
+            targetIsPlayer: false,
+          });
+        }
+      }
+    }
+    if (canProc && src.lifesteal > 0) {
+      const ls = Math.floor((dmg * src.lifesteal) / 100);
+      if (ls > 0) {
+        const h0 = src.hp;
+        src.hp = Math.min(src.maxHp, src.hp + ls);
+        const g = src.hp - h0;
+        if (g > 0) {
+          this.pushCombatFloat({
+            unitId: src.id,
+            kind: "heal",
+            amount: g,
+          });
+          this.applySedaVampiraSplash(src, g);
+        }
+      }
+    }
+    if (mit > 0 && (dmgToHero > 0 || shieldAbsorb > 0) && tgt !== src) {
+      if (dmgToHero > 0) {
+        this.pushCombatFloat({
+          unitId: tgt.id,
+          kind: "damage",
+          amount: dmgToHero,
+          crit: useCrit,
+          targetIsPlayer: tgt.isPlayer,
+          sourceClass: src.isPlayer ? src.heroClass : undefined,
+          duelCut: !!this.duel && tgt !== src,
+          floatHex: { q: tgt.q, r: tgt.r },
+        });
+      }
+      if (shieldAbsorb > 0) {
+        this.pushCombatFloat({
+          unitId: tgt.id,
+          kind: "shield_absorb",
+          amount: shieldAbsorb,
+          targetIsPlayer: tgt.isPlayer,
+          floatHex: { q: tgt.q, r: tgt.r },
+        });
+      }
+    }
+    if (
+      !src.isPlayer &&
+      tgt.isPlayer &&
+      mit > 0 &&
+      tgt !== src &&
+      (shieldAbsorb > 0 || bunkerAbsorbed > 0 || dmgToHero > 0)
+    ) {
+      this.pendingCombatVfx = {
+        kind: "enemy_strike",
+        attackerId: src.id,
+        targetId: tgt.id,
+        archetypeId: src.enemyArchetypeId ?? undefined,
+      };
+    }
+    if (
+      src.isPlayer &&
+      src.heroClass &&
+      !tgt.isPlayer &&
+      tgt !== src &&
+      mit > 0 &&
+      (dmg > 0 || shieldAbsorb > 0)
+    ) {
+      this.applyPoison(src, tgt, rawUse);
+    }
+    if (tgt === src) {
+      this.onDeaths();
+      return dmgToHero;
+    }
+    if (
+      canProc &&
+      src.heroClass === "pistoleiro" &&
+      !tgt.isPlayer &&
+      mit > 0 &&
+      (dmg > 0 || shieldAbsorb > 0)
+    ) {
+      src.pistoleiroBonusDanoWave += pistoleiroPassiveBonusPerProc(src.level);
+      this.addWeaponUltHitCharge(src);
+    }
+    if (
+      tgt.isPlayer &&
+      tgt.heroClass === "gladiador" &&
+      !src.isPlayer &&
+      mit > 0 &&
+      tgt !== src &&
+      (dmgToHero > 0 || shieldAbsorb > 0)
+    ) {
+      this.addWeaponUltTakenCharge(tgt, dmgToHero + shieldAbsorb);
+    }
+    if (!tgt.isPlayer && wasAlive && tgt.hp <= 0) {
+      this.onEnemyKilled(src.isPlayer ? src : null, tgt);
+      if (src.ultimateId === "rainha_desespero" && src.heroClass === "sacerdotisa") {
+        this.addHeroOuroWithMetaBonus(src, 5);
+      }
+    }
+    if (src.hp > 0 && src.hp <= src.maxHp * 0.5) {
+      const im = src.artifacts["imortal"] ?? 0;
+      if (im > 0) {
+        const add = Math.floor(src.regenVida * im * 0.5);
+        if (add > 0) {
+          const h0 = src.hp;
+          src.hp = Math.min(src.maxHp, src.hp + add);
+          const g = src.hp - h0;
+          if (g > 0) {
+            this.pushCombatFloat({
+              unitId: src.id,
+              kind: "heal",
+              amount: g,
+            });
+            this.applySedaVampiraSplash(src, g);
+          }
+        }
+      }
+    }
+    this.onDeaths();
+    return dmgToHero;
+  }
+
+  private onEnemyKilled(killer: Unit | null, victim: Unit): void {
+    const deathBio = biomeAt(this.grid, victim.q, victim.r) as BiomeId;
+    const biomeHeroes = this.heroesHavingChosenBiome(deathBio);
+    const lootHero =
+      killer?.isPlayer ? killer : (biomeHeroes[0] ?? null);
+
+    if (killer?.isPlayer && killer.heroClass === "gladiador") {
+      killer.gladiadorKills++;
+      if (killer.ultimateId === "campeao") {
+        const add = Math.floor(killer.maxHp * 0.1);
+        killer.maxHp += add;
+        killer.hp += add;
+        if (add > 0) {
+          this.pushCombatFloat({
+            unitId: killer.id,
+            kind: "heal",
+            amount: add,
+          });
+          this.applySedaVampiraSplash(killer, add);
+        }
+      }
+    }
+    const aid = victim.enemyArchetypeId ?? "gladinio";
+    const archDef = getEnemyArchetype(aid);
+    const rawXp =
+      victim.enemyXpReward ??
+      archDef?.xpReward ??
+      ENEMY_BY_ID["gladinio"]!.xpReward;
+    const xpScale = killXpScaleForParty(this.partyOrder.length);
+    const baseXp = Math.max(0, Math.floor(rawXp * xpScale));
+    const xpRecipients = this.grantKillXpToBiomeOwners(
+      victim,
+      baseXp,
+      killer,
+    );
+    for (const h of xpRecipients) {
+      this.flushCombatLevelUp(h);
+    }
+    if (killer?.isPlayer) {
+      const fo = killer.artifacts["furacao_ouro"] ?? 0;
+      if (fo > 0) this.addHeroOuroWithMetaBonus(killer, 5 * fo);
+    }
+    if (lootHero) {
+      const dropChance = this.crystalDropChanceForKill(lootHero, victim);
+      if (victim.enemyGuaranteeCrystal || Math.random() < dropChance) {
+        const cx = Math.min(4, lootHero.artifacts["crystal_extra"] ?? 0);
+        const n = 1 + cx;
+        this.crystalsRun += n;
+        this.waveCrystalsGained += n;
+        this.log(n > 1 ? `${n} cristais obtidos!` : "Cristal obtido!");
+      }
+    }
+    const essId = biomeToEssenceId(deathBio);
+    if (essId && lootHero) {
+      const essPct = essenceDropTotalPercent(
+        this.wave,
+        this.effectiveSorte(lootHero),
+      );
+      let nEss = resolveEssenceDropCount(essPct);
+      if (victim.enemyGrantsBossEssence) nEss = Math.max(1, nEss);
+      if (nEss > 0) {
+        this.meta.essences[essId] = (this.meta.essences[essId] ?? 0) + nEss;
+        this.waveEssencesGained[essId] =
+          (this.waveEssencesGained[essId] ?? 0) + nEss;
+        this.saveMeta();
+        this.log(
+          nEss > 1
+            ? `${nEss}× ${FORGE_ESSENCE_LABELS[essId]} obtidas!`
+            : `${FORGE_ESSENCE_LABELS[essId]} obtida!`,
+        );
+      }
+    }
+    if (killer?.isPlayer) {
+      const pv = Math.min(12, killer.artifacts["pulso_verde"] ?? 0);
+      if (pv > 0) {
+        const healEach = 5 * pv;
+        for (const ally of this.getParty()) {
+          if (ally.hp <= 0) continue;
+          const h0 = ally.hp;
+          ally.hp = Math.min(ally.maxHp, ally.hp + healEach);
+          const g = ally.hp - h0;
+          if (g > 0) {
+            this.pushCombatFloat({
+              unitId: ally.id,
+              kind: "heal",
+              amount: g,
+            });
+            this.applySedaVampiraSplash(ally, g);
+          }
+        }
+      }
+      const motor = killer.artifacts["motor_morte"] ?? 0;
+      if (motor > 0) {
+        const near = this.nearestEnemyTo(killer, victim.id);
+        if (near) {
+          const jump = this.nearestFreeHexAdjacentToUnit(killer, near);
+          if (jump) {
+            killer.q = jump.q;
+            killer.r = jump.r;
+          }
+          killer.motorMorteNextBasicPct = 10 * motor;
+        }
+      }
+    }
+  }
+
+  /** Heróis vivos cuja escolha de bioma na run coincide com `bioma`. */
+  private heroesHavingChosenBiome(biome: BiomeId): Unit[] {
+    if (biome === "hub") return [];
+    return this.getParty().filter(
+      (hero) => hero.hp > 0 && this.heroHomeBiome(hero) === biome,
+    );
+  }
+
+  /**
+   * XP pelo bioma de spawn do inimigo: repartida entre donos vivos desse bioma.
+   * Se todos os donos estiverem mortos, cada um recebe XP integral e o assassino herói também (se for outro).
+   * Retorna heróis que receberam XP (>0) para poder correr level-up (ex.: dono do bioma quando outro mata).
+   */
+  private grantKillXpToBiomeOwners(
+    victim: Unit,
+    baseXp: number,
+    killerForFallback: Unit | null,
+  ): Unit[] {
+    const recipients: Unit[] = [];
+    if (baseXp <= 0) return recipients;
+    const bio =
+      victim.enemySpawnBiome && victim.enemySpawnBiome !== "hub"
+        ? victim.enemySpawnBiome
+        : (biomeAt(this.grid, victim.q, victim.r) as BiomeId);
+    if (bio === "hub") {
+      if (killerForFallback?.isPlayer) {
+        this.grantXp(killerForFallback, baseXp);
+        recipients.push(killerForFallback);
+      }
+      return recipients;
+    }
+
+    const ownersAll = this.partyHeroesWithChosenBiomeAll(bio);
+    const ownersAlive = ownersAll.filter((h) => h.hp > 0);
+
+    if (ownersAlive.length > 0) {
+      const n = ownersAlive.length;
+      let share = Math.floor(baseXp / n);
+      let rem = baseXp - share * n;
+      for (const h of ownersAlive) {
+        let add = share;
+        if (rem > 0) {
+          add++;
+          rem--;
+        }
+        if (add > 0) {
+          this.grantXp(h, add);
+          recipients.push(h);
+        }
+      }
+      return recipients;
+    }
+
+    for (const h of ownersAll) {
+      this.grantXp(h, baseXp);
+      recipients.push(h);
+    }
+    const killer =
+      killerForFallback?.isPlayer && killerForFallback.hp > 0
+        ? killerForFallback
+        : null;
+    if (killer && !ownersAll.some((o) => o.id === killer.id)) {
+      this.grantXp(killer, baseXp);
+      recipients.push(killer);
+    }
+    return recipients;
+  }
+
+  /** Chance 0–1 de cristal ao matar (sorte do assassino + meta + ultimate). */
+  crystalDropChanceForKill(killer: Unit, victim: Unit): number {
+    if (victim.enemyGuaranteeCrystal) return 1;
+    const aid = victim.enemyArchetypeId ?? "gladinio";
+    const archDef = getEnemyArchetype(aid);
+    const base =
+      victim.enemyCrystalBase ??
+      archDef?.crystalDropChance ??
+      ENEMY_BY_ID["gladinio"]!.crystalDropChance;
+    let dropChance =
+      base +
+      this.effectiveSorte(killer) * 0.01 +
+      (this.meta.permCrystalDrop / 100) * 0.15;
+    if (killer.ultimateId === "estrategista_nato") {
+      dropChance = Math.min(1, dropChance * 2);
+    }
+    const fc = Math.min(10, killer.artifacts["fio_cruel"] ?? 0);
+    dropChance += 0.03 * fc;
+    return Math.min(1, dropChance);
+  }
+
+  /** Chance total de essência (wave + sorte), pode passar de 100%. */
+  essenceDropTotalPercentForKill(killer: Unit): number {
+    return essenceDropTotalPercent(this.wave, this.effectiveSorte(killer));
+  }
+
+  private nearestEnemyTo(u: Unit, excludeId: string): Unit | null {
+    let best: Unit | null = null;
+    let d = Infinity;
+    for (const e of this.enemies()) {
+      if (e.id === excludeId) continue;
+      const dist = hexDistance({ q: u.q, r: u.r }, { q: e.q, r: e.r });
+      if (dist < d) {
+        d = dist;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  private applyPoison(att: Unit, tgt: Unit, raw: number): void {
+    const s = att.artifacts["maos_venenosas"] ?? 0;
+    if (s <= 0) return;
+    const per = Math.floor(raw * 0.25 * s);
+    const turns = 3 + s;
+    tgt.poison = { turns, perTurn: per };
+  }
+
+  /** Seda vampira: % da cura em HP vira dano bruto em inimigos do mesmo bioma (20% por acúmulo, máx. 10). */
+  private applySedaVampiraSplash(hero: Unit, healHp: number): void {
+    if (!hero.isPlayer || healHp <= 0) return;
+    const s = Math.min(10, hero.artifacts["seda_vampira"] ?? 0);
+    if (s <= 0) return;
+    const rawSplash = Math.floor(healHp * 0.2 * s);
+    if (rawSplash <= 0) return;
+    const bio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
+    for (const e of this.enemies()) {
+      if (e.hp <= 0) continue;
+      const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
+      if (eb !== bio) continue;
+      this.dealDamage(hero, e, rawSplash, false, false, false);
+    }
+  }
+
+  private healUnit(
+    target: Unit,
+    base: number,
+    src: Unit,
+    opts?: {
+      overflowToShieldHalf?: boolean;
+      overflowShieldRatio?: number;
+      skipWeaponUltMeter?: boolean;
+    },
+  ): void {
+    const pct = 1 + src.potencialCuraEscudo / 100;
+    const amt = Math.floor(base * pct);
+    const shieldRatio = opts?.overflowShieldRatio ?? 0.5;
+    if (opts?.overflowToShieldHalf) {
+      const space = Math.max(0, target.maxHp - target.hp);
+      const toHp = Math.min(space, amt);
+      if (toHp > 0) {
+        target.hp += toHp;
+        this.pushCombatFloat({
+          unitId: target.id,
+          kind: "heal",
+          amount: toHp,
+        });
+        this.applySedaVampiraSplash(target, toHp);
+        this.addWeaponUltHealCharge(src, toHp, opts?.skipWeaponUltMeter);
+      }
+      const over = amt - toHp;
+      if (over > 0) {
+        const sh = Math.floor(over * shieldRatio);
+        if (sh > 0) {
+          target.shieldGGBlue += sh;
+          this.pushCombatFloat({
+            unitId: target.id,
+            kind: "shield_gain",
+            amount: sh,
+          });
+          this.addWeaponUltHealCharge(src, sh, opts?.skipWeaponUltMeter);
+        }
+      }
+    } else {
+      const h0 = target.hp;
+      target.hp = Math.min(target.maxHp, target.hp + amt);
+      const g = target.hp - h0;
+      if (g > 0) {
+        this.pushCombatFloat({
+          unitId: target.id,
+          kind: "heal",
+          amount: g,
+        });
+        this.applySedaVampiraSplash(target, g);
+        this.addWeaponUltHealCharge(src, g, opts?.skipWeaponUltMeter);
+      }
+    }
+    const cb = src.artifacts["curandeiro_batalha"] ?? 0;
+    if (cb > 0) src.curandeiroDanoWave += 2 * cb;
+  }
+
+  /** Carga da ultimate da arma: PV curados e escudo aplicado por `healUnit` (ex. Sentença). */
+  private addWeaponUltHealCharge(
+    src: Unit,
+    amount: number,
+    skip?: boolean,
+  ): void {
+    if (skip || !src.isPlayer || src.heroClass !== "sacerdotisa") return;
+    if (amount <= 0) return;
+    const th = weaponUltThreshold("sacerdotisa");
+    src.weaponUltHealAcc = (src.weaponUltHealAcc ?? 0) + amount;
+    src.weaponUltMeter = Math.min(1, (src.weaponUltHealAcc ?? 0) / th);
+  }
+
+  private addWeaponUltHitCharge(att: Unit): void {
+    if (!att.isPlayer || att.heroClass !== "pistoleiro") return;
+    const th = weaponUltThreshold("pistoleiro");
+    att.weaponUltHitAcc = (att.weaponUltHitAcc ?? 0) + 1;
+    att.weaponUltMeter = Math.min(1, (att.weaponUltHitAcc ?? 0) / th);
+  }
+
+  private addWeaponUltTakenCharge(tgt: Unit, amount: number): void {
+    if (!tgt.isPlayer || tgt.heroClass !== "gladiador") return;
+    if (amount <= 0) return;
+    const th = weaponUltThreshold("gladiador");
+    tgt.weaponUltTakenAcc = (tgt.weaponUltTakenAcc ?? 0) + amount;
+    tgt.weaponUltMeter = Math.min(1, (tgt.weaponUltTakenAcc ?? 0) / th);
+  }
+
+  private resetWeaponUltCharge(h: Unit): void {
+    h.weaponUltMeter = 0;
+    h.weaponUltHealAcc = 0;
+    h.weaponUltHitAcc = 0;
+    h.weaponUltTakenAcc = 0;
+  }
+
+  tryWeaponUltimate(): boolean {
+    const h = this.currentHero();
+    if (!h || h.hp <= 0 || this.phase !== "combat") return false;
+    if (h.weaponUltMeter < 1) return false;
+    if (h.heroClass === "sacerdotisa") return this.castParaisoNaTerra(h);
+    if (h.heroClass === "pistoleiro") return this.castFuracaoBalas(h);
+    if (h.heroClass === "gladiador") return this.castFuriaGigante(h);
+    return false;
+  }
+
+  private castParaisoNaTerra(h: Unit): boolean {
+    const w = h.weaponLevel;
+    const flat = paraisoShieldFlat(w);
+    const mm = paraisoManaShieldMult(w);
+    const reg = paraisoRegenBonus(w);
+    const regT = paraisoRegenTurns(w);
+    for (const ally of this.getParty()) {
+      if (ally.hp <= 0) continue;
+      const manaPart = Math.floor(ally.maxMana * mm);
+      ally.shieldGGBlue += flat + manaPart;
+      ally.paraisoRegenBonus = {
+        turns: regT,
+        bonusHp: reg,
+        bonusMana: reg,
+      };
+    }
+    this.resetWeaponUltCharge(h);
+    this.log(`${h.name}: Paraíso na terra!`);
+    this.emit();
+    return true;
+  }
+
+  private castFuracaoBalas(h: Unit): boolean {
+    const mult = furacaoDamageMult(h.weaponLevel);
+    const base = h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+    const raw = Math.floor(base * mult);
+    for (const e of [...this.enemies()]) {
+      if (e.hp <= 0) continue;
+      const crit = rollCrit(h.acertoCritico + roninCritBonus(h));
+      const dealt = this.dealDamage(h, e, raw, crit, true, false);
+      if (crit && dealt > 0 && e.hp > 0) {
+        const T = furacaoBleedTurns(h.weaponLevel);
+        const pct = furacaoBleedPct(h.weaponLevel);
+        const total = Math.max(1, Math.floor(dealt * pct));
+        const per = Math.max(1, Math.floor(total / T));
+        e.bleed = { turns: T, perTurn: per };
+      }
+    }
+    this.resetWeaponUltCharge(h);
+    this.flushCombatLevelUp(h);
+    if (this.phase === "combat") {
+      this.tryResolveWaveClearAfterCombatResume();
+    }
+    this.log(`${h.name}: Furacão de balas!`);
+    this.emit();
+    return true;
+  }
+
+  private castFuriaGigante(h: Unit): boolean {
+    if (h.furiaGiganteTurns && h.furiaGiganteTurns > 0) return false;
+    h.furiaSavedDano = h.dano;
+    const extra = Math.floor(h.maxHp * 0.5);
+    h.furiaExtraMaxHp = extra;
+    h.maxHp += extra;
+    h.hp += extra;
+    h.dano = Math.max(1, Math.floor(h.maxHp * 0.1));
+    h.furiaGiganteTurns = 3;
+    this.resetWeaponUltCharge(h);
+    this.log(`${h.name}: Fúria do gigante!`);
+    this.emit();
+    return true;
+  }
+
+  private endFuriaGigante(h: Unit): void {
+    const extra = h.furiaExtraMaxHp ?? 0;
+    if (extra > 0) {
+      h.maxHp -= extra;
+      h.hp = Math.min(h.hp, h.maxHp);
+    }
+    if (h.furiaSavedDano != null) h.dano = h.furiaSavedDano;
+    h.furiaGiganteTurns = undefined;
+    h.furiaExtraMaxHp = undefined;
+    h.furiaSavedDano = undefined;
+    this.log(`${h.name}: Fúria do gigante termina.`);
+    this.emit();
+  }
+
+  private syncGladiadorDuelPassiveHp(u: Unit): void {
+    const wins = u.gladiadorDuelWins ?? 0;
+    if (wins <= 0) return;
+    const per = gladiadorDuelHpPerWin(u.level);
+    const target = wins * per;
+    const prev = u.gladiadorDuelHpGranted ?? 0;
+    const diff = target - prev;
+    if (diff !== 0) {
+      u.maxHp += diff;
+      u.hp += diff;
+      u.gladiadorDuelHpGranted = target;
+    }
+  }
+
+  private syncWeaponPassivesOnLevelUp(u: Unit): void {
+    if (u.heroClass === "sacerdotisa") {
+      const target = priestPassivePotencialPoints(u.level);
+      const prev = u.priestPassivePotencialSnapshot ?? 0;
+      u.potencialCuraEscudo += target - prev;
+      u.priestPassivePotencialSnapshot = target;
+    }
+    if (u.heroClass === "gladiador") {
+      this.syncGladiadorDuelPassiveHp(u);
+    }
+  }
+
+  /**
+   * Veneno e HoT: ticks no fim do turno do herói (via `applyEndTurnEffects`) ou,
+   * para cada inimigo, logo após o fim do turno daquele inimigo (`processNextEnemyTurn`).
+   * Dano de veneno não usa crítico de habilidades; crítico em DoT só com efeito/artefato dedicado no futuro.
+   */
+  private applyPoisonAndHotTick(u: Unit): void {
+    if (u.hp <= 0) return;
+    if (u.poison && u.poison.turns > 0) {
+      const pd = u.poison.perTurn;
+      if (pd > 0) {
+        this.pushCombatFloat({
+          unitId: u.id,
+          kind: "damage",
+          amount: pd,
+          crit: false,
+          targetIsPlayer: u.isPlayer,
+          floatHex: { q: u.q, r: u.r },
+          poisonDot: true,
+        });
+      }
+      u.hp = Math.max(0, u.hp - pd);
+      u.poison.turns--;
+    }
+    if (u.poison && u.poison.turns <= 0) u.poison = undefined;
+
+    if (u.hot && u.hot.turns > 0) {
+      const ht = u.hot.perTurn;
+      if (ht > 0 && u.hp > 0) {
+        const h0 = u.hp;
+        u.hp = Math.min(u.maxHp, u.hp + ht);
+        const g = u.hp - h0;
+        if (g > 0) {
+          this.pushCombatFloat({
+            unitId: u.id,
+            kind: "heal",
+            amount: g,
+            floatHex: { q: u.q, r: u.r },
+          });
+          this.applySedaVampiraSplash(u, g);
+        }
+      }
+      u.hot.turns--;
+    }
+    if (u.hot && u.hot.turns <= 0) u.hot = undefined;
+
+    if (u.bleed && u.bleed.turns > 0) {
+      const bd = u.bleed.perTurn;
+      if (bd > 0) {
+        this.pushCombatFloat({
+          unitId: u.id,
+          kind: "damage",
+          amount: bd,
+          crit: false,
+          targetIsPlayer: u.isPlayer,
+          floatHex: { q: u.q, r: u.r },
+        });
+      }
+      u.hp = Math.max(0, u.hp - bd);
+      u.bleed.turns--;
+    }
+    if (u.bleed && u.bleed.turns <= 0) u.bleed = undefined;
+  }
+
+  private applyEndTurnEffects(u: Unit): void {
+    const bio = biomeAt(this.grid, u.q, u.r) as BiomeId;
+    const mana0 = u.mana;
+    const hp0 = u.hp;
+    const sh0 = u.shieldGGBlue;
+    const fd = u.isPlayer ? forgeSynergyTier(u.forgeLoadout, "deserto") : 0;
+    const noDesertDrain =
+      bio !== "deserto" ||
+      unitIgnoresTerrain(u) ||
+      (u.isPlayer && fd >= 1);
+    const regenMult = u.isPlayer && fd >= 2 ? 2 : 1;
+    let paraisoMana = 0;
+    let paraisoHp = 0;
+    if (u.paraisoRegenBonus && u.paraisoRegenBonus.turns > 0) {
+      paraisoMana = u.paraisoRegenBonus.bonusMana;
+      paraisoHp = u.paraisoRegenBonus.bonusHp;
+      u.paraisoRegenBonus.turns--;
+      if (u.paraisoRegenBonus.turns <= 0) u.paraisoRegenBonus = undefined;
+    }
+    if (noDesertDrain) {
+      u.mana = Math.min(
+        u.maxMana,
+        u.mana +
+          Math.floor(u.regenMana * regenMult) +
+          paraisoMana,
+      );
+    } else if (paraisoMana > 0) {
+      u.mana = Math.min(u.maxMana, u.mana + paraisoMana);
+    }
+    let rv =
+      bio === "deserto" && !noDesertDrain ? 0 : u.regenVida;
+    rv = Math.floor(rv * regenMult) + paraisoHp;
+    const ton = u.artifacts["tonico"] ?? 0;
+    if (ton > 0) {
+      u.mana = Math.min(u.maxMana, u.mana + Math.floor(rv * 0.5 * ton));
+    }
+    u.hp = Math.min(u.maxHp, u.hp + rv);
+    const manaGain = u.mana - mana0;
+    if (manaGain > 0) {
+      this.pushCombatFloat({
+        unitId: u.id,
+        kind: "mana",
+        amount: manaGain,
+      });
+    }
+    const healRv = u.hp - hp0;
+    if (healRv > 0) {
+      this.pushCombatFloat({
+        unitId: u.id,
+        kind: "heal",
+        amount: healRv,
+      });
+    }
+    this.applyPoisonAndHotTick(u);
+
+    if (u.immobileThisTurn) {
+      u.defesa += u.artifacts["duro_pedra"] ?? 0;
+    }
+    const pb = computePartyBonus(this.runColors);
+    if (pb.shieldPerTurn > 0) {
+      u.shieldGGBlue += pb.shieldPerTurn;
+      const sg = u.shieldGGBlue - sh0;
+      if (sg > 0) {
+        this.pushCombatFloat({
+          unitId: u.id,
+          kind: "shield_gain",
+          amount: sg,
+        });
+      }
+    }
+  }
+
+  private onDeaths(): void {
+    this.units = this.units.filter((u) => u.isPlayer || u.hp > 0);
+    for (const b of this.allBunkerStates()) {
+      const bid = b.occupantId;
+      if (!bid) continue;
+      const occ = this.units.find((u) => u.id === bid);
+      if (!occ || occ.hp <= 0) b.occupantId = null;
+    }
+  }
+
+  /** Herói dentro do bunker com estrutura intacta: inimigos terrestres podem atingir o alvo (dano vai ao bunker). */
+  private isBunkerOccupant(u: Unit): boolean {
+    const b = this.bunkerAtHex(u.q, u.r);
+    return (
+      u.isPlayer &&
+      !!b &&
+      b.hp > 0 &&
+      b.occupantId === u.id
+    );
+  }
+
+  /**
+   * Quando o bunker chega a 0 PV, expulsa o ocupante para o hex livre vizinho mais próximo do resto do grupo.
+   */
+  private catapultHeroOutOfDestroyedBunker(hero: Unit): void {
+    const b = this.bunkerForOccupant(hero.id);
+    if (!b || b.occupantId !== hero.id) return;
+    const dest = this.findBestBunkerEjectHex(hero, b);
+    b.occupantId = null;
+    if (!dest) {
+      this.emit();
+      return;
+    }
+    const fromQ = hero.q;
+    const fromR = hero.r;
+    hero.q = dest.q;
+    hero.r = dest.r;
+    this.pendingMoveAnim = {
+      unitId: hero.id,
+      cells: [
+        { q: fromQ, r: fromR },
+        { q: dest.q, r: dest.r },
+      ],
+    };
+    this.log(`${hero.name} foi arremessado para fora do bunker destruído!`);
+    this.emit();
+  }
+
+  private findBestBunkerEjectHex(
+    hero: Unit,
+    b: BunkerState,
+  ): { q: number; r: number } | null {
+    const allies = this.getParty().filter(
+      (u) => u.hp > 0 && u.id !== hero.id,
+    );
+    const scoreNeighbor = (n: { q: number; r: number }): number => {
+      if (!this.grid.has(axialKey(n.q, n.r))) return Infinity;
+      const blocked = this.units.some(
+        (u) =>
+          u.hp > 0 &&
+          u.id !== hero.id &&
+          u.q === n.q &&
+          u.r === n.r,
+      );
+      if (blocked) return Infinity;
+      if (allies.length === 0) return 0;
+      return Math.min(
+        ...allies.map((a) => hexDistance(n, { q: a.q, r: a.r })),
+      );
+    };
+    const scored = hexNeighbors(b.q, b.r).map((n) => ({
+      q: n.q,
+      r: n.r,
+      s: scoreNeighbor(n),
+    }));
+    scored.sort((a, b) => a.s - b.s || a.q - b.q || a.r - b.r);
+    const pick = scored.find((x) => x.s < Infinity);
+    if (pick) return { q: pick.q, r: pick.r };
+    for (let ring = 2; ring <= 12; ring++) {
+      const pool: { q: number; r: number }[] = [];
+      for (const c of this.grid.values()) {
+        if (c.biome === "hub") continue;
+        if (
+          hexDistance({ q: b.q, r: b.r }, { q: c.q, r: c.r }) !== ring
+        )
+          continue;
+        const occ = this.units.some(
+          (u) =>
+            u.hp > 0 &&
+            u.id !== hero.id &&
+            u.q === c.q &&
+            u.r === c.r,
+        );
+        if (!occ) pool.push({ q: c.q, r: c.r });
+      }
+      if (pool.length === 0) continue;
+      pool.sort((a, b) => {
+        const da =
+          allies.length === 0
+            ? 0
+            : Math.min(
+                ...allies.map((al) =>
+                  hexDistance(a, { q: al.q, r: al.r }),
+                ),
+              );
+        const db =
+          allies.length === 0
+            ? 0
+            : Math.min(
+                ...allies.map((al) =>
+                  hexDistance(b, { q: al.q, r: al.r }),
+                ),
+              );
+        return da - db || a.q - b.q || a.r - b.r;
+      });
+      return pool[0]!;
+    }
+    return null;
+  }
+
+  /**
+   * Move o inimigo até ter alcance (se precisar) e agenda ataque + vulcânico
+   * só após a animação de movimento no canvas.
+   * @returns ms até o fim do movimento (0 se não andou).
+   */
+  private runEnemyAI(e: Unit): number {
+    const tgt = this.pickEnemyHeroTarget(e);
+    if (!tgt) return 0;
+    const cells: { q: number; r: number }[] = [{ q: e.q, r: e.r }];
+    let steps = e.movimento;
+    while (steps > 0) {
+      const bypassFly = this.isBunkerOccupant(tgt);
+      const distNow = hexDistance(
+        { q: e.q, r: e.r },
+        { q: tgt.q, r: tgt.r },
+      );
+      const eAlcNow = this.effectiveAlcanceForEnemy(e);
+      if (
+        !(tgt.flying && !e.flying && !bypassFly) &&
+        distNow >= 1 &&
+        distNow <= eAlcNow
+      ) {
+        break;
+      }
+      const blocked = this.occupiedHexKeysExcluding(e.id);
+      this.addBunkerHexForEnemyPath(blocked);
+      const path = this.findEnemyApproachPath(e, tgt, blocked);
+      if (!path || path.length <= 1) break;
+      const next = path[1]!;
+      const nk = axialKey(next.q, next.r);
+      if (blocked.has(nk)) break;
+      e.q = next.q;
+      e.r = next.r;
+      cells.push({ q: e.q, r: e.r });
+      steps--;
+    }
+    const moveSegs = Math.max(0, cells.length - 1);
+    const mult = this.enemyPhaseTimingMult;
+    const segMs = UNIT_MOVE_SEGMENT_MS * mult;
+    const skipMoveAnim = getSkipEnemyMoveAnim();
+    if (cells.length > 1 && !skipMoveAnim) {
+      this.pendingMoveAnim = {
+        unitId: e.id,
+        cells,
+        segmentMs: segMs,
+      };
+    }
+    const moveMs = skipMoveAnim ? 0 : moveSegs * segMs;
+    const enemyId = e.id;
+    const targetId = tgt.id;
+    this.queueCombat(moveMs, () => {
+      const ex = this.units.find((u) => u.id === enemyId);
+      const tgx = this.units.find((u) => u.id === targetId);
+      if (!ex || !tgx || ex.hp <= 0 || tgx.hp <= 0 || this.phase !== "combat") {
+        if (ex && ex.hp > 0) this.applyVolcanicAtEndOfTurn(ex);
+        this.emit();
+        return;
+      }
+      const bypassFly = this.isBunkerOccupant(tgx);
+      const dist = hexDistance(
+        { q: ex.q, r: ex.r },
+        { q: tgx.q, r: tgx.r },
+      );
+      if (tgx.flying && !ex.flying && !bypassFly) {
+        this.applyVolcanicAtEndOfTurn(ex);
+        this.emit();
+        return;
+      }
+      const eAlc = this.effectiveAlcanceForEnemy(ex);
+      if (dist >= 1 && dist <= eAlc) {
+        const crit0 = rollCrit(ex.acertoCritico);
+        this.dealDamage(ex, tgx, ex.dano, crit0, true, true);
+        if (ex.enemyAttackKind === "aoe1" && ex.hp > 0) {
+          for (const ally of this.getParty()) {
+            if (ally.hp <= 0 || ally.id === tgx.id) continue;
+            const da = hexDistance(
+              { q: tgx.q, r: tgx.r },
+              { q: ally.q, r: ally.r },
+            );
+            if (da <= 1) {
+              this.dealDamage(
+                ex,
+                ally,
+                ex.dano,
+                rollCrit(ex.acertoCritico),
+                true,
+                true,
+              );
+            }
+          }
+        }
+      }
+      this.applyVolcanicAtEndOfTurn(ex);
+      this.emit();
+    });
+    return moveMs;
+  }
+
+  /** Inimigos não podem entrar no hex dos bunkers (estruturas). */
+  private addBunkerHexForEnemyPath(blocked: Set<string>): void {
+    for (const b of this.allBunkerStates()) {
+      if (b.hp <= 0) continue;
+      blocked.add(axialKey(b.q, b.r));
+    }
+  }
+
+  /** Hexes ocupados por unidades vivas (e lápides de heróis mortos), exceto `unitId`. */
+  occupiedHexKeysExcluding(unitId: string): Set<string> {
+    const s = new Set<string>();
+    for (const u of this.units) {
+      if (u.hp <= 0) {
+        if (u.isPlayer) s.add(axialKey(u.q, u.r));
+        continue;
+      }
+      if (u.id === unitId) continue;
+      s.add(axialKey(u.q, u.r));
+    }
+    return s;
+  }
+
+  /**
+   * Caminho até um hex de ataque (1..alcance do alvo), nunca sobre o alvo.
+   * Se estiver tudo bloqueado à frente, aproxima o máximo possível do herói (hex alcançável com menor distância).
+   */
+  private findEnemyApproachPath(
+    e: Unit,
+    tgt: Unit,
+    blocked: Set<string>,
+  ): ReturnType<typeof findPath> | null {
+    const primary = this.findEnemyApproachPathToAttackRing(e, tgt, blocked);
+    if (primary && primary.length > 1) return primary;
+    return this.findEnemyApproachPathBestCloser(e, tgt, blocked);
+  }
+
+  /** Caminho até um hex válido para atacar o alvo (distância 1..alcance). */
+  private findEnemyApproachPathToAttackRing(
+    e: Unit,
+    tgt: Unit,
+    blocked: Set<string>,
+  ): ReturnType<typeof findPath> | null {
+    const eAlc = this.effectiveAlcanceForEnemy(e);
+    const goals: { q: number; r: number }[] = [];
+    for (const c of this.grid.values()) {
+      const d = hexDistance({ q: c.q, r: c.r }, { q: tgt.q, r: tgt.r });
+      if (d < 1 || d > eAlc) continue;
+      const k = axialKey(c.q, c.r);
+      if (blocked.has(k)) continue;
+      goals.push({ q: c.q, r: c.r });
+    }
+    goals.sort(
+      (a, b) =>
+        hexDistance(a, { q: e.q, r: e.r }) -
+        hexDistance(b, { q: e.q, r: e.r }),
+    );
+    const maxCost = ENEMY_APPROACH_PATHFIND_MAX;
+    const fly = e.flying;
+    const ign = unitIgnoresTerrain(e);
+    const start = { q: e.q, r: e.r };
+    for (const goal of goals) {
+      const p = findPath(
+        this.grid,
+        start,
+        goal,
+        fly,
+        ign,
+        maxCost,
+        blocked,
+      );
+      if (p && p.length > 1) return p;
+    }
+    return null;
+  }
+
+  /**
+   * Quando não há rota até hex de ataque (filas de inimigos bloqueiam), escolhe o hex alcançável
+   * que mais reduz a distância axial ao herói e devolve o caminho até lá.
+   */
+  private findEnemyApproachPathBestCloser(
+    e: Unit,
+    tgt: Unit,
+    blocked: Set<string>,
+  ): ReturnType<typeof findPath> | null {
+    const start = { q: e.q, r: e.r };
+    const startK = axialKey(start.q, start.r);
+    const d0 = hexDistance(start, { q: tgt.q, r: tgt.r });
+    const maxCost = ENEMY_APPROACH_PATHFIND_MAX;
+    const fly = e.flying;
+    const ign = unitIgnoresTerrain(e);
+    const costs = reachableHexes(
+      this.grid,
+      start,
+      maxCost,
+      fly,
+      ign,
+      blocked,
+    );
+    let bestH: { q: number; r: number } | null = null;
+    let bestDist = Infinity;
+    let bestPathCost = Infinity;
+    for (const [k, c] of costs) {
+      if (k === startK) continue;
+      const [q, r] = k.split(",").map(Number) as [number, number];
+      const h = { q: q!, r: r! };
+      const dT = hexDistance(h, { q: tgt.q, r: tgt.r });
+      if (dT < bestDist || (dT === bestDist && c < bestPathCost)) {
+        bestDist = dT;
+        bestPathCost = c;
+        bestH = h;
+      }
+    }
+    if (!bestH || bestDist >= d0) return null;
+    const p = findPath(
+      this.grid,
+      start,
+      bestH,
+      fly,
+      ign,
+      maxCost,
+      blocked,
+    );
+    return p && p.length > 1 ? p : null;
+  }
+
+  /** Hex vizinho livre ao alvo, o mais próximo da posição atual do atacante (ex.: motor da morte). */
+  private nearestFreeHexAdjacentToUnit(
+    mover: Unit,
+    around: Unit,
+  ): { q: number; r: number } | null {
+    const occ = this.occupiedHexKeysExcluding(mover.id);
+    let best: { q: number; r: number } | null = null;
+    let bestD = Infinity;
+    for (const n of hexNeighbors(around.q, around.r)) {
+      const nk = axialKey(n.q, n.r);
+      if (!this.grid.has(nk) || occ.has(nk)) continue;
+      const d = hexDistance(n, { q: mover.q, r: mover.r });
+      if (d < bestD) {
+        bestD = d;
+        best = { q: n.q, r: n.r };
+      }
+    }
+    return best;
+  }
+
+  /** Bônus total de XP em % (trevo, loja, meta permanente, sinergia de cores), igual ao usado em `grantXp`. */
+  xpGainBonusPercentForHero(u: Unit): number {
+    const trevo = u.artifacts["trevo"] ?? 0;
+    const shopXp = u.artifacts["_xp_shop"] ?? 0;
+    return Math.floor(
+      25 * trevo + shopXp + this.meta.permXp + this.partyXpBonusPct,
+    );
+  }
+
+  private grantXp(u: Unit, base: number): void {
+    const trevo = u.artifacts["trevo"] ?? 0;
+    const shopXp = u.artifacts["_xp_shop"] ?? 0;
+    const metaXp = this.meta.permXp;
+    let mult =
+      1 +
+      0.25 * trevo +
+      shopXp / 100 +
+      metaXp / 100 +
+      this.partyXpBonusPct / 100;
+    const gained = Math.floor(base * mult);
+    this.waveXpGained += gained;
+    u.xp += gained;
+  }
+
+  /** Sobe de nível só após fechar o lote de dano/mortes (evita menu no meio de multi-hit). */
+  private flushCombatLevelUp(hero: Unit): void {
+    if (this.phase !== "combat" || !hero.isPlayer || hero.hp <= 0) return;
+    this.checkLevelUp(hero);
+  }
+
+  checkLevelUp(u: Unit): void {
+    if (!u.isPlayer) return;
+    if (
+      !Number.isFinite(u.xpToNext) ||
+      u.xpToNext <= 0 ||
+      u.xp < u.xpToNext
+    )
+      return;
+    u.xp -= u.xpToNext;
+    u.level++;
+    u.xpToNext = xpCurve(u.level);
+    this.syncWeaponPassivesOnLevelUp(u);
+    u.hp = Math.min(u.hp, u.maxHp);
+    u.mana = Math.min(u.mana, u.maxMana);
+    if (
+      forgeSynergyTier(u.forgeLoadout, "deserto") >= 3 &&
+      biomeAt(this.grid, u.q, u.r) === "deserto"
+    ) {
+      for (const ally of this.getParty()) {
+        if (ally.hp <= 0) continue;
+        let pool = ally.maxHp;
+        const space = ally.maxHp - ally.hp;
+        const toHp = Math.min(space, pool);
+        ally.hp += toHp;
+        pool -= toHp;
+        ally.shieldGGBlue += pool;
+        ally.mana = ally.maxMana;
+      }
+    }
+    this.log(`${u.name} sobe para nível ${u.level}!`);
+    if (u.level >= 60 && !u.ultimateId) {
+      this.pendingUltimate = { unitId: u.id };
+      this.phase = "ultimate_pick";
+      this.emit();
+      return;
+    }
+    const sorteEff = this.effectiveSorte(u);
+    const nArt = 3 + this.meta.initialCards;
+    const choices = randomArtifactChoicesForHero(u, nArt, sorteEff);
+    if (choices.length === 0) {
+      this.log(`${u.name}: sem cartas de level-up disponíveis.`);
+    } else {
+      this.pendingArtifacts = {
+        unitId: u.id,
+        choices,
+        choiceCount: nArt,
+        rerollsLeft: 1,
+      };
+      this.phase = "level_up_pick";
+    }
+    this.emit();
+  }
+
+  /** Um rerol por level-up: novo lote com o mesmo número de cartas. */
+  rerollArtifactPick(): void {
+    const pa = this.pendingArtifacts;
+    if (!pa || pa.rerollsLeft <= 0) return;
+    const u = this.units.find((x) => x.id === pa.unitId);
+    if (!u) return;
+    const sorteEff = this.effectiveSorte(u);
+    const choices = randomArtifactChoicesForHero(u, pa.choiceCount, sorteEff);
+    if (choices.length === 0) {
+      this.log(`${u.name}: sem cartas de reroll disponíveis.`);
+      return;
+    }
+    this.pendingArtifacts = {
+      ...pa,
+      choices,
+      rerollsLeft: 0,
+    };
+    this.emit();
+  }
+
+  pickArtifact(artifactId: string): void {
+    if (!this.pendingArtifacts) return;
+    const u = this.units.find((x) => x.id === this.pendingArtifacts!.unitId);
+    if (!u) return;
+    if (artifactId === "_pick_gold") {
+      this.addHeroOuroWithMetaBonus(u, 75);
+    } else if (artifactId === "_pick_restore") {
+      u.hp = u.maxHp;
+      u.mana = u.maxMana;
+    } else {
+      const cap = getArtifactMaxStacks(artifactId);
+      const prev = u.artifacts[artifactId] ?? 0;
+      u.artifacts[artifactId] = Math.min(cap, prev + 1);
+      const def = artifactDefById(artifactId);
+      const b = def?.pickBonusPerStack;
+      if (b) {
+        if (b.dano) u.dano += b.dano;
+        if (b.defesa) u.defesa += b.defesa;
+        if (b.maxHp) u.maxHp += b.maxHp;
+        if (b.hp) u.hp += b.hp;
+        if (b.acertoCritico) u.acertoCritico += b.acertoCritico;
+        if (b.danoCritico) u.danoCritico += b.danoCritico;
+        if (b.penetracao) u.penetracao += b.penetracao;
+        if (b.regenVida) u.regenVida += b.regenVida;
+        if (b.regenMana) u.regenMana += b.regenMana;
+        if (b.alcance) u.alcance += b.alcance;
+        if (b.movimento) u.movimento += b.movimento;
+        if (b.lifesteal) u.lifesteal += b.lifesteal;
+        if (b.sorte) u.sorte += b.sorte;
+        if (b.potencialCuraEscudo) u.potencialCuraEscudo += b.potencialCuraEscudo;
+      }
+    }
+    u.hp = Math.min(u.hp, u.maxHp);
+    u.mana = Math.min(u.mana, u.maxMana);
+    this.pendingArtifacts = null;
+    this.phase = "combat";
+    if (artifactId === "braco_forte") {
+      const ch = this.currentHero();
+      if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
+    }
+    this.checkLevelUp(u);
+    if (this.phase === "combat") {
+      this.tryResolveWaveClearAfterCombatResume();
+    }
+    flushCombatOutcomeQueue({
+      hasPendingCombatSchedule: () => this.hasPendingCombatSchedule(),
+      getPhase: () => this.phase,
+    });
+    this.emit();
+  }
+
+  pickUltimate(id: string): void {
+    if (!this.pendingUltimate) return;
+    const u = this.units.find((x) => x.id === this.pendingUltimate!.unitId);
+    if (!u) return;
+    u.ultimateId = id;
+    u.formaFinal = true;
+    if (id === "fada_cura") u.flying = true;
+    u.hp = Math.min(u.hp, u.maxHp);
+    u.mana = Math.min(u.mana, u.maxMana);
+    this.pendingUltimate = null;
+    this.phase = "combat";
+    this.checkLevelUp(u);
+    if (this.phase === "combat") {
+      this.tryResolveWaveClearAfterCombatResume();
+    }
+    flushCombatOutcomeQueue({
+      hasPendingCombatSchedule: () => this.hasPendingCombatSchedule(),
+      getPhase: () => this.phase,
+    });
+    this.emit();
+  }
+
+  buyBunkerRepair(heroId: string): boolean {
+    const u = this.units.find((x) => x.id === heroId);
+    if (!u || !u.isPlayer) return false;
+    const list = this.allBunkerStates();
+    if (list.length === 0) return false;
+    let missing = 0;
+    for (const b of list) missing += b.maxHp - b.hp;
+    if (missing <= 0) return false;
+    if (u.ouro < missing) return false;
+    u.ouro -= missing;
+    for (const b of list) b.hp = b.maxHp;
+    this.log(`Bunkers reparados (${missing} ouro).`);
+    this.emit();
+    return true;
+  }
+
+  buyBunkerEvolve(heroId: string): boolean {
+    const u = this.units.find((x) => x.id === heroId);
+    if (!u || !u.isPlayer) return false;
+    const list = this.allBunkerStates();
+    if (list.length === 0) return false;
+    const t = list[0]!.tier;
+    if (t >= 2) return false;
+    const cost = BUNKER_EVOLVE_COSTS[t as 0 | 1];
+    let c = cost;
+    if (u.ultimateId === "estrategista_nato") c = Math.ceil(c * 0.5);
+    if (u.ouro < c) return false;
+    u.ouro -= c;
+    const nt = (t + 1) as 1 | 2;
+    const st = bunkerStatsForTier(nt);
+    for (const b of list) {
+      b.tier = nt;
+      b.maxHp = st.maxHp;
+      b.defesa = st.defesa;
+      b.hp = st.maxHp;
+    }
+    this.log(`Bunkers evoluíram (nível ${nt}).`);
+    this.emit();
+    return true;
+  }
+
+  takePendingBunkerHint(): { text: string; q: number; r: number } | null {
+    const s = this.pendingBunkerHint;
+    this.pendingBunkerHint = null;
+    return s;
+  }
+
+  takePendingMoveBlockedHint(): { text: string; unitId: string } | null {
+    const s = this.pendingMoveBlockedHint;
+    this.pendingMoveBlockedHint = null;
+    return s;
+  }
+
+
+  buyGoldItem(heroId: string, itemId: string): boolean {
+    const u = this.units.find((x) => x.id === heroId);
+    if (!u || !u.isPlayer) return false;
+    const item = GOLD_SHOP.find((i) => i.id === itemId);
+    if (!item) return false;
+    if (item.id === "xp_pct" && (u.artifacts["_xp_shop"] ?? 0) >= 60)
+      return false;
+    let cost = item.cost;
+    if (u.ultimateId === "estrategista_nato") cost = Math.ceil(cost * 0.5);
+    if (u.ouro < cost) return false;
+    u.ouro -= cost;
+    item.apply(u);
+    this.emit();
+    return true;
+  }
+
+  /** Cristais: compra meta (fora de run) */
+  buyMetaTrack(
+    track:
+      | "permDamage"
+      | "permHp"
+      | "permDef"
+      | "permHealShield"
+      | "permXp"
+      | "permGold"
+      | "permCrystalDrop",
+  ): boolean {
+    const cur = this.meta[track];
+    if (cur >= 5) return false;
+    const costs = [1, 2, 4, 6, 9];
+    const cost = costs[cur];
+    if (cost === undefined || this.meta.crystals < cost) return false;
+    this.meta.crystals -= cost;
+    this.meta[track]++;
+    this.saveMeta();
+    return true;
+  }
+
+  buyInitialCards(): boolean {
+    const cur = this.meta.initialCards;
+    if (cur >= 3) return false;
+    const costs = [2, 5, 9];
+    const cost = costs[cur];
+    if (cost === undefined || this.meta.crystals < cost) return false;
+    this.meta.crystals -= cost;
+    this.meta.initialCards++;
+    this.saveMeta();
+    return true;
+  }
+
+  buyWeaponUpgrade(slot: 0 | 1 | 2): boolean {
+    const cur = this.meta.weaponLevelByHeroSlot[slot];
+    if (cur >= 5) return false;
+    const cost = weaponUpgradeCrystalCost(cur);
+    if (cost == null || this.meta.crystals < cost) return false;
+    this.meta.crystals -= cost;
+    const next = (cur + 1) as WeaponLevel;
+    const w: [WeaponLevel, WeaponLevel, WeaponLevel] = [
+      ...this.meta.weaponLevelByHeroSlot,
+    ];
+    w[slot] = next;
+    this.meta.weaponLevelByHeroSlot = w;
+    this.saveMeta();
+    return true;
+  }
+
+  reachableForCurrentHero(): Map<string, number> {
+    const h = this.currentHero();
+    if (!h) return new Map();
+    const blocked = this.occupiedHexKeysExcluding(h.id);
+    return reachableHexes(
+      this.grid,
+      { q: h.q, r: h.r },
+      this.movementLeft,
+      h.flying,
+      unitIgnoresTerrain(h),
+      blocked,
+    );
+  }
+
+  effectiveAlcanceForHero(h: Unit): number {
+    const bio = biomeAt(this.grid, h.q, h.r) as BiomeId;
+    const ign = unitIgnoresTerrain(h);
+    const ft = forgeSynergyTier(h.forgeLoadout, "floresta");
+    let total = h.alcance;
+    if (ft >= 2) total += 2;
+    else if (ft >= 1 && bio === "floresta") total += 2;
+    else if (!ign && bio === "floresta") total += 1;
+    const bk = this.bunkerAtHex(h.q, h.r);
+    if (
+      bk &&
+      bk.hp > 0 &&
+      bk.occupantId === h.id &&
+      h.q === bk.q &&
+      h.r === bk.r
+    ) {
+      total += 1;
+    }
+    return total;
+  }
+
+  private effectiveAlcanceForEnemy(e: Unit): number {
+    const bio = biomeAt(this.grid, e.q, e.r) as BiomeId;
+    const suppressForest =
+      bio === "floresta" && this.anyHeroSuppressesEnemyForestRange();
+    return effectiveAlcanceForBiome(
+      e.alcance,
+      bio,
+      unitIgnoresTerrain(e),
+      { suppressForestEnemyBonus: suppressForest },
+    );
+  }
+
+  /** Hexes com distância axial [minD, maxD] do centro (inclusive). */
+  hexKeysInRing(q: number, r: number, minD: number, maxD: number): Set<string> {
+    const out = new Set<string>();
+    for (const c of this.grid.values()) {
+      const d = hexDistance({ q, r }, { q: c.q, r: c.r });
+      if (d >= minD && d <= maxD) out.add(axialKey(c.q, c.r));
+    }
+    return out;
+  }
+
+  getBasicAttackRangeHexKeys(): Set<string> {
+    const h = this.currentHero();
+    if (!h || h.hp <= 0) return new Set();
+    const alc = this.effectiveAlcanceForHero(h);
+    return this.hexKeysInRing(h.q, h.r, 1, Math.max(1, alc));
+  }
+
+  getSkillRangeHexKeys(skillId: string): Set<string> {
+    const h = this.currentHero();
+    if (!h || h.hp <= 0) return new Set();
+    if (skillId === "bunker_tiro_preciso") {
+      const keys = new Set<string>();
+      for (const u of this.units) {
+        if (u.isPlayer || u.hp <= 0) continue;
+        keys.add(axialKey(u.q, u.r));
+      }
+      return keys;
+    }
+    if (skillId === "ate_a_morte") return this.hexKeysInRing(h.q, h.r, 1, 1);
+    if (skillId === "atirar_todo_lado" || skillId === "especialista_destruicao") {
+      return this.getBasicAttackRangeHexKeys();
+    }
+    if (skillId === "sentenca") {
+      return new Set();
+    }
+    return new Set();
+  }
+
+  /** Inimigo vivo neste hex (um por célula). */
+  liveEnemyIdAtHex(q: number, r: number): string | null {
+    const t = this.units.find(
+      (u) => !u.isPlayer && u.hp > 0 && u.q === q && u.r === r,
+    );
+    return t?.id ?? null;
+  }
+
+  validateEnemyForBasicAttack(targetId: string): boolean {
+    const h = this.currentHero();
+    const t = this.units.find((u) => u.id === targetId);
+    if (!h || !t || t.isPlayer || t.hp <= 0) return false;
+    const d = hexDistance({ q: h.q, r: h.r }, { q: t.q, r: t.r });
+    const alc = this.effectiveAlcanceForHero(h);
+    return d >= 1 && d <= alc;
+  }
+
+  /** Skills que exigem clique em inimigo (não hex vazio). */
+  canSkillTargetEnemy(skillId: string, targetId: string): boolean {
+    const t = this.units.find((u) => u.id === targetId);
+    const h = this.currentHero();
+    if (!t || !h || t.isPlayer || t.hp <= 0) return false;
+    if (skillId === "ate_a_morte") {
+      return hexDistance({ q: h.q, r: h.r }, { q: t.q, r: t.r }) <= 1;
+    }
+    if (skillId === "especialista_destruicao") {
+      return this.validateEnemyForBasicAttack(targetId);
+    }
+    if (skillId === "bunker_tiro_preciso") return true;
+    return false;
+  }
+
+  hexInSkillRange(skillId: string, q: number, r: number): boolean {
+    return this.getSkillRangeHexKeys(skillId).has(axialKey(q, r));
+  }
+}
+
+function roninCritBonus(u: Unit): number {
+  const s = u.artifacts["ronin"] ?? 0;
+  return 20 * s;
+}
+
+function hexNeighborsOffset(i: number): { q: number; r: number } {
+  const ring = [
+    { q: 0, r: 0 },
+    { q: 1, r: 0 },
+    { q: 0, r: 1 },
+    { q: -1, r: 1 },
+  ];
+  return ring[i % ring.length]!;
+}
