@@ -90,7 +90,7 @@ export function computePartyBonus(colors: TeamColor[]): PartyBonus {
     }
     if (v === 3) {
       b.maxHp += 100;
-      b.defesa += 5;
+      b.defesa += 20;
       return b;
     }
     if (v === 2 && r === 1) {

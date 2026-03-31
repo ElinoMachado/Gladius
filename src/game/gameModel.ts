@@ -1479,7 +1479,6 @@ export class GameModel {
       return;
     }
     if (unitIgnoresTerrain(u)) return;
-    const volcanicWasAlive = u.hp > 0;
     let d = biomeVolcanicDamage();
     if (
       !u.isPlayer &&
@@ -1487,6 +1486,29 @@ export class GameModel {
     ) {
       d *= 2;
     }
+
+    /** Bioma vulcânico: herói no bunker — o dano ambiental vai à estrutura, não ao herói. */
+    if (u.isPlayer && this.isBunkerOccupant(u)) {
+      const bk = this.bunkerAtHex(u.q, u.r)!;
+      const hpDmg = d;
+      bk.hp = Math.max(0, bk.hp - hpDmg);
+      if (hpDmg > 0) {
+        this.pushCombatFloat({
+          unitId: BUNKER_COMBAT_FLOAT_ID,
+          kind: "damage",
+          amount: hpDmg,
+          targetIsPlayer: true,
+          bunkerDamage: true,
+          bunkerHex: { q: bk.q, r: bk.r },
+        });
+      }
+      if (bk.hp <= 0) {
+        this.catapultHeroOutOfDestroyedBunker(u);
+      }
+      return;
+    }
+
+    const volcanicWasAlive = u.hp > 0;
     let shieldAbsorb = 0;
     let dmgHp = d;
     if (u.shieldGGBlue > 0) {

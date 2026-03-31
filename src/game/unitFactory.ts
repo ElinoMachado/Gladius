@@ -112,8 +112,10 @@ export function createHeroUnit(
     movimento: t.movimento,
     dano: mb.dano,
     defesa: mb.defesa,
-    acertoCritico: 5,
-    danoCritico: 1.5,
+    acertoCritico:
+      cls === "sacerdotisa" ? 0 : cls === "gladiador" ? 10 : 25,
+    danoCritico:
+      cls === "sacerdotisa" ? 1.5 : cls === "gladiador" ? 1.75 : 2,
     penetracao: 0,
     regenVida: t.regenVida,
     regenMana: t.regenMana,

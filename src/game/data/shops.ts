@@ -1,14 +1,15 @@
 import type { Unit } from "../types";
 
 export type GoldShopId =
-  | "dano"
   | "vida"
-  | "movimento"
-  | "crit_chance"
-  | "crit_dmg"
+  | "max_mana"
   | "regen_hp"
   | "regen_mana"
+  | "dano"
+  | "crit_chance"
+  | "crit_dmg"
   | "defesa"
+  | "movimento"
   | "heal_shield"
   | "xp_pct";
 
@@ -19,15 +20,8 @@ export interface GoldShopItem {
   apply: (u: Unit) => void;
 }
 
+/** Ordem de exibição na loja (e referência para o HUD de atributos). */
 export const GOLD_SHOP: GoldShopItem[] = [
-  {
-    id: "dano",
-    label: "Dano +1",
-    cost: 10,
-    apply: (u) => {
-      u.dano += 1;
-    },
-  },
   {
     id: "vida",
     label: "Vida +5 (máx.)",
@@ -38,27 +32,12 @@ export const GOLD_SHOP: GoldShopItem[] = [
     },
   },
   {
-    id: "movimento",
-    label: "Movimento +1",
-    cost: 50,
+    id: "max_mana",
+    label: "Mana máxima +1",
+    cost: 40,
     apply: (u) => {
-      u.movimento += 1;
-    },
-  },
-  {
-    id: "crit_chance",
-    label: "Acerto crítico +10%",
-    cost: 30,
-    apply: (u) => {
-      u.acertoCritico += 10;
-    },
-  },
-  {
-    id: "crit_dmg",
-    label: "Dano crítico +10%",
-    cost: 25,
-    apply: (u) => {
-      u.danoCritico += 0.1;
+      u.maxMana += 1;
+      u.mana += 1;
     },
   },
   {
@@ -78,11 +57,43 @@ export const GOLD_SHOP: GoldShopItem[] = [
     },
   },
   {
+    id: "dano",
+    label: "Dano +1",
+    cost: 10,
+    apply: (u) => {
+      u.dano += 1;
+    },
+  },
+  {
+    id: "crit_chance",
+    label: "Acerto crítico +10%",
+    cost: 30,
+    apply: (u) => {
+      u.acertoCritico += 10;
+    },
+  },
+  {
+    id: "crit_dmg",
+    label: "Dano crítico +10%",
+    cost: 25,
+    apply: (u) => {
+      u.danoCritico += 0.1;
+    },
+  },
+  {
     id: "defesa",
-    label: "Defesa +1",
+    label: "Defesa +10",
     cost: 35,
     apply: (u) => {
-      u.defesa += 1;
+      u.defesa += 10;
+    },
+  },
+  {
+    id: "movimento",
+    label: "Movimento +1",
+    cost: 50,
+    apply: (u) => {
+      u.movimento += 1;
     },
   },
   {
@@ -96,7 +107,7 @@ export const GOLD_SHOP: GoldShopItem[] = [
   {
     id: "xp_pct",
     label: "XP +10%",
-    cost: 15,
+    cost: 45,
     apply: (u) => {
       const capStacks = 6;
       const cur = u.artifacts["_xp_shop"] ?? 0;

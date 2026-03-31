@@ -10,6 +10,7 @@ import { HeroPreview3D } from "./render/HeroPreview3D";
 import { MainMenuSword3D } from "./render/MainMenuSword3D";
 import { BiomePicker3D } from "./render/BiomePicker3D";
 import { ShopStall3D } from "./render/ShopStall3D";
+import { CrystalShop3D } from "./render/CrystalShop3D";
 import { BunkerPreview3D } from "./render/BunkerPreview3D";
 import { ForgePiecePreview3D } from "./render/ForgePiecePreview3D";
 import type { GamePhase, HeroClassId, TeamColor, BiomeId, Unit } from "./game/types";
@@ -139,7 +140,6 @@ import {
   paraisoRegenBonus,
   paraisoRegenTurns,
   paraisoShieldFlat,
-  pistoleiroPassiveBonusPerProc,
   pisotearCooldownWaves,
   pisotearDamageMult,
   pisotearManaCost,
@@ -435,16 +435,20 @@ function colorHintToDisplayColor(hint: string): number {
 
 function templateStatsStripHtml(cls: HeroClassId): string {
   const t = HEROES[cls];
+  const critPct =
+    cls === "sacerdotisa" ? "0%" : cls === "gladiador" ? "10%" : "25%";
+  const critMultStr =
+    cls === "sacerdotisa" ? "1.50" : cls === "gladiador" ? "1.75" : "2.00";
   const items: { sym: string; label: string; value: string }[] = [
     { sym: "♥", label: "Vida máxima", value: String(t.maxHp) },
     { sym: "◎", label: "Mana máxima", value: String(t.maxMana) },
-    { sym: "◼", label: "Defesa", value: String(t.defesa) },
-    { sym: "⚔", label: "Dano", value: String(t.dano) },
-    { sym: "★", label: "Acerto crítico", value: "5%" },
-    { sym: "✦", label: "Multiplicador de crítico", value: "1.50" },
-    { sym: "○", label: "Movimento", value: String(t.movimento) },
-    { sym: "◇", label: "Regeneração de mana", value: String(t.regenMana) },
     { sym: "+", label: "Regeneração de vida", value: String(t.regenVida) },
+    { sym: "◇", label: "Regeneração de mana", value: String(t.regenMana) },
+    { sym: "⚔", label: "Dano", value: String(t.dano) },
+    { sym: "★", label: "Acerto crítico", value: critPct },
+    { sym: "✦", label: "Multiplicador de crítico", value: critMultStr },
+    { sym: "◼", label: "Defesa", value: String(t.defesa) },
+    { sym: "○", label: "Movimento", value: String(t.movimento) },
   ];
   return `<div class="setup-stats-strip">${items
     .map(
@@ -490,6 +494,7 @@ function lolViewedHero(m: GameModel): Unit | null {
 /** Índice do herói na loja de ouro; `render()` reabre a loja após `emit()` (ex.: compra), sem resetar. */
 let goldShopHeroIndex = 0;
 let goldShopStall3d: ShopStall3D | null = null;
+let crystalShop3d: CrystalShop3D | null = null;
 let goldShopBunker3d: BunkerPreview3D | null = null;
 /** Atualização parcial da loja (evita `innerHTML` na shell a cada `emit()`). */
 let refreshGoldShop: (() => void) | null = null;
@@ -520,6 +525,8 @@ function goldShopStatIcon(id: GoldShopId): StatIconId {
       return "dmg";
     case "vida":
       return "regen_hp";
+    case "max_mana":
+      return "regen_mp";
     case "movimento":
       return "mov";
     case "crit_chance":
@@ -1419,7 +1426,7 @@ function showMainMenu(): void {
       <div class="main-menu-content">
         <header class="main-menu-header">
           <h1 class="main-menu-title">Gladius</h1>
-          <p class="main-menu-subtitle">Arena dos sobreviventes</p>
+          <p class="main-menu-subtitle">Sobreviventes do Coliseu</p>
         </header>
         <nav class="main-menu-nav" aria-label="Menu principal">
           <button type="button" class="main-menu-link main-menu-link--primary" data-action="new">Novo jogo</button>
@@ -1527,17 +1534,26 @@ function showWaveSummaryOverlay(): void {
 function showCrystalShop(): void {
   hideGameTooltip();
   disposeMenu3dPreviews();
+  crystalShop3d?.dispose();
+  crystalShop3d = null;
   const m = model.meta;
   uiRoot.innerHTML = "";
-  const s = el(`
-    <div class="screen" style="overflow-y:auto;justify-content:flex-start;padding-top:2rem">
-      <h1>Loja de cristais</h1>
-      <p>Cristais: <strong>${m.crystals}</strong></p>
-      <div class="shop-grid" id="meta-grid"></div>
-      <button class="btn" id="btn-back">Voltar</button>
-    </div>
-  `);
-  uiRoot.appendChild(s);
+  const shell = el(`<div class="shop-screen crystal-shop-screen"></div>`);
+  const bgHost = el(`<div class="shop-screen__bg" aria-hidden="true"></div>`);
+  const panel = el(`<div class="shop-screen__panel shop-screen__panel--crystal"></div>`);
+  shell.appendChild(bgHost);
+  shell.appendChild(panel);
+  uiRoot.appendChild(shell);
+  crystalShop3d = new CrystalShop3D(bgHost);
+  crystalShop3d.start();
+  panel.innerHTML = `
+    <div class="crystal-shop-panel-inner">
+      <h1 class="crystal-shop-heading">Loja de cristais</h1>
+      <p class="crystal-shop-crystals">Cristais: <strong>${m.crystals}</strong></p>
+      <div class="shop-grid crystal-shop-grid" id="meta-grid"></div>
+      <button type="button" class="btn crystal-shop-back-btn" id="btn-back">Voltar</button>
+    </div>`;
+  const s = panel.querySelector(".crystal-shop-panel-inner") as HTMLElement;
   const grid = s.querySelector("#meta-grid")!;
   const tracks = [
     ["permDamage", "Dano meta"],
@@ -1551,8 +1567,13 @@ function showCrystalShop(): void {
   for (const [key, label] of tracks) {
     const cur = m[key];
     const cost = nextMetaCost(cur);
-    const div = el(`<div class="shop-item">${label}: nível ${cur}/5 (+${permPercent(cur)}%) ${cost != null ? `— próximo: ${cost} 💎` : "— máx."}
-      <button class="btn" data-meta="${key}" ${cost == null || m.crystals < cost! ? "disabled" : ""}>Comprar</button></div>`);
+    const canBuy = cost != null && m.crystals >= cost;
+    const btnLabel = cost != null ? `${cost} 💎` : "—";
+    const ariaBuy =
+      cost != null
+        ? `Comprar por ${cost} cristais`
+        : "Melhoria no nível máximo";
+    const div = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">${label}: nível ${cur}/5 (+${permPercent(cur)}%)${cost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" data-meta="${key}" ${!canBuy ? "disabled" : ""} aria-label="${escapeHtml(ariaBuy)}">${btnLabel}</button></div>`);
     grid.appendChild(div);
     div.querySelector("button")!.addEventListener("click", () => {
       if (model.buyMetaTrack(key)) render();
@@ -1560,22 +1581,32 @@ function showCrystalShop(): void {
   }
   const ic = m.initialCards;
   const icCost = nextInitialCardCost(ic);
-  const icDiv = el(`<div class="shop-item" style="grid-column:1/-1">+1 carta por nível (escolha de artefatos): ${ic}/3 compras ${icCost != null ? `— próximo: ${icCost} 💎` : ""}
-    <button class="btn" id="btn-ic" ${icCost == null || m.crystals < icCost! ? "disabled" : ""}>Comprar</button></div>`);
+  const icCanBuy = icCost != null && m.crystals >= icCost;
+  const icBtnLabel = icCost != null ? `${icCost} 💎` : "—";
+  const icAria =
+    icCost != null
+      ? `Comprar por ${icCost} cristais`
+      : "Número máximo de compras";
+  const icDiv = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">+1 carta por nível (escolha de artefatos): ${ic}/3 compras${icCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-ic" ${!icCanBuy ? "disabled" : ""} aria-label="${escapeHtml(icAria)}">${icBtnLabel}</button></div>`);
   grid.appendChild(icDiv);
   icDiv.querySelector("#btn-ic")!.addEventListener("click", () => {
     if (model.buyInitialCards()) render();
   });
 
   const wHead = el(
-    `<div class="shop-item shop-item--weapon-head" style="grid-column:1/-1"><strong>Melhorar arma principal</strong> — evolui skills principais e a ultimate da arma (níveis 2–5). Custos: 10 / 15 / 20 / 30 💎 por slot de party.</div>`,
+    `<div class="shop-item crystal-shop-item crystal-shop-item--header shop-item--weapon-head" style="grid-column:1/-1"><strong>Melhorar arma principal</strong> — evolui skills principais e a ultimate da arma (níveis 2–5). Custos: 10 / 15 / 20 / 30 💎 por slot de party.</div>`,
   );
   grid.appendChild(wHead);
   for (let slot = 0; slot < 3; slot++) {
     const wl = m.weaponLevelByHeroSlot[slot as 0 | 1 | 2];
     const cost = weaponUpgradeCrystalCost(wl);
-    const div = el(`<div class="shop-item">Slot party ${slot + 1}: arma nv <strong>${wl}</strong>/5 ${cost != null ? `— próximo: <strong>${cost}</strong> 💎` : "— <em>máximo</em>"}
-      <button type="button" class="btn" data-weapon-slot="${slot}" ${cost == null || m.crystals < cost ? "disabled" : ""}>Comprar melhoria</button></div>`);
+    const wCanBuy = cost != null && m.crystals >= cost;
+    const wBtnLabel = cost != null ? `${cost} 💎` : "—";
+    const wAria =
+      cost != null
+        ? `Melhorar arma do slot ${slot + 1} por ${cost} cristais`
+        : "Arma no nível máximo neste slot";
+    const div = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Slot party ${slot + 1}: arma nv <strong>${wl}</strong>/5${cost != null ? "" : " — <em>máximo</em>"}</span><button type="button" class="btn crystal-shop-buy-btn" data-weapon-slot="${slot}" ${!wCanBuy ? "disabled" : ""} aria-label="${escapeHtml(wAria)}">${wBtnLabel}</button></div>`);
     grid.appendChild(div);
     div.querySelector("button")!.addEventListener("click", () => {
       if (model.buyWeaponUpgrade(slot as 0 | 1 | 2)) render();
@@ -2184,12 +2215,10 @@ function combatPassiveDescription(h: Unit): string {
     return `Reduz perda de ouro entre rodadas em 1. +${p}% potencial de cura/escudo (25% base + 25% a cada 10 níveis do herói).`;
   }
   if (h.heroClass === "pistoleiro") {
-    const b = pistoleiroPassiveBonusPerProc(h.level);
-    return `Sempre que causa dano, +${b} dano permanente nesta wave (escala a cada 10 níveis).`;
+    return HEROES.pistoleiro.passiveDescription;
   }
   if (h.heroClass === "gladiador") {
-    const hp = gladiadorDuelHpPerWin(h.level);
-    return `Ao vencer duelo mortal: +${hp} vida máxima e atual (escala por nível); vitórias anteriores são recalculadas ao subir de nível.`;
+    return HEROES.gladiador.passiveDescription;
   }
   return "";
 }
@@ -2801,34 +2830,53 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     const critMultBase = b.danoCritico + (roch ? 1 : 0);
 
     const waveExtra = h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+
+    {
+      const hpPair = valWithDelta(`${h.hp}/${h.maxHp}`, h.maxHp - b.maxHp, "int");
+      cells.push({
+        icon: "regen_hp",
+        label: "Vida",
+        value: `${h.hp}/${h.maxHp}`,
+        valueHtml: hpPair.html,
+        tooltipValue: hpPair.plain,
+      });
+    }
+    {
+      const mpPair = valWithDelta(
+        `${h.mana}/${h.maxMana}`,
+        h.maxMana - b.maxMana,
+        "int",
+      );
+      cells.push({
+        icon: "regen_mp",
+        label: "Mana",
+        value: `${h.mana}/${h.maxMana}`,
+        valueHtml: mpPair.html,
+        tooltipValue: mpPair.plain,
+      });
+    }
+    pushStat(
+      cells,
+      "regen_hp",
+      "Regen. vida",
+      String(effRegV),
+      effRegV - baseRegV,
+      "int",
+    );
+    pushStat(
+      cells,
+      "regen_mp",
+      "Regen. mana",
+      String(effRegM),
+      effRegM - baseRegM,
+      "int",
+    );
     pushStat(
       cells,
       "dmg",
       "Dano",
       String(h.dano),
       h.dano - b.dano + waveExtra,
-      "int",
-    );
-    {
-      const { html } = valWithDelta(
-        String(effDef),
-        effDef - baseEffDef,
-        "int",
-      );
-      cells.push({
-        icon: "def",
-        label: ign ? "Defesa (ruler ignora bioma)" : "Defesa",
-        value: String(effDef),
-        valueHtml: html,
-        tooltipValue: defenseReductionTooltipText(effDef),
-      });
-    }
-    pushStat(
-      cells,
-      "pen",
-      "Penetração",
-      String(h.penetracao),
-      h.penetracao - b.penetracao,
       "int",
     );
     pushStat(
@@ -2847,7 +2895,20 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       critMultCur - critMultBase,
       "mult",
     );
-
+    {
+      const { html } = valWithDelta(
+        String(effDef),
+        effDef - baseEffDef,
+        "int",
+      );
+      cells.push({
+        icon: "def",
+        label: ign ? "Defesa (ruler ignora bioma)" : "Defesa",
+        value: String(effDef),
+        valueHtml: html,
+        tooltipValue: defenseReductionTooltipText(effDef),
+      });
+    }
     const movDeltaCore = movPool - b.movimento;
     const movPair = valWithDelta(String(movPool), movDeltaCore, "int");
     const pantExtra =
@@ -2876,43 +2937,11 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     );
     pushStat(
       cells,
-      "regen_hp",
-      "Regen. vida",
-      String(effRegV),
-      effRegV - baseRegV,
-      "int",
-    );
-    pushStat(
-      cells,
-      "regen_mp",
-      "Regen. mana",
-      String(effRegM),
-      effRegM - baseRegM,
-      "int",
-    );
-    pushStat(
-      cells,
-      "lifesteal",
-      "Roubo de vida",
-      `${h.lifesteal}%`,
-      h.lifesteal - b.lifesteal,
-      "pct",
-    );
-    pushStat(
-      cells,
       "pot",
       "Potencial de cura e escudo",
       String(h.potencialCuraEscudo),
       h.potencialCuraEscudo - b.potencialCuraEscudo,
       "float",
-    );
-    pushStat(
-      cells,
-      "luck",
-      "Sorte",
-      String(m.effectiveSorte(h)),
-      m.effectiveSorte(h) - b.sorte,
-      "int",
     );
     {
       const xpCur = model.xpGainBonusPercentForHero(h);
@@ -2930,6 +2959,30 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         "pct",
       );
     }
+    pushStat(
+      cells,
+      "pen",
+      "Penetração",
+      String(h.penetracao),
+      h.penetracao - b.penetracao,
+      "int",
+    );
+    pushStat(
+      cells,
+      "lifesteal",
+      "Roubo de vida",
+      `${h.lifesteal}%`,
+      h.lifesteal - b.lifesteal,
+      "pct",
+    );
+    pushStat(
+      cells,
+      "luck",
+      "Sorte",
+      String(m.effectiveSorte(h)),
+      m.effectiveSorte(h) - b.sorte,
+      "int",
+    );
 
     const flyStr = h.flying ? "Sim" : "Não";
     let flyHtml = escapeHtml(flyStr);
@@ -2951,6 +3004,26 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   } else {
     const we = h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
     cells.push({
+      icon: "regen_hp",
+      label: "Vida",
+      value: `${h.hp}/${h.maxHp}`,
+    });
+    cells.push({
+      icon: "regen_mp",
+      label: "Mana",
+      value: `${h.mana}/${h.maxMana}`,
+    });
+    cells.push({
+      icon: "regen_hp",
+      label: "Regen. vida",
+      value: String(effRegV),
+    });
+    cells.push({
+      icon: "regen_mp",
+      label: "Regen. mana",
+      value: String(effRegM),
+    });
+    cells.push({
       icon: "dmg",
       label: "Dano",
       value: String(h.dano),
@@ -2958,17 +3031,6 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         we > 0
           ? `${h.dano} (+${we} bônus de wave no combate)`
           : String(h.dano),
-    });
-    cells.push({
-      icon: "def",
-      label: ign ? "Defesa (ruler ignora bioma)" : "Defesa",
-      value: String(effDef),
-      tooltipValue: defenseReductionTooltipText(effDef),
-    });
-    cells.push({
-      icon: "pen",
-      label: "Penetração",
-      value: String(h.penetracao),
     });
     cells.push({
       icon: "crit_hit",
@@ -2979,6 +3041,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "crit_dmg",
       label: "Dano critico",
       value: critMultCur.toFixed(2),
+    });
+    cells.push({
+      icon: "def",
+      label: ign ? "Defesa (ruler ignora bioma)" : "Defesa",
+      value: String(effDef),
+      tooltipValue: defenseReductionTooltipText(effDef),
     });
     const pantF =
       bio === "pantano" && !ign
@@ -2997,32 +3065,27 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       value: String(effAlc),
     });
     cells.push({
-      icon: "regen_hp",
-      label: "Regen. vida",
-      value: String(effRegV),
-    });
-    cells.push({
-      icon: "regen_mp",
-      label: "Regen. mana",
-      value: String(effRegM),
-    });
-    cells.push({
-      icon: "lifesteal",
-      label: "Roubo de vida",
-      value: `${h.lifesteal}%`,
-    });
-    cells.push({
       icon: "pot",
       label: "Potencial de cura e escudo",
       value: String(h.potencialCuraEscudo),
     });
-    cells.push({ icon: "luck", label: "Sorte", value: String(h.sorte) });
     cells.push({
       icon: "xp_bonus",
       label: "Bônus XP",
       value: `+${model.xpGainBonusPercentForHero(h)}%`,
       tooltipValue: `+${model.xpGainBonusPercentForHero(h)}%`,
     });
+    cells.push({
+      icon: "pen",
+      label: "Penetração",
+      value: String(h.penetracao),
+    });
+    cells.push({
+      icon: "lifesteal",
+      label: "Roubo de vida",
+      value: `${h.lifesteal}%`,
+    });
+    cells.push({ icon: "luck", label: "Sorte", value: String(h.sorte) });
     cells.push({
       icon: "fly",
       label: "Voo",
@@ -4617,6 +4680,10 @@ function render(): void {
   if (model.phase !== "main_menu") {
     mainMenuSword3d?.dispose();
     mainMenuSword3d = null;
+  }
+  if (model.phase !== "crystal_shop") {
+    crystalShop3d?.dispose();
+    crystalShop3d = null;
   }
   if (
     (prevPhase === "shop_initial" || prevPhase === "shop_wave") &&
