@@ -1,4 +1,6 @@
-# GitHub Pages: Settings → Pages → Build and deployment → Source: GitHub Actions
+# Publica a pasta `dist` (build Vite). O index.html na RAIZ do repo é só para dev — NÃO uses
+# Pages "Deploy from branch" com folder /(root) ou verás ecrã branco (/src/main.ts 404).
+# Settings → Pages → Source: GitHub Actions
 name: Deploy to GitHub Pages
 
 on:
