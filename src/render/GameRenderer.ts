@@ -67,6 +67,7 @@ export class GameRenderer {
   private animRose = 0;
   private moveOverlayGroup: THREE.Group | null = null;
   private attackOverlayGroup: THREE.Group | null = null;
+  private enemyInspectMoveOverlayGroup: THREE.Group | null = null;
 
   private readonly unitMoveAnims = new Map<
     string,
@@ -1481,6 +1482,8 @@ export class GameRenderer {
     this.moveOverlayGroup = null;
     this.disposeOverlayGroup(this.attackOverlayGroup);
     this.attackOverlayGroup = null;
+    this.disposeOverlayGroup(this.enemyInspectMoveOverlayGroup);
+    this.enemyInspectMoveOverlayGroup = null;
   }
 
   setMovementOverlay(keys: Set<string>): void {
@@ -1497,6 +1500,16 @@ export class GameRenderer {
       ? this.buildHexOverlay(keys, 0xff2222, 0.45, 0.11)
       : null;
     if (this.attackOverlayGroup) this.arenaRoot.add(this.attackOverlayGroup);
+  }
+
+  /** Alcance de movimento do inimigo inspecionado (âmbar). */
+  setEnemyInspectMovementOverlay(keys: Set<string>): void {
+    this.disposeOverlayGroup(this.enemyInspectMoveOverlayGroup);
+    this.enemyInspectMoveOverlayGroup = keys.size
+      ? this.buildHexOverlay(keys, 0xffaa33, 0.42, 0.095)
+      : null;
+    if (this.enemyInspectMoveOverlayGroup)
+      this.arenaRoot.add(this.enemyInspectMoveOverlayGroup);
   }
 
   private buildHexOverlay(

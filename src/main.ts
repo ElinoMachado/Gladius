@@ -438,7 +438,7 @@ function templateStatsStripHtml(cls: HeroClassId): string {
   const critPct =
     cls === "sacerdotisa" ? "0%" : cls === "gladiador" ? "10%" : "25%";
   const critMultStr =
-    cls === "sacerdotisa" ? "1.50" : cls === "gladiador" ? "1.75" : "2.00";
+    cls === "sacerdotisa" ? "150%" : cls === "gladiador" ? "175%" : "200%";
   const items: { sym: string; label: string; value: string }[] = [
     { sym: "♥", label: "Vida máxima", value: String(t.maxHp) },
     { sym: "◎", label: "Mana máxima", value: String(t.maxMana) },
@@ -501,6 +501,8 @@ let refreshGoldShop: (() => void) | null = null;
 let artifactCodex3d: ArtifactCodex3D | null = null;
 let enemyCompendium3d: EnemyPreview3D | null = null;
 let mainMenuSword3d: MainMenuSword3D | null = null;
+/** Preview 3D do herói na loja de ouro (atributos à venda). */
+let goldShopHeroPreview3d: HeroPreview3D | null = null;
 /** Pré-visualizações 3D da tela Forja (descartadas ao repintar ou sair do menu). */
 let forgePiecePreviews3d: ForgePiecePreview3D[] = [];
 
@@ -720,7 +722,7 @@ function enemyInspectExtraRows(u: Unit, m: GameModel): [string, string][] {
     ],
     ["Penetração", String(u.penetracao)],
     ["Crítico", `${u.acertoCritico}%`],
-    ["Mult. crítico", u.danoCritico.toFixed(2)],
+    ["Mult. crítico", `${Math.round(u.danoCritico * 100)}%`],
     ["Movimento (base)", String(u.movimento)],
     [
       ign
@@ -860,6 +862,11 @@ function applyCombatOverlays(): void {
   }
   view.setMovementOverlay(moveKeys);
   view.setAttackOverlay(atkKeys);
+  const enemyInspectKeys =
+    combatInspectEnemyId != null
+      ? model.enemyMovementPreviewKeys(combatInspectEnemyId)
+      : new Set<string>();
+  view.setEnemyInspectMovementOverlay(enemyInspectKeys);
 }
 
 function el(html: string): HTMLElement {
@@ -1419,6 +1426,8 @@ function showForge(): void {
 function showMainMenu(): void {
   hideGameTooltip();
   disposeMenu3dPreviews();
+  mainMenuSword3d?.dispose();
+  mainMenuSword3d = null;
   uiRoot.innerHTML = "";
   const s = el(`
     <div class="main-menu-screen">
@@ -1887,6 +1896,8 @@ function showGoldShop(isInitial: boolean): void {
   goldShopBunker3d = null;
   goldShopStall3d?.dispose();
   goldShopStall3d = null;
+  goldShopHeroPreview3d?.dispose();
+  goldShopHeroPreview3d = null;
   uiRoot.innerHTML = "";
   const party = model.getParty();
   let idx = Math.min(
@@ -1915,6 +1926,8 @@ function showGoldShop(isInitial: boolean): void {
     hideGameTooltip();
     goldShopBunker3d?.dispose();
     goldShopBunker3d = null;
+    goldShopHeroPreview3d?.dispose();
+    goldShopHeroPreview3d = null;
     const h = party[idx]!;
     const list = GOLD_SHOP.map((it, si) => {
       const xpFull =
@@ -1938,6 +1951,13 @@ function showGoldShop(isInitial: boolean): void {
         <p class="hint-banner shop-hint">${isInitial ? "Cada herói gasta o <strong>ouro da bolsa</strong> na loja. Na arena há um <strong>estipêndio da wave</strong> (100/herói) para o dreno entre rodadas; o que sobrar passa para a bolsa ao vencer a wave. No último herói, use <strong>Começar wave 1</strong>." : "Use o ouro recebido no final das waves para comprar melhorias nos atributos de cada herói."}</p>
         <h2 class="shop-hero-name">${escapeHtml(h.name)}</h2>
         <p class="shop-hero-gold">Ouro atual (loja): <strong>${h.ouro}</strong> · Herói ${idx + 1}/${party.length}</p>
+        <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
+          <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
+          <div class="shop-hero-stats-col">
+            <p class="shop-hero-stats-head">Atributos atuais (como no combate)</p>
+            <div id="gold-shop-hero-stats" class="lol-stats-list gold-shop-hero-stats-grid"></div>
+          </div>
+        </div>
         ${model.bunkerForShop() ? goldShopBunkerSectionHtml(model.bunkerForShop()!, h) : ""}
         <div class="shop-grid">${list}</div>
         <div class="shop-nav">
@@ -1992,6 +2012,20 @@ function showGoldShop(isInitial: boolean): void {
       goldShopBunker3d.setTier(bShop.tier);
       goldShopBunker3d.start();
     }
+    const hero3dHost = panel.querySelector("#gold-shop-hero-3d") as HTMLElement;
+    const heroStatsEl = panel.querySelector(
+      "#gold-shop-hero-stats",
+    ) as HTMLElement;
+    if (h.heroClass) {
+      goldShopHeroPreview3d = new HeroPreview3D(hero3dHost, 220, 260);
+      goldShopHeroPreview3d.setHero(h.heroClass, h.displayColor);
+      goldShopHeroPreview3d.start();
+      renderHeroStatsGrid(heroStatsEl, heroStatCells(h, model));
+    } else {
+      hero3dHost.style.display = "none";
+      heroStatsEl.innerHTML =
+        '<p class="shop-hero-stats-fallback">Sem classe — sem pré-visualização 3D.</p>';
+    }
     panel.querySelector("#shop-prev")!.addEventListener("click", () => {
       idx = Math.max(0, idx - 1);
       goldShopHeroIndex = idx;
@@ -2007,6 +2041,8 @@ function showGoldShop(isInitial: boolean): void {
         goldShopStall3d = null;
         goldShopBunker3d?.dispose();
         goldShopBunker3d = null;
+        goldShopHeroPreview3d?.dispose();
+        goldShopHeroPreview3d = null;
         if (isInitial) model.finishInitialShop();
         else model.finishWaveShop();
         render();
@@ -2017,6 +2053,8 @@ function showGoldShop(isInitial: boolean): void {
       goldShopStall3d = null;
       goldShopBunker3d?.dispose();
       goldShopBunker3d = null;
+      goldShopHeroPreview3d?.dispose();
+      goldShopHeroPreview3d = null;
       model.abandonRunFromShop();
       render();
     });
@@ -2694,7 +2732,8 @@ function tooltipBunkerMinasCombat(h: Unit, m: GameModel): string {
     },
     {
       label: "Efeito:",
-      value: "Explosões sucessivas; dano escala com a evolução do bunker",
+      value:
+        "Primeiro aparecem os hexes afetados (anéis); clique num hex destacado para confirmar",
       kind: "fx",
     },
   ]);
@@ -2801,6 +2840,11 @@ function tooltipEspecialista(h: Unit, m: GameModel): string {
   ]);
 }
 
+/** Bônus % de acerto crítico do artefato Ronin (combate usa o mesmo). */
+function roninCritChanceBonus(artifacts: Unit["artifacts"]): number {
+  return 20 * (artifacts["ronin"] ?? 0);
+}
+
 function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   const bio = biomeAt(m.grid, h.q, h.r) as BiomeId;
   const ign = unitIgnoresTerrain(h);
@@ -2883,17 +2927,20 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       cells,
       "crit_hit",
       "Acerto crítico",
-      `${h.acertoCritico}%`,
-      h.acertoCritico - b.acertoCritico,
+      `${h.acertoCritico + roninCritChanceBonus(h.artifacts)}%`,
+      h.acertoCritico -
+        b.acertoCritico +
+        roninCritChanceBonus(h.artifacts) -
+        roninCritChanceBonus(b.artifacts),
       "pct",
     );
     pushStat(
       cells,
       "crit_dmg",
       "Dano critico",
-      critMultCur.toFixed(2),
-      critMultCur - critMultBase,
-      "mult",
+      `${Math.round(critMultCur * 100)}%`,
+      Math.round((critMultCur - critMultBase) * 100),
+      "pct",
     );
     {
       const { html } = valWithDelta(
@@ -3035,12 +3082,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     cells.push({
       icon: "crit_hit",
       label: "Acerto crítico",
-      value: `${h.acertoCritico}%`,
+      value: `${h.acertoCritico + roninCritChanceBonus(h.artifacts)}%`,
     });
     cells.push({
       icon: "crit_dmg",
       label: "Dano critico",
-      value: critMultCur.toFixed(2),
+      value: `${Math.round(critMultCur * 100)}%`,
     });
     cells.push({
       icon: "def",
@@ -4045,11 +4092,10 @@ function showCombatHUD(): void {
       bindGameTooltip(bMin, () => tooltipBunkerMinasCombat(h, model));
       bMin.addEventListener("click", () => {
         if (!isViewingActive) return;
-        if (model.trySkill("bunker_minas")) {
-          resetCombatSelection();
-          refreshOverlays();
-          update();
-        }
+        pendingCombat = { kind: "skill", id: "bunker_minas" };
+        movePreviewActive = false;
+        refreshOverlays();
+        update();
       });
       actionRow.appendChild(bMin);
       if (bunk.tier >= 2) {
@@ -4470,6 +4516,19 @@ function showCombatHUD(): void {
         cancelPendingCombatToMove();
         return;
       }
+      if (sid === "bunker_minas") {
+        const hex = view.pickHex(x, y, model.grid);
+        const onHex = hex && model.hexInSkillRange(sid, hex.q, hex.r);
+        if (onHex) {
+          if (model.trySkill("bunker_minas")) {
+            resetCombatSelection();
+            update();
+          }
+        } else {
+          cancelPendingCombatToMove();
+        }
+        return;
+      }
       return;
     }
 
@@ -4523,8 +4582,11 @@ function showLevelPick(): void {
   const p = model.pendingArtifacts!;
   const hero = model.units.find((x) => x.id === p.unitId);
   uiRoot.innerHTML = "";
+  const heroLine = hero
+    ? escapeHtml(hero.name)
+    : "Herói";
   const s = el(`<div class="modal"><div class="modal-inner modal-inner--artifact-pick">
-    <h2>Escolha um artefato</h2>
+    <h2>Escolha um artefato — ${heroLine}</h2>
     <p class="artifact-pick-hint">Passe o rato sobre a carta para ver o próximo nível.</p>
     <div class="artifact-pick-actions">
       <button type="button" class="btn" id="btn-artifact-reroll">Rerol (1)</button>
@@ -4694,6 +4756,8 @@ function render(): void {
     goldShopStall3d = null;
     goldShopBunker3d?.dispose();
     goldShopBunker3d = null;
+    goldShopHeroPreview3d?.dispose();
+    goldShopHeroPreview3d = null;
   }
   if (
     model.phase !== "combat" &&

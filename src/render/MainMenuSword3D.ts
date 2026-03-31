@@ -57,6 +57,7 @@ export class MainMenuSword3D {
     spinRate: number;
   }[] = [];
   private onResize = (): void => this.syncSize();
+  private resizeObserver: ResizeObserver | null = null;
   private menuTextures: MainMenuTextureSet;
   private rosePetalTextures: THREE.CanvasTexture[] = [];
   /** AABB reutilizado para evitar que cantos do plano inclinado fiquem abaixo do chão (y≈0). */
@@ -462,11 +463,22 @@ export class MainMenuSword3D {
 
     this.syncSize();
     window.addEventListener("resize", this.onResize);
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(() => this.syncSize());
+      this.resizeObserver.observe(this.host);
+    }
+    requestAnimationFrame(() => this.syncSize());
   }
 
   private syncSize(): void {
-    const w = this.host.clientWidth || window.innerWidth;
-    const h = this.host.clientHeight || window.innerHeight;
+    const w = Math.max(
+      1,
+      this.host.clientWidth || window.innerWidth,
+    );
+    const h = Math.max(
+      1,
+      this.host.clientHeight || window.innerHeight,
+    );
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(h, 1);
     this.camera.updateProjectionMatrix();
@@ -534,6 +546,8 @@ export class MainMenuSword3D {
 
   dispose(): void {
     this.stop();
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     window.removeEventListener("resize", this.onResize);
     disposeObject3D(this.scene);
     this.scene.clear();

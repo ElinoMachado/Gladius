@@ -1420,10 +1420,6 @@ export class GameModel {
     this.enemyTurnQueue = [];
     this.currentHeroIndex = 0;
     if (this.enemies().every((x) => x.hp <= 0)) {
-      // Não avançar para resumo de wave / loja enquanto o jogador escolhe artefato ou ultimate.
-      if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") {
-        return;
-      }
       const runWaveClear = (): void => {
         if (this.hasLivingEnemies()) return;
         if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") {
@@ -1559,8 +1555,14 @@ export class GameModel {
    * (vitória/loja). Chamado após Sentença/AoE ou ao voltar do level-up com arena limpa.
    */
   private tryResolveWaveClearAfterCombatResume(): void {
-    if (this.phase !== "combat") return;
     if (this.hasLivingEnemies()) return;
+    if (
+      this.phase !== "combat" &&
+      this.phase !== "level_up_pick" &&
+      this.phase !== "ultimate_pick"
+    ) {
+      return;
+    }
     this.finishEnemyPhaseAfterAllMoves();
   }
 
@@ -3726,6 +3728,30 @@ export class GameModel {
     );
   }
 
+  /**
+   * Hexes que um inimigo pode alcançar com `movimento` neste turno (mesmas regras que a IA de aproximação).
+   */
+  enemyMovementPreviewKeys(enemyId: string): Set<string> {
+    const e = this.units.find((u) => u.id === enemyId);
+    if (!e || e.isPlayer || e.hp <= 0) return new Set();
+    const blocked = this.occupiedHexKeysExcluding(e.id);
+    this.addBunkerHexForEnemyPath(blocked);
+    const reach = reachableHexes(
+      this.grid,
+      { q: e.q, r: e.r },
+      e.movimento,
+      e.flying,
+      unitIgnoresTerrain(e),
+      blocked,
+    );
+    const here = axialKey(e.q, e.r);
+    const out = new Set<string>();
+    for (const k of reach.keys()) {
+      if (k !== here) out.add(k);
+    }
+    return out;
+  }
+
   effectiveAlcanceForHero(h: Unit): number {
     const bio = biomeAt(this.grid, h.q, h.r) as BiomeId;
     const ign = unitIgnoresTerrain(h);
@@ -3779,6 +3805,13 @@ export class GameModel {
   getSkillRangeHexKeys(skillId: string): Set<string> {
     const h = this.currentHero();
     if (!h || h.hp <= 0) return new Set();
+    if (skillId === "bunker_minas") {
+      const b = this.bunkerAtHex(h.q, h.r);
+      if (!b || b.hp <= 0 || b.occupantId !== h.id) return new Set();
+      const maxR = bunkerMinasMaxRing(b.tier);
+      if (maxR < 1) return new Set();
+      return this.hexKeysInRing(b.q, b.r, 1, maxR);
+    }
     if (skillId === "bunker_tiro_preciso") {
       const keys = new Set<string>();
       for (const u of this.units) {
