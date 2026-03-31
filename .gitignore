@@ -19,3 +19,9 @@ Thumbs.db
 
 # Test / coverage
 coverage/
+
+# Áudio “crowd” não referenciado pelo jogo (só menu + combate em /public/audio/*.mp3).
+# Mantém o repo leve; o pack pode voltar a ser extraído localmente se precisares.
+public/audio/_crowd_unpack/
+public/audio/_crowd_unpack2/
+public/audio/_crowd_pack.zip

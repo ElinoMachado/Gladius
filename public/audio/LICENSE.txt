@@ -11,3 +11,6 @@ menu-theme.mp3
   Licença: CC0 (domínio público)
   https://creativecommons.org/publicdomain/zero/1.0/
   Fonte: https://opengameart.org/content/town-theme-rpg
+
+(Áudios “crowd cheering” Gregor Quendel não estão no repositório — não são usados pelo código.
+ Se precisares, usa o pack “Free Crowd Cheering Sounds” e extrai localmente em public/audio/.)
