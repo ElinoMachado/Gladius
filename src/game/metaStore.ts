@@ -10,8 +10,8 @@ import { COMBAT_BIOMES } from "./data/biomes";
 
 const KEY = "gladiadores-arena-meta-v2";
 
-/** Essências iniciais por bioma de combate; 0 = nenhuma. Útil para testes na forja. */
-const STARTER_ESSENCES_PER_BIOME = 100;
+/** Essências iniciais por bioma de combate; 0 = novos jogadores sem stock. Subir p/ testes na forja. */
+const STARTER_ESSENCES_PER_BIOME = 0;
 
 function starterEssencesMap(): Partial<Record<ForgeEssenceId, number>> {
   if (STARTER_ESSENCES_PER_BIOME <= 0) return {};
