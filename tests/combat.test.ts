@@ -38,6 +38,7 @@ describe("combatMath", () => {
   it("pontos de movimento não são mais cortados no pântano (custo por hex)", () => {
     expect(effectiveMovimentoForBiome(6, "pantano")).toBe(6);
     expect(movementStepEnterCost({ biome: "pantano" })).toBe(2);
+    expect(movementStepEnterCost({ biome: "pantano" }, true)).toBe(1);
     expect(movementStepEnterCost({ biome: "floresta" })).toBe(1);
   });
 
@@ -108,8 +109,18 @@ describe("grid path hub", () => {
       false,
       true,
     );
+    const reachPanForge = reachableHexes(
+      grid,
+      { q: from.q, r: from.r },
+      2,
+      false,
+      false,
+      undefined,
+      true,
+    );
     expect(reachNormal.get(k)).toBe(2);
     expect(reachRuler.get(k)).toBe(1);
+    expect(reachPanForge.get(k)).toBe(1);
   });
 });
 

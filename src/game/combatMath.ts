@@ -114,9 +114,16 @@ export function effectiveMovimentoForBiome(base: number, _biome: BiomeId): numbe
   return base;
 }
 
-/** Custo para entrar num hex: pântano gasta o dobro (mobilidade −50%). */
-export function movementStepEnterCost(toCell: { biome: BiomeId }): number {
-  return toCell.biome === "pantano" ? 2 : 1;
+/**
+ * Custo para entrar num hex: pântano gasta o dobro (mobilidade −50%), salvo
+ * ruler (`ignoreTerrain` no pathfinding) ou sinergia forja pântano nv1+.
+ */
+export function movementStepEnterCost(
+  toCell: { biome: BiomeId },
+  ignorePantanoPenalty = false,
+): number {
+  if (toCell.biome === "pantano") return ignorePantanoPenalty ? 1 : 2;
+  return 1;
 }
 
 export function biomeVolcanicDamage(): number {

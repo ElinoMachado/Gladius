@@ -150,6 +150,16 @@ export function getForgeLevel(
   return undefined;
 }
 
+/** Bônus % de XP do elmo de essência pântano (nv2 +50%, nv3 +100%). */
+export function pantanoHelmoXpBonusPercent(
+  loadout: ForgeHeroLoadout | undefined,
+): number {
+  const lv = getForgeLevel(loadout, "helmo", "pantano");
+  if (lv === 2) return 50;
+  if (lv === 3) return 100;
+  return 0;
+}
+
 function ensureProgressMap(
   loadout: ForgeHeroLoadout,
   kind: ForgeSlotKind,
@@ -322,19 +332,39 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
   const resolved = resolveEquippedForgeLoadout(loadout);
   const h = resolved.helmo;
   if (h) {
-    const hel =
-      h.level === 1
-        ? { mov: 1, alc: 0 }
-        : h.level === 2
-          ? { mov: 1, alc: 1 }
-          : { mov: 2, alc: 2 };
-    u.movimento += hel.mov;
-    u.alcance += hel.alc;
+    if (h.biome === "pantano") {
+      if (h.level === 1) u.movimento += 1;
+      else if (h.level === 2) u.movimento += 1;
+      else u.movimento += 2;
+    } else {
+      const hel =
+        h.level === 1
+          ? { mov: 1, alc: 0 }
+          : h.level === 2
+            ? { mov: 1, alc: 1 }
+            : { mov: 2, alc: 2 };
+      u.movimento += hel.mov;
+      u.alcance += hel.alc;
+    }
   }
   const c = resolved.capa;
   if (c) {
     /** Só o pacote do nível atual (como elmo/manoplas), sem somar nv1+nv2+nv3. */
-    if (c.level === 1) {
+    if (c.biome === "pantano") {
+      if (c.level === 1) {
+        u.maxHp += 150;
+        u.hp += 150;
+        u.defesa += 20;
+      } else if (c.level === 2) {
+        u.maxHp += 400;
+        u.hp += 400;
+        u.defesa += 30;
+      } else {
+        u.maxHp += 900;
+        u.hp += 900;
+        u.defesa += 50;
+      }
+    } else if (c.level === 1) {
       u.maxHp += 100;
       u.hp += 100;
       u.defesa += 25;
@@ -350,15 +380,28 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
   }
   const m = resolved.manoplas;
   if (m) {
-    const mn =
-      m.level === 1
-        ? { dano: 10, c: 25, cd: 0 }
-        : m.level === 2
-          ? { dano: 25, c: 50, cd: 0.25 }
-          : { dano: 50, c: 100, cd: 0.5 };
-    u.dano += mn.dano;
-    u.acertoCritico += mn.c;
-    u.danoCritico += mn.cd;
+    if (m.biome === "pantano") {
+      if (m.level === 1) {
+        u.dano += 5;
+        u.penetracao += 10;
+      } else if (m.level === 2) {
+        u.dano += 15;
+        u.penetracao += 50;
+      } else {
+        u.dano += 30;
+        u.penetracao += 125;
+      }
+    } else {
+      const mn =
+        m.level === 1
+          ? { dano: 10, c: 25, cd: 0 }
+          : m.level === 2
+            ? { dano: 25, c: 50, cd: 0.25 }
+            : { dano: 50, c: 100, cd: 0.5 };
+      u.dano += mn.dano;
+      u.acertoCritico += mn.c;
+      u.danoCritico += mn.cd;
+    }
   }
   if (forgeSynergyTier(loadout, "floresta") >= 2) {
     u.flying = true;
@@ -379,16 +422,32 @@ export function forgeVisualKey(loadout: ForgeHeroLoadout | undefined): string {
 export function forgePieceDescription(
   slot: ForgeSlotKind,
   level: 1 | 2 | 3,
+  biome: ForgeEssenceId,
 ): string {
   if (slot === "helmo") {
+    if (biome === "pantano") {
+      if (level === 1) return "+1 movimento";
+      if (level === 2) return "+1 movimento, bônus de XP +50%";
+      return "+2 movimento, bônus de XP +100%";
+    }
     if (level === 1) return "+1 movimento";
     if (level === 2) return "+1 alcance, +1 movimento";
     return "+2 alcance, +2 movimento";
   }
   if (slot === "capa") {
+    if (biome === "pantano") {
+      if (level === 1) return "+150 vida máx., +20 armadura";
+      if (level === 2) return "+400 vida máx., +30 armadura";
+      return "+900 vida máx., +50 armadura";
+    }
     if (level === 1) return "+100 vida máx., +25 armadura";
     if (level === 2) return "+200 vida máx., +50 armadura";
     return "+500 vida máx., +100 armadura";
+  }
+  if (biome === "pantano") {
+    if (level === 1) return "+5 dano, +10 penetração";
+    if (level === 2) return "+15 dano, +50 penetração";
+    return "+30 dano, +125 penetração";
   }
   if (level === 1) return "+10 dano, +25% chance crítica";
   if (level === 2) return "+25 dano, +50% crítico, +25% dano crítico";
@@ -407,11 +466,21 @@ export function forgePieceEffectHtml(
   kind: ForgeSlotKind,
   level: 1 | 2 | 3,
   uniqBase: number,
+  biome: ForgeEssenceId,
 ): string {
   const u = { n: uniqBase };
   const p: string[] = [];
   if (kind === "helmo") {
-    if (level === 1) p.push(forgeFxSeg("mov", u, "+1 movimento"));
+    if (biome === "pantano") {
+      if (level === 1) p.push(forgeFxSeg("mov", u, "+1 movimento"));
+      else if (level === 2) {
+        p.push(forgeFxSeg("mov", u, "+1 movimento, "));
+        p.push(forgeFxSeg("xp_bonus", u, "bônus XP +50%"));
+      } else {
+        p.push(forgeFxSeg("mov", u, "+2 movimento, "));
+        p.push(forgeFxSeg("xp_bonus", u, "bônus XP +100%"));
+      }
+    } else if (level === 1) p.push(forgeFxSeg("mov", u, "+1 movimento"));
     else if (level === 2) {
       p.push(forgeFxSeg("range", u, "+1 alcance, "));
       p.push(forgeFxSeg("mov", u, "+1 movimento"));
@@ -420,7 +489,18 @@ export function forgePieceEffectHtml(
       p.push(forgeFxSeg("mov", u, "+2 movimento"));
     }
   } else if (kind === "capa") {
-    if (level === 1) {
+    if (biome === "pantano") {
+      if (level === 1) {
+        p.push(forgeFxSeg("max_hp", u, "+150 vida máx., "));
+        p.push(forgeFxSeg("def", u, "+20 armadura"));
+      } else if (level === 2) {
+        p.push(forgeFxSeg("max_hp", u, "+400 vida máx., "));
+        p.push(forgeFxSeg("def", u, "+30 armadura"));
+      } else {
+        p.push(forgeFxSeg("max_hp", u, "+900 vida máx., "));
+        p.push(forgeFxSeg("def", u, "+50 armadura"));
+      }
+    } else if (level === 1) {
       p.push(forgeFxSeg("max_hp", u, "+100 vida máx., "));
       p.push(forgeFxSeg("def", u, "+25 armadura"));
     } else if (level === 2) {
@@ -430,19 +510,28 @@ export function forgePieceEffectHtml(
       p.push(forgeFxSeg("max_hp", u, "+500 vida máx., "));
       p.push(forgeFxSeg("def", u, "+100 armadura"));
     }
-  } else {
+  } else if (biome === "pantano") {
     if (level === 1) {
-      p.push(forgeFxSeg("dmg", u, "+10 dano, "));
-      p.push(forgeFxSeg("crit_hit", u, "+25% chance crítica"));
+      p.push(forgeFxSeg("dmg", u, "+5 dano, "));
+      p.push(forgeFxSeg("pen", u, "+10 penetração"));
     } else if (level === 2) {
-      p.push(forgeFxSeg("dmg", u, "+25 dano, "));
-      p.push(forgeFxSeg("crit_hit", u, "+50% crítico, "));
-      p.push(forgeFxSeg("crit_dmg", u, "+25% dano crítico"));
+      p.push(forgeFxSeg("dmg", u, "+15 dano, "));
+      p.push(forgeFxSeg("pen", u, "+50 penetração"));
     } else {
-      p.push(forgeFxSeg("dmg", u, "+50 dano, "));
-      p.push(forgeFxSeg("crit_hit", u, "+100% crítico, "));
-      p.push(forgeFxSeg("crit_dmg", u, "+50% dano crítico"));
+      p.push(forgeFxSeg("dmg", u, "+30 dano, "));
+      p.push(forgeFxSeg("pen", u, "+125 penetração"));
     }
+  } else if (level === 1) {
+    p.push(forgeFxSeg("dmg", u, "+10 dano, "));
+    p.push(forgeFxSeg("crit_hit", u, "+25% chance crítica"));
+  } else if (level === 2) {
+    p.push(forgeFxSeg("dmg", u, "+25 dano, "));
+    p.push(forgeFxSeg("crit_hit", u, "+50% crítico, "));
+    p.push(forgeFxSeg("crit_dmg", u, "+25% dano crítico"));
+  } else {
+    p.push(forgeFxSeg("dmg", u, "+50 dano, "));
+    p.push(forgeFxSeg("crit_hit", u, "+100% crítico, "));
+    p.push(forgeFxSeg("crit_dmg", u, "+50% dano crítico"));
   }
   return `<div class="forge-piece-effect-line">${p.join("")}</div>`;
 }
@@ -469,6 +558,13 @@ export function forgeSynergyDescriptionLines(
       "1 peça: na floresta, +2 alcance; inimigos na floresta não ganham +1 de alcance.",
       "2 peças: voo; mantém o bônus de alcance da floresta fora dela.",
       "3 peça: sorte dobrada.",
+    ];
+  }
+  if (biome === "pantano") {
+    return [
+      "1 peça: ignora penalidade de movimento no pântano; com Ruler: +1 movimento para ti e todos os aliados.",
+      "2 peças: inimigos com movimento < 4 causam 50% menos dano.",
+      "3 peças: dobra os teus pontos de movimento no turno.",
     ];
   }
   return [
@@ -519,7 +615,7 @@ export function forgePieceCardTooltipHtml(
     kind === "helmo" ? "Elmo" : kind === "capa" ? "Capa" : "Manoplas";
   const titleWithLevel = `${title} - nv ${piece.level}`;
   const essenceLine = FORGE_ESSENCE_LABELS[piece.biome];
-  const effectHtml = forgePieceEffectHtml(kind, piece.level, 320);
+  const effectHtml = forgePieceEffectHtml(kind, piece.level, 320, piece.biome);
   const tier = forgeSynergyTier(heroLoadout, piece.biome);
   const synLines = forgeSynergyDescriptionLines(piece.biome);
   let synBlock = `<p class="game-ui-tooltip-passive"><strong>Sinergia (${FORGE_ESSENCE_LABELS[piece.biome]}, ${tier}/3 peças nv 3)</strong></p><ul class="forge-tip-syn">`;
@@ -615,14 +711,14 @@ export function forgeUpgradeButtonTooltipHtml(
   if (curLv == null) {
     const cost = FORGE_COST_CREATE;
     const have = meta.essences[selectedBiome] ?? 0;
-    const fx = forgePieceEffectHtml(kind, 1, 520);
+    const fx = forgePieceEffectHtml(kind, 1, 520, selectedBiome);
     return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Forjar nv1</div><p class="game-ui-tooltip-passive">Nova linha de ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])}; não apaga outras essências já forjadas neste slot.</p><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p><p class="game-ui-tooltip-passive"><strong>Após forjar</strong></p>${fx}</div>`;
   }
   const cost =
     curLv === 1 ? FORGE_COST_UPGRADE_TO_2 : FORGE_COST_UPGRADE_TO_3;
   const have = meta.essences[selectedBiome] ?? 0;
   const nextLev = (curLv + 1) as 2 | 3;
-  const fx = forgePieceEffectHtml(kind, nextLev, 530);
+  const fx = forgePieceEffectHtml(kind, nextLev, 530, selectedBiome);
   return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Aprimorar → nv${nextLev}</div><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p><p class="game-ui-tooltip-passive"><strong>Estado após aprimorar (nível completo)</strong></p>${fx}</div>`;
 }
 

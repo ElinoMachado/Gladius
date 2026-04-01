@@ -87,6 +87,7 @@ import {
   forgeKindBiomeHeldByOtherHero,
   forgePieceEffectHtml,
   getForgeLevel,
+  pantanoHelmoXpBonusPercent,
   forgeSynergyCrestTooltipHtml,
   forgeSynergyPanelHtml,
   forgeSynergyTier,
@@ -1278,7 +1279,12 @@ function syncForgeKindRow(
   if (!curPiece) {
     statsEl.innerHTML = `<div class="forge-piece-stats__line">${escapeHtml("— Sem forja nesta essência —")}</div><div class="forge-piece-stats__line">${escapeHtml("Escolhe o bioma e forja nv1; outras essências deste slot mantêm-se.")}</div>`;
   } else {
-    const inner = forgePieceEffectHtml(kind, effectLevel, previewIndex * 24);
+    const inner = forgePieceEffectHtml(
+      kind,
+      effectLevel,
+      previewIndex * 24,
+      displayBiome,
+    );
     statsEl.innerHTML = inner;
     statsEl.querySelectorAll<HTMLElement>(".lol-stat-ico[data-ico]").forEach((ico) => {
       const id = ico.dataset.ico as StatIconId;
@@ -1791,7 +1797,7 @@ function showHeroSetup(): void {
           <span class="hero-slot-weapon-row__nv">nv <strong>${wl}</strong>/5</span>
           <span class="hero-slot-weapon-row__hint" aria-hidden="true">paira · skill e ultimate</span>
         </div>
-        <div class="hero-slot-model-host" data-slot-model="${i}"></div><div class="hero-slot-passive-wrap"><p class="hero-slot-passive"><small>${escapeHtml(HEROES[hid].passiveDescription)}</small></p></div>`;
+        <div class="hero-slot-model-host" data-slot-model="${i}"></div><div class="hero-slot-passive-wrap"><div class="hero-slot-passive__title">Passiva</div><p class="hero-slot-passive">${escapeHtml(HEROES[hid].passiveDescription)}</p></div>`;
       bindSetupStatCells(card);
       const weaponRow = card.querySelector(".hero-slot-weapon-row") as HTMLElement;
       bindGameTooltip(weaponRow, () =>
@@ -2073,18 +2079,27 @@ function showGoldShop(isInitial: boolean): void {
         </div>
       </div>`;
     }).join("");
+    const goldAriaLabel =
+      party.length > 1
+        ? `Ouro deste herói (bolsa individual, não partilhada): ${h.ouro}`
+        : `Ouro atual na loja: ${h.ouro}`;
+    const goldMultiHint =
+      party.length > 1
+        ? `<p class="shop-hero-gold-multi-hint" role="note">O ouro acima é só <strong>deste herói</strong> — na loja, <strong>cada herói tem a sua própria bolsa</strong>; troca de herói para gastar o ouro de cada um.</p>`
+        : "";
     panel.innerHTML = `
       <div class="shop-panel-inner">
         <h1 class="shop-title hero-setup-main-title">Loja do coliseu</h1>
         <h2 class="shop-hero-name">${escapeHtml(h.name)}</h2>
         <div class="shop-hero-gold-row">
-          <span class="shop-hero-gold__coin-wrap" id="shop-gold-coin-tip" role="img" tabindex="0" aria-label="Ouro atual na loja: ${h.ouro}">
+          <span class="shop-hero-gold__coin-wrap" id="shop-gold-coin-tip" role="img" tabindex="0" aria-label="${escapeHtml(goldAriaLabel)}">
             <span class="shop-hero-gold__icon" aria-hidden="true">${combatGoldCoinSvgHtml("shop-hero-gold__coin-svg")}</span>
           </span>
           <strong class="shop-hero-gold__value" id="shop-gold-value">${h.ouro}</strong>
           <span class="shop-hero-gold__sep" aria-hidden="true">·</span>
           <span class="shop-hero-gold__hero-idx">Herói ${idx + 1}/${party.length}</span>
         </div>
+        ${goldMultiHint}
         <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
           <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
           <div class="shop-hero-stats-col">
@@ -3153,7 +3168,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   const bio = biomeAt(m.grid, h.q, h.r) as BiomeId;
   const ign = unitIgnoresTerrain(h);
   const effDef = effectiveDefenseForBiome(h.defesa, bio, ign);
-  const movPool = h.movimento + rulerMovementBonus(h);
+  const movPool = m.heroMovementPool(h);
   const effAlc = m.effectiveAlcanceForHero(h);
   const roch = bio === "rochoso" && !ign;
   const critMultCur = h.danoCritico + (roch ? 1 : 0);
@@ -3262,10 +3277,13 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     }
     const movDeltaCore = movPool - b.movimento;
     const movPair = valWithDelta(String(movPool), movDeltaCore, "int");
-    const pantExtra =
-      bio === "pantano" && !ign
-        ? ` <span class="lol-stat-delta lol-stat-delta--down">(−50% mobilidade)</span>`
-        : "";
+    const pantHexSlow =
+      bio === "pantano" &&
+      !ign &&
+      forgeSynergyTier(h.forgeLoadout, "pantano") < 1;
+    const pantExtra = pantHexSlow
+      ? ` <span class="lol-stat-delta lol-stat-delta--down">(−50% mobilidade)</span>`
+      : "";
     cells.push({
       icon: "mov",
       label: "Movimento",
@@ -3273,9 +3291,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       valueHtml: movPair.html + pantExtra,
       tooltipValue:
         movPair.plain +
-        (bio === "pantano" && !ign
-          ? " — hexes no pântano custam 2 pontos"
-          : ""),
+        (pantHexSlow ? " — hexes no pântano custam 2 pontos" : ""),
     });
 
     pushStat(
@@ -3295,11 +3311,15 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       "float",
     );
     {
-      const xpCur = model.xpGainBonusPercentForHero(h);
+      const xpCur = m.xpGainBonusPercentForHero(h);
       const tre0 = b.artifacts["trevo"] ?? 0;
       const shop0 = b.artifacts["_xp_shop"] ?? 0;
       const xpBase = Math.floor(
-        25 * tre0 + shop0 + model.meta.permXp + model.partyXpBonusPct,
+        25 * tre0 +
+          shop0 +
+          m.meta.permXp +
+          m.partyXpBonusPct +
+          pantanoHelmoXpBonusPercent(h.forgeLoadout),
       );
       pushStat(
         cells,
@@ -3399,16 +3419,21 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       value: String(effDef),
       tooltipValue: defenseReductionTooltipText(effDef),
     });
-    const pantF =
-      bio === "pantano" && !ign
-        ? ` <span class="lol-stat-delta lol-stat-delta--down">(−50% mobilidade)</span>`
-        : "";
+    const pantHexSlowElse =
+      bio === "pantano" &&
+      !ign &&
+      forgeSynergyTier(h.forgeLoadout, "pantano") < 1;
+    const pantF = pantHexSlowElse
+      ? ` <span class="lol-stat-delta lol-stat-delta--down">(−50% mobilidade)</span>`
+      : "";
     cells.push({
       icon: "mov",
       label: "Movimento",
       value: String(movPool),
       valueHtml: escapeHtml(String(movPool)) + pantF,
-      tooltipValue: String(movPool),
+      tooltipValue:
+        String(movPool) +
+        (pantHexSlowElse ? " — hexes no pântano custam 2 pontos" : ""),
     });
     cells.push({
       icon: "range",
@@ -5452,7 +5477,7 @@ function equipmentModalPieceCellHtml(
     </div>`;
   }
   const bio = FORGE_ESSENCE_LABELS[piece.biome];
-  const fx = forgePieceEffectHtml(kind, piece.level, uniqBase);
+  const fx = forgePieceEffectHtml(kind, piece.level, uniqBase, piece.biome);
   return `<div class="eq-piece-cell" data-eq-hero="${forgeHi}" data-eq-kind="${kind}">
     <div class="eq-piece-3d-host" data-eq-3d="1" aria-hidden="true"></div>
     <div class="eq-piece-meta">

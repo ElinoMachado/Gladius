@@ -29,6 +29,8 @@ export function findPath(
   ignoreTerrain: boolean,
   maxCost: number,
   blocked?: Set<string>,
+  /** Sinergia forja pântano (nv1+): hexes de pântano custam 1 ponto como terreno normal. */
+  ignorePantanoMoveCost = false,
 ): Axial[] | null {
   const startK = axialKey(start.q, start.r);
   const goalK = axialKey(goal.q, goal.r);
@@ -65,7 +67,9 @@ export function findPath(
       if (blocked?.has(nk)) continue;
       if (!canCrossBiome(fromCell, toCell, flying, ignoreTerrain)) continue;
 
-      const step = ignoreTerrain ? 1 : movementStepEnterCost(toCell);
+      const step = ignoreTerrain
+        ? 1
+        : movementStepEnterCost(toCell, ignorePantanoMoveCost);
       const ng = (g.get(best) ?? Infinity) + step;
       if (ng > maxCost) continue;
       if (ng < (g.get(nk) ?? Infinity)) {
@@ -87,6 +91,7 @@ export function reachableHexes(
   flying: boolean,
   ignoreTerrain: boolean,
   blocked?: Set<string>,
+  ignorePantanoMoveCost = false,
 ): Map<string, number> {
   const startK = axialKey(start.q, start.r);
   if (!grid.has(startK)) return new Map();
@@ -105,7 +110,11 @@ export function reachableHexes(
       if (!toCell) continue;
       if (blocked?.has(nk)) continue;
       if (!canCrossBiome(fromCell, toCell, flying, ignoreTerrain)) continue;
-      const nc = curCost + (ignoreTerrain ? 1 : movementStepEnterCost(toCell));
+      const nc =
+        curCost +
+        (ignoreTerrain
+          ? 1
+          : movementStepEnterCost(toCell, ignorePantanoMoveCost));
       if (nc > movement) continue;
       if (nc < (costs.get(nk) ?? Infinity)) {
         costs.set(nk, nc);

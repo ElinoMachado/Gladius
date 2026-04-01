@@ -29,6 +29,7 @@ import {
   resolveEssenceDropCount,
   FORGE_ESSENCE_LABELS,
   forgeSynergyTier,
+  pantanoHelmoXpBonusPercent,
 } from "./forge";
 import { createEnemyUnit, createHeroUnit, xpCurve, biomeAt } from "./unitFactory";
 import {
@@ -500,6 +501,38 @@ export class GameModel {
       if (forgeSynergyTier(h.forgeLoadout, "floresta") >= 1) return true;
     }
     return false;
+  }
+
+  private anyPartyHasPantanoSynergyTier(min: 1 | 2 | 3): boolean {
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      if (forgeSynergyTier(h.forgeLoadout, "pantano") >= min) return true;
+    }
+    return false;
+  }
+
+  /** +1 mov a toda a party se alguém tiver sinergia pântano nv1+ e Ruler. */
+  private partyPantanoRulerMovBonus(): number {
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      if (
+        forgeSynergyTier(h.forgeLoadout, "pantano") >= 1 &&
+        (h.artifacts["ruler"] ?? 0) > 0
+      )
+        return 1;
+    }
+    return 0;
+  }
+
+  /**
+   * Pontos de movimento no início do turno (Ruler, sinergia pântano+Ruler na party,
+   * dobra com sinergia pântano nv3 neste herói).
+   */
+  heroMovementPool(h: Unit): number {
+    let mov = h.movimento + rulerMovementBonus(h);
+    mov += this.partyPantanoRulerMovBonus();
+    if (forgeSynergyTier(h.forgeLoadout, "pantano") >= 3) mov *= 2;
+    return mov;
   }
 
   /** Sorte efetiva (ex.: sinergia floresta nv3 dobra). */
@@ -1232,7 +1265,7 @@ export class GameModel {
       return;
     }
     h.bunkerReentryBlocked = false;
-    let mov = h.movimento + rulerMovementBonus(h);
+    const mov = this.heroMovementPool(h);
     this.movementLeft = mov;
     this.basicAttacksSpentThisTurn = 0;
     this.syncBasicLeftFromSpent(h);
@@ -1730,6 +1763,8 @@ export class GameModel {
     }
     const fly = h.flying;
     const ign = unitIgnoresTerrain(h);
+    const panSwamp =
+      !ign && forgeSynergyTier(h.forgeLoadout, "pantano") >= 1;
     const blocked = this.occupiedHexKeysExcluding(h.id);
     const fromQ = h.q;
     const fromR = h.r;
@@ -1740,6 +1775,7 @@ export class GameModel {
       fly,
       ign,
       blocked,
+      panSwamp,
     );
     const k = axialKey(toQ, toR);
     const cost = reach.get(k);
@@ -1769,6 +1805,7 @@ export class GameModel {
       ign,
       cost,
       blocked,
+      panSwamp,
     );
     if (path && path.length > 1) {
       this.pendingMoveAnim = {
@@ -2371,6 +2408,14 @@ export class GameModel {
       if (v > 0 || c > 0) {
         rawUse = Math.floor(rawUse * (1 + 0.08 * v + 0.15 * c));
       }
+    }
+    if (
+      !src.isPlayer &&
+      src.hp > 0 &&
+      src.movimento < 4 &&
+      this.anyPartyHasPantanoSynergyTier(2)
+    ) {
+      rawUse = Math.max(1, Math.floor(rawUse * 0.5));
     }
     const defBio = biomeAt(this.grid, tgt.q, tgt.r) as BiomeId;
     const atkBio = biomeAt(this.grid, src.q, src.r) as BiomeId;
@@ -3575,7 +3620,11 @@ export class GameModel {
     const trevo = u.artifacts["trevo"] ?? 0;
     const shopXp = u.artifacts["_xp_shop"] ?? 0;
     return Math.floor(
-      25 * trevo + shopXp + this.meta.permXp + this.partyXpBonusPct,
+      25 * trevo +
+        shopXp +
+        this.meta.permXp +
+        this.partyXpBonusPct +
+        pantanoHelmoXpBonusPercent(u.forgeLoadout),
     );
   }
 
@@ -3588,7 +3637,8 @@ export class GameModel {
       0.25 * trevo +
       shopXp / 100 +
       metaXp / 100 +
-      this.partyXpBonusPct / 100;
+      this.partyXpBonusPct / 100 +
+      pantanoHelmoXpBonusPercent(u.forgeLoadout) / 100;
     const gained = Math.floor(base * mult);
     this.waveXpGained += gained;
     u.xp += gained;
@@ -3870,13 +3920,16 @@ export class GameModel {
     const h = this.currentHero();
     if (!h) return new Map();
     const blocked = this.occupiedHexKeysExcluding(h.id);
+    const ign = unitIgnoresTerrain(h);
+    const panSwamp = !ign && forgeSynergyTier(h.forgeLoadout, "pantano") >= 1;
     return reachableHexes(
       this.grid,
       { q: h.q, r: h.r },
       this.movementLeft,
       h.flying,
-      unitIgnoresTerrain(h),
+      ign,
       blocked,
+      panSwamp,
     );
   }
 
