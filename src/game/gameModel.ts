@@ -2589,9 +2589,11 @@ export class GameModel {
       }
     }
     const totalCrit = src.acertoCritico + roninCritBonus(src);
-    if (totalCrit > 100) {
-      mit = Math.floor(mit * (1 + (totalCrit - 100) * 0.02));
-    }
+    const roninStacks = src.artifacts["ronin"] ?? 0;
+    const roninOverflowFlatDano =
+      roninStacks > 0 && totalCrit > 100
+        ? Math.floor((totalCrit - 100) / 5)
+        : 0;
     let useCrit = crit;
     let critMultExtra = 0;
     if (!fromBasicAttack && src.isPlayer && src.heroClass) {
@@ -2610,7 +2612,7 @@ export class GameModel {
       useCrit,
       rochosoCritAdd,
     );
-    let dmg = mit;
+    let dmg = mit + roninOverflowFlatDano;
     if (useBunkerDefense) {
       dmg = Math.max(1, Math.floor(dmg * BUNKER_DAMAGE_TAKEN_MULT));
     }

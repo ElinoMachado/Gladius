@@ -46,7 +46,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Ronin",
     rarity: "common",
     description:
-      "+20% acerto crítico por acúmulo; cada 1% acima de 100% vira +2% dano.",
+      "+20% acerto crítico por acúmulo. Acima de 100% a chance extra não conta para crítico; cada 5% de excesso viram +1 de dano nos teus golpes.",
   },
   {
     id: "sylfid",

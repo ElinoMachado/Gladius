@@ -133,7 +133,7 @@ export function describeArtifactAtStack(
     case "maos_venenosas":
       return `Veneno em qualquer dano seu: ${25 * n}% do dano bruto por turno, ${3 + n} turno(s).`;
     case "ronin":
-      return `+${20 * n}% acerto crítico; acima de 100% cada 1% → +2% dano.`;
+      return `+${20 * n}% acerto crítico; acima de 100% o excesso não aumenta crítico; cada 5% de excesso → +1 de dano.`;
     case "imortal":
       return `Abaixo de 50% HP: +${50 * n}% da regen vida.`;
     case "duro_pedra":

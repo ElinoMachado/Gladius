@@ -172,7 +172,7 @@ export interface Unit extends CoreStats {
     bonusHp: number;
     bonusMana: number;
   };
-  /** Ronin overflow já convertido em dano % — simplificado em bonus plano */
+  /** Cor de tintura do modelo / retrato (herói ou inimigo). */
   displayColor: number;
   /** Bioma de spawn da wave (XP / IA de foco); só inimigos. */
   enemySpawnBiome?: BiomeId;

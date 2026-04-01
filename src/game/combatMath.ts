@@ -8,8 +8,10 @@ export interface DamageContext {
   rochosoCritAdd?: number;
 }
 
+/** Acima de 100% não aumenta a probabilidade de crítico (excesso só serve a efeitos como Ronin). */
 export function rollCrit(chancePercent: number): boolean {
-  return Math.random() * 100 < chancePercent;
+  const p = Math.min(100, Math.max(0, chancePercent));
+  return Math.random() * 100 < p;
 }
 
 /**
