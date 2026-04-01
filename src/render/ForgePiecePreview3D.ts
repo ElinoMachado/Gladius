@@ -79,17 +79,19 @@ export class ForgePiecePreview3D {
 
   setKindAndPiece(
     kind: ForgeSlotKind,
-    biome: ForgeEssenceId,
+    biome: ForgeEssenceId | null,
     level: 1 | 2 | 3,
   ): void {
     this.kind = kind;
     disposeObject3D(this.pivot);
     this.pivot.clear();
-    const piece = buildForgePieceDetailGroup(kind, biome, level);
-    if (kind === "helmo") piece.scale.setScalar(1.05);
-    else if (kind === "capa") piece.scale.setScalar(1.02);
-    else piece.scale.setScalar(0.92);
-    this.pivot.add(piece);
+    if (biome != null) {
+      const piece = buildForgePieceDetailGroup(kind, biome, level);
+      if (kind === "helmo") piece.scale.setScalar(1.05);
+      else if (kind === "capa") piece.scale.setScalar(1.02);
+      else piece.scale.setScalar(0.92);
+      this.pivot.add(piece);
+    }
 
     const { pos, target } = cameraSetupForKind(kind);
     this.camera.position.copy(pos);

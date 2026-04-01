@@ -356,6 +356,15 @@ export function setEquippedBiome(
   (loadout as Record<string, unknown>)[ek as string] = biome;
 }
 
+/** Remove a essência equipada neste tipo de peça (slot de party fica sem equipamento visível). */
+export function clearEquippedBiome(
+  loadout: ForgeHeroLoadout,
+  kind: ForgeSlotKind,
+): void {
+  const ek = EQUIPPED_KEY[kind];
+  delete (loadout as Record<string, unknown>)[ek as string];
+}
+
 /** Qual essência está equipada neste slot. Com `global`, valida níveis no progresso global. */
 export function resolveEquippedBiome(
   L: ForgeHeroLoadout | undefined,
@@ -1245,12 +1254,15 @@ export function forgeUpgradeButtonTooltipHtml(
   meta: MetaProgress,
   heroSlotIndex: 0 | 1 | 2,
   kind: ForgeSlotKind,
-  selectedBiome: ForgeEssenceId,
+  selectedBiome: ForgeEssenceId | "",
 ): string {
   normalizeForgeMeta(meta);
   const loadout = meta.forgeByHeroSlot[heroSlotIndex];
   if (!loadout) {
     return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Forja</div><p class="game-ui-tooltip-passive">Dados de herói inválidos; reinicia o jogo ou o meta.</p></div>`;
+  }
+  if (selectedBiome === "") {
+    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Forja</div><p class="game-ui-tooltip-passive">Escolhe uma essência no menu para forjar ou aprimorar. <strong>Vazio</strong> deixa este slot sem peça equipada (o progresso global das linhas mantém-se).</p></div>`;
   }
   const g = meta.forgeGlobalProgress ?? {};
   const curLv = getForgeProgressLevel(g, kind, selectedBiome);

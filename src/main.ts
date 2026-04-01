@@ -83,6 +83,7 @@ import {
   FORGE_COST_UPGRADE_TO_2,
   FORGE_COST_UPGRADE_TO_3,
   FORGE_ESSENCE_LABELS,
+  clearEquippedBiome,
   forgeBiomeEquippedOnOtherSlot,
   forgeEssenceBarHtml,
   forgePieceEffectHtml,
@@ -1153,8 +1154,11 @@ let forgeUiHeroIndex: 0 | 1 | 2 = 0;
  */
 let forgeLastSyncedHeroForBiomeUi: 0 | 1 | 2 | null = null;
 
-/** Biomas escolhidos nos &lt;select&gt; por slot de party (sobrevive ao `innerHTML` do paint). */
-type ForgeUiBiomePicks = Partial<Record<ForgeSlotKind, ForgeEssenceId>>;
+/**
+ * Escolha memorizada no &lt;select&gt; por slot de party (sobrevive ao `innerHTML` do paint).
+ * `null` = opção Vazio; chave em falta = usar essência equipada salva.
+ */
+type ForgeUiBiomePicks = Partial<Record<ForgeSlotKind, ForgeEssenceId | null>>;
 const forgeUiBiomePicksByHero: ForgeUiBiomePicks[] = [{}, {}, {}];
 
 /** `Number("") === 0` — nunca usar Number() no slot de party da forja. */
@@ -1176,7 +1180,9 @@ function snapshotForgeBiomePicksFromDom(body: HTMLElement): void {
       `select.forge-biome-sel[data-forge-kind="${kind}"]`,
     ) as HTMLSelectElement | null;
     const v = sel?.value?.trim() ?? "";
-    if (COMBAT_BIOMES.some((id) => id === v)) {
+    if (v === "") {
+      forgeUiBiomePicksByHero[h][kind] = null;
+    } else if (COMBAT_BIOMES.some((id) => id === v)) {
       forgeUiBiomePicksByHero[h][kind] = v as ForgeEssenceId;
     }
   }
@@ -1235,82 +1241,112 @@ function syncForgeKindRow(
   if (!bioSel || !statsEl || !curEl || !btn) return;
 
   const rawEssence = trustBiomeSelectValue ? bioSel.value.trim() : "";
-  const fromUser =
+  const preservedPick = forgeUiBiomePicksByHero[hi][kind];
+  /** Select novo após paint vem vazio: usa escolha memorizada, depois linha equipada neste slot. */
+  let selectedEssence: ForgeEssenceId | null;
+  if (trustBiomeSelectValue && rawEssence === "") {
+    selectedEssence = null;
+  } else if (
     trustBiomeSelectValue &&
     rawEssence &&
     COMBAT_BIOMES.some((id) => id === rawEssence)
-      ? (rawEssence as ForgeEssenceId)
-      : null;
-  const preservedPick = forgeUiBiomePicksByHero[hi][kind];
-  /** Select novo após paint vem vazio: usa escolha memorizada, depois linha equipada neste slot. */
-  let selectedEssence: ForgeEssenceId =
-    fromUser ??
-    preservedPick ??
-    resolveEquippedBiome(L, kind, g) ??
-    ("floresta" as ForgeEssenceId);
+  ) {
+    selectedEssence = rawEssence as ForgeEssenceId;
+  } else if (preservedPick !== undefined) {
+    selectedEssence = preservedPick;
+  } else {
+    selectedEssence = resolveEquippedBiome(L, kind, g) ?? null;
+  }
 
   const biomeForgeSelectable = (eid: ForgeEssenceId) =>
     !forgeBiomeEquippedOnOtherSlot(meta, hi, kind, eid);
-  if (!biomeForgeSelectable(selectedEssence)) {
+  if (selectedEssence != null && !biomeForgeSelectable(selectedEssence)) {
     const eq = resolveEquippedBiome(L, kind, g);
     selectedEssence =
       (eq != null && biomeForgeSelectable(eq) ? eq : null) ??
       (COMBAT_BIOMES.find((b) => biomeForgeSelectable(b as ForgeEssenceId)) as
         | ForgeEssenceId
         | undefined) ??
-      ("floresta" as ForgeEssenceId);
+      null;
     forgeUiBiomePicksByHero[hi][kind] = selectedEssence;
   }
 
   bioSel.disabled = false;
   const forgeOptLockedTitle = "Já equipado noutro slot da party";
-  bioSel.innerHTML = COMBAT_BIOMES.map((b) => {
-    const eid = b as ForgeEssenceId;
-    const sel = eid === selectedEssence ? " selected" : "";
-    const onOther = forgeBiomeEquippedOnOtherSlot(meta, hi, kind, eid);
-    const dis = onOther
-      ? ` disabled title="${escapeHtml(forgeOptLockedTitle)}"`
-      : "";
-    return `<option value="${eid}"${sel}${dis}>${escapeHtml(FORGE_ESSENCE_LABELS[eid])}</option>`;
-  }).join("");
+  const emptySel = selectedEssence === null ? " selected" : "";
+  const emptyOpt = `<option value=""${emptySel}>${escapeHtml("Vazio")}</option>`;
+  bioSel.innerHTML =
+    emptyOpt +
+    COMBAT_BIOMES.map((b) => {
+      const eid = b as ForgeEssenceId;
+      const sel = eid === selectedEssence ? " selected" : "";
+      const onOther = forgeBiomeEquippedOnOtherSlot(meta, hi, kind, eid);
+      const dis = onOther
+        ? ` disabled title="${escapeHtml(forgeOptLockedTitle)}"`
+        : "";
+      return `<option value="${eid}"${sel}${dis}>${escapeHtml(FORGE_ESSENCE_LABELS[eid])}</option>`;
+    }).join("");
   if (![...bioSel.options].some((o) => o.selected)) {
     bioSel.selectedIndex = 0;
   }
 
-  const biomeNow = (bioSel.value ?? selectedEssence) as ForgeEssenceId;
-  const progressLv = getForgeProgressLevel(g, kind, biomeNow);
-  const equippedOnOther = forgeBiomeEquippedOnOtherSlot(meta, hi, kind, biomeNow);
-  if (progressLv != null && !equippedOnOther) {
-    setEquippedBiome(L, kind, biomeNow);
+  const rawVal = (bioSel.value ?? "").trim();
+  const biomeNow: ForgeEssenceId | null =
+    rawVal === "" ? null : (rawVal as ForgeEssenceId);
+  if (biomeNow === null) {
+    clearEquippedBiome(L, kind);
+  } else {
+    const progressLv = getForgeProgressLevel(g, kind, biomeNow);
+    const equippedOnOther = forgeBiomeEquippedOnOtherSlot(
+      meta,
+      hi,
+      kind,
+      biomeNow,
+    );
+    if (progressLv != null && !equippedOnOther) {
+      setEquippedBiome(L, kind, biomeNow);
+    }
   }
 
-  const selLv = progressLv;
+  const selLv =
+    biomeNow != null ? getForgeProgressLevel(g, kind, biomeNow) : undefined;
   const curPiece =
-    selLv != null
+    biomeNow != null && selLv != null
       ? { biome: biomeNow, level: selLv }
       : undefined;
   const fullyMaxedThisLine = Boolean(curPiece && curPiece.level >= 3);
-  const displayBiome = biomeNow;
   const displayLevel = curPiece?.level ?? 1;
 
   if (pieceLabelEl) {
-    pieceLabelEl.textContent = `${forgePieceLabelPt(kind)} - nv ${displayLevel}`;
+    pieceLabelEl.textContent =
+      biomeNow == null
+        ? forgePieceLabelPt(kind)
+        : `${forgePieceLabelPt(kind)} - nv ${displayLevel}`;
   }
-  curEl.textContent = FORGE_ESSENCE_LABELS[displayBiome];
+  curEl.textContent =
+    biomeNow == null ? "Vazio" : FORGE_ESSENCE_LABELS[biomeNow];
   curEl.classList.toggle("forge-piece-cur--oneliner", false);
 
   const preview = forgePiecePreviews3d[previewIndex];
-  if (preview) preview.setKindAndPiece(kind, displayBiome, displayLevel);
+  if (preview) {
+    preview.setKindAndPiece(
+      kind,
+      biomeNow,
+      displayLevel as 1 | 2 | 3,
+    );
+  }
 
   const effectLevel = (curPiece?.level ?? 1) as 1 | 2 | 3;
-  if (!curPiece) {
+  if (biomeNow == null) {
+    statsEl.innerHTML = `<div class="forge-piece-stats__line">${escapeHtml("— Sem peça equipada neste slot —")}</div><div class="forge-piece-stats__line">${escapeHtml("Escolhe uma essência para ver efeitos e forjar; Vazio remove só a equipação deste slot.")}</div>`;
+  } else if (!curPiece) {
     statsEl.innerHTML = `<div class="forge-piece-stats__line">${escapeHtml("— Sem forja nesta essência —")}</div><div class="forge-piece-stats__line">${escapeHtml("Escolhe o bioma e forja nv1; outras essências deste slot mantêm-se.")}</div>`;
   } else {
     const inner = forgePieceEffectHtml(
       kind,
       effectLevel,
       previewIndex * 24,
-      displayBiome,
+      curPiece.biome,
     );
     statsEl.innerHTML = inner;
     statsEl.querySelectorAll<HTMLElement>(".lol-stat-ico[data-ico]").forEach((ico) => {
@@ -1323,12 +1359,19 @@ function syncForgeKindRow(
     : curPiece.level === 1
       ? FORGE_COST_UPGRADE_TO_2
       : FORGE_COST_UPGRADE_TO_3;
-  btn.textContent = fullyMaxedThisLine
-    ? "Máximo"
-    : !curPiece
-      ? `Forjar (${cost})`
-      : `Aprimorar (${cost})`;
-  if (fullyMaxedThisLine) {
+  btn.textContent =
+    biomeNow == null
+      ? "—"
+      : fullyMaxedThisLine
+        ? "Máximo"
+        : !curPiece
+          ? `Forjar (${cost})`
+          : `Aprimorar (${cost})`;
+  if (biomeNow == null) {
+    btn.setAttribute("aria-disabled", "true");
+    btn.classList.remove("forge-do-btn--max");
+    btn.classList.add("forge-do-btn--blocked");
+  } else if (fullyMaxedThisLine) {
     btn.setAttribute("aria-disabled", "true");
     btn.classList.toggle("forge-do-btn--max", true);
     btn.classList.remove("forge-do-btn--blocked");
@@ -1477,7 +1520,9 @@ function showForge(): void {
         const se = node as HTMLSelectElement;
         const k = se.dataset.forgeKind as ForgeSlotKind;
         const v = se.value.trim();
-        if (COMBAT_BIOMES.some((id) => id === v)) {
+        if (v === "") {
+          forgeUiBiomePicksByHero[hi][k] = null;
+        } else if (COMBAT_BIOMES.some((id) => id === v)) {
           forgeUiBiomePicksByHero[hi][k] = v as ForgeEssenceId;
         }
         syncForgeHeroPanel(body, model.meta);
@@ -1492,7 +1537,7 @@ function showForge(): void {
         const bioSel = body.querySelector(
           `select.forge-biome-sel[data-forge-kind="${kind}"]`,
         ) as HTMLSelectElement;
-        const biome = bioSel.value as ForgeEssenceId;
+        const biome = bioSel.value.trim() as ForgeEssenceId | "";
         return forgeUpgradeButtonTooltipHtml(model.meta, hi, kind, biome);
       });
       btn.addEventListener("click", () => {
@@ -1501,7 +1546,12 @@ function showForge(): void {
         const bioSel = body.querySelector(
           `select.forge-biome-sel[data-forge-kind="${kind}"]`,
         ) as HTMLSelectElement;
-        const biome = bioSel.value as ForgeEssenceId;
+        const rawB = bioSel.value.trim();
+        if (rawB === "" || !COMBAT_BIOMES.some((id) => id === rawB)) {
+          playInputError();
+          return;
+        }
+        const biome = rawB as ForgeEssenceId;
         if (forgeTryCraftOrUpgrade(model.meta, hi, kind, biome)) {
           delete forgeUiBiomePicksByHero[hi][kind];
           model.saveMeta();
