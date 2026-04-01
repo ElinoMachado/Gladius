@@ -95,6 +95,7 @@ import {
   forgeSynergyCrestTooltipHtml,
   forgeSynergyPanelHtml,
   forgeSynergyTier,
+  heroSlotForgeSynergyStripHtml,
   forgeTryCraftOrUpgrade,
   forgeUpgradeButtonTooltipHtml,
   resolveEquippedBiome,
@@ -1880,15 +1881,21 @@ function showHeroSetup(): void {
     wrap.appendChild(label);
     wrap.appendChild(sel);
     mountCrystalSelect(sel);
-    const forgeL = resolveEquippedForgeLoadoutForMeta(
-      model.meta,
-      i as 0 | 1 | 2,
-    );
+    const slotMeta = i as 0 | 1 | 2;
+    const forgeL = resolveEquippedForgeLoadoutForMeta(model.meta, slotMeta);
     const forgePanel = el(
       `<div class="hero-slot-forge" role="region" aria-label="Equipamentos forjados (${heroSetupSlotLabels[i]})"></div>`,
     );
-    forgePanel.innerHTML = `<div class="hero-slot-forge__title">Equipamentos forjados neste slot</div>${heroSlotForgeEquipSummaryHtml(model.meta, i as 0 | 1 | 2)}`;
+    forgePanel.innerHTML = `<div class="hero-slot-forge__title">Equipamentos forjados neste slot</div>${heroSlotForgeEquipSummaryHtml(model.meta, slotMeta)}${heroSlotForgeSynergyStripHtml(forgeL)}`;
     wrap.appendChild(forgePanel);
+    forgePanel
+      .querySelectorAll<HTMLElement>("[data-slot-syn-biome]")
+      .forEach((tipEl) => {
+        const biome = tipEl.dataset.slotSynBiome as ForgeEssenceId;
+        bindGameTooltip(tipEl, () =>
+          forgeSynergyCrestTooltipHtml(biome, forgeSynergyTier(forgeL, biome)),
+        );
+      });
     wrap.appendChild(card);
     slotsRoot.appendChild(wrap);
     const hid = setup.slots[i];

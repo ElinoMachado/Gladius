@@ -1117,6 +1117,139 @@ h1 {
   box-shadow: -4px 0 14px rgba(255, 200, 80, 0.28);
 }
 
+/* Sinergias compactas (brasões) abaixo do resumo de equipamento no setup */
+.hero-slot-forge-syn {
+  margin-top: 0.42rem;
+  padding-top: 0.38rem;
+  border-top: 1px solid rgba(201, 162, 39, 0.28);
+}
+
+.hero-slot-forge-syn__lbl {
+  display: block;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b8a878;
+  margin-bottom: 0.28rem;
+}
+
+.hero-slot-forge-syn__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem 0.4rem;
+  align-items: flex-start;
+}
+
+.hero-slot-forge-syn-ico {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 0.1rem;
+  line-height: 0;
+  border-radius: 8px;
+  cursor: help;
+  border: 1px solid rgba(100, 90, 120, 0.5);
+  background: linear-gradient(
+    165deg,
+    rgba(36, 32, 48, 0.9) 0%,
+    rgba(14, 12, 20, 0.95) 100%
+  );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.hero-slot-forge-syn-ico:hover,
+.hero-slot-forge-syn-ico:focus-visible {
+  border-color: rgba(232, 197, 71, 0.65);
+  box-shadow:
+    0 0 10px rgba(212, 175, 55, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.hero-slot-forge-syn-ico:focus-visible {
+  outline: 2px solid rgba(232, 197, 71, 0.75);
+  outline-offset: 2px;
+}
+
+.hero-slot-forge-syn-ico .forge-biome-crest-wrap {
+  display: block;
+  line-height: 0;
+}
+
+.hero-slot-forge-syn-tier {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  min-width: 1.15rem;
+  padding: 0.04rem 0.18rem 0.06rem;
+  font-size: 0.52rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: #f5ecd8;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  background: rgba(8, 6, 12, 0.82);
+  border-radius: 4px 0 6px 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.hero-slot-forge-syn-ico--tier-0 .hero-slot-forge-syn-tier {
+  color: #9a9088;
+}
+
+.hero-slot-forge-syn-ico--tier-1 {
+  border-color: rgba(205, 130, 80, 0.55);
+  box-shadow: 0 0 8px rgba(184, 115, 51, 0.2);
+}
+
+.hero-slot-forge-syn-ico--tier-1 .hero-slot-forge-syn-tier {
+  color: #ffc8a0;
+  border-color: rgba(205, 127, 50, 0.45);
+}
+
+.hero-slot-forge-syn-ico--tier-2 {
+  border-color: rgba(190, 205, 230, 0.55);
+  box-shadow: 0 0 8px rgba(180, 195, 220, 0.22);
+}
+
+.hero-slot-forge-syn-ico--tier-2 .hero-slot-forge-syn-tier {
+  color: #dce8ff;
+  border-color: rgba(190, 205, 230, 0.4);
+}
+
+.hero-slot-forge-syn-ico--tier-3 {
+  border-color: rgba(255, 205, 90, 0.65);
+  box-shadow:
+    0 0 10px rgba(255, 200, 80, 0.35),
+    0 0 18px rgba(212, 175, 55, 0.2);
+}
+
+.hero-slot-forge-syn-ico--tier-3 .hero-slot-forge-syn-tier {
+  color: #fff0c0;
+  border-color: rgba(255, 215, 100, 0.5);
+}
+
+.hero-slot-forge-syn--empty .hero-slot-forge-syn__empty {
+  display: block;
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: #8a8078;
+  font-style: italic;
+}
+
+.hero-setup-screen .hero-slot-forge-syn {
+  border-top-color: rgba(201, 162, 39, 0.32);
+}
+
+.hero-setup-screen .hero-slot-forge-syn__lbl {
+  color: #d4af37;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
 .hero-slot-card {
   flex: 1 1 auto;
   min-height: min(440px, 48vh);

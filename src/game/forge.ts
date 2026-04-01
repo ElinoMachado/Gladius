@@ -1240,6 +1240,38 @@ export function forgeSynergyPanelHtml(L: ForgeHeroLoadout): string {
   return `<div class="forge-synergy-panel">${cards}</div>`;
 }
 
+/**
+ * Faixa compacta (só brasões) para o setup de heróis: sinergias da combinação
+ * equipada no slot. Tooltip = `forgeSynergyCrestTooltipHtml` (efeitos por tier).
+ */
+export function heroSlotForgeSynergyStripHtml(L: ForgeHeroLoadout): string {
+  const equipped = resolveEquippedForgeLoadout(L);
+  const present = new Set<ForgeEssenceId>();
+  for (const kind of FORGE_SLOT_ORDER) {
+    const p = equipped[kind];
+    if (p) present.add(p.biome);
+  }
+  const biomes = COMBAT_BIOMES.map((id) => id as ForgeEssenceId).filter((b) =>
+    present.has(b),
+  );
+  if (biomes.length === 0) {
+    return `<div class="hero-slot-forge-syn hero-slot-forge-syn--empty" role="status"><span class="hero-slot-forge-syn__empty">Sinergias: equipa elmo, capa e manoplas neste slot para ver os biomas da combinação; só nv3 contam para o tier. Paira nos brasões para ler os efeitos.</span></div>`;
+  }
+  const icons = biomes
+    .map((biome) => {
+      const tier = forgeSynergyTier(L, biome);
+      const crest = biomeCrestWrap(biome, 28);
+      const title = FORGE_ESSENCE_LABELS[biome];
+      const aria = `${title} — sinergia ${tier}/3 (só peças nv3 contam). Paira para ver os três níveis.`;
+      return `<div class="hero-slot-forge-syn-ico hero-slot-forge-syn-ico--tier-${tier}" tabindex="0" role="button" data-slot-syn-biome="${biome}" aria-label="${escapeForgeHtml(aria)}">${crest}<span class="hero-slot-forge-syn-tier" aria-hidden="true">${tier}/3</span></div>`;
+    })
+    .join("");
+  return `<div class="hero-slot-forge-syn" role="region" aria-label="Sinergias da combinação equipada neste slot">
+    <span class="hero-slot-forge-syn__lbl">Sinergias desta combinação</span>
+    <div class="hero-slot-forge-syn__row">${icons}</div>
+  </div>`;
+}
+
 /** Barra de essências com brasão por bioma. */
 export function forgeEssenceBarHtml(meta: MetaProgress): string {
   return `<div class="forge-essence-bar">${COMBAT_BIOMES.map((id) => {
