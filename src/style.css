@@ -4228,6 +4228,60 @@ body.enemy-inspect--dragging-body {
   color: #e8c547;
 }
 
+/* Loja ouro: bunker · sandbox · herói/atributos em linha */
+.shop-screen__panel--gold .shop-panel-inner {
+  max-width: min(1200px, 98vw);
+}
+
+.shop-mid-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 1rem 1.15rem;
+  margin: 0.65rem 0 1rem;
+}
+
+.shop-mid-cell {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.shop-mid-cell--bunker {
+  flex: 1 1 300px;
+}
+
+.shop-mid-cell--sandbox {
+  flex: 1 1 260px;
+}
+
+.shop-mid-cell--hero {
+  flex: 1.2 1 340px;
+}
+
+.shop-mid-row .shop-bunker {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.shop-mid-row .shop-sandbox-artifacts {
+  margin-top: 0;
+  height: 100%;
+  box-sizing: border-box;
+  max-height: min(520px, 70vh);
+  overflow-y: auto;
+}
+
+.shop-mid-row .shop-hero-viz {
+  margin: 0;
+  height: 100%;
+  min-height: 260px;
+  box-sizing: border-box;
+}
+
 .crystal-shop-panel-inner {
   position: relative;
   z-index: 1;
@@ -4587,7 +4641,7 @@ body.enemy-inspect--dragging-body {
   border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.shop-bunker + .shop-grid {
+.shop-mid-row + .shop-grid {
   margin-top: 0.95rem;
 }
 

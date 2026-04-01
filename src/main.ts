@@ -2207,6 +2207,13 @@ function showGoldShop(isInitial: boolean): void {
       party.length > 1
         ? `<p class="shop-hero-gold-multi-hint" role="note">O ouro acima é só <strong>deste herói</strong> — na loja, <strong>cada herói tem a sua própria bolsa</strong>; troca de herói para gastar o ouro de cada um.</p>`
         : "";
+    const bunkerShop = model.bunkerForShop();
+    const bunkerMidCell = bunkerShop
+      ? `<div class="shop-mid-cell shop-mid-cell--bunker">${goldShopBunkerSectionHtml(bunkerShop, h)}</div>`
+      : "";
+    const sandboxMidCell = model.devSandboxMode
+      ? `<div class="shop-mid-cell shop-mid-cell--sandbox">${goldShopSandboxArtifactsSectionHtml(h)}</div>`
+      : "";
     panel.innerHTML = `
       <div class="shop-panel-inner">
         <h1 class="shop-title hero-setup-main-title">Loja do coliseu</h1>
@@ -2220,15 +2227,19 @@ function showGoldShop(isInitial: boolean): void {
           <span class="shop-hero-gold__hero-idx">Herói ${idx + 1}/${party.length}</span>
         </div>
         ${goldMultiHint}
-        <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
-          <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
-          <div class="shop-hero-stats-col">
-            <p class="shop-hero-stats-head">Atributos atuais (como no combate)</p>
-            <div id="gold-shop-hero-stats" class="lol-stats-list gold-shop-hero-stats-grid"></div>
+        <div class="shop-mid-row">
+          ${bunkerMidCell}
+          ${sandboxMidCell}
+          <div class="shop-mid-cell shop-mid-cell--hero">
+            <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
+              <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
+              <div class="shop-hero-stats-col">
+                <p class="shop-hero-stats-head">Atributos atuais (como no combate)</p>
+                <div id="gold-shop-hero-stats" class="lol-stats-list gold-shop-hero-stats-grid"></div>
+              </div>
+            </div>
           </div>
         </div>
-        ${model.bunkerForShop() ? goldShopBunkerSectionHtml(model.bunkerForShop()!, h) : ""}
-        ${model.devSandboxMode ? goldShopSandboxArtifactsSectionHtml(h) : ""}
         <div class="shop-grid">${list}</div>
         <div class="shop-nav">
           <button type="button" class="btn" id="shop-prev" ${idx < 1 ? "disabled" : ""}>Herói anterior</button>
