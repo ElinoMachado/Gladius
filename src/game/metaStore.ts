@@ -94,6 +94,29 @@ function starterEssencesMap(): Partial<Record<ForgeEssenceId, number>> {
   return out;
 }
 
+/** Só chaves de bioma de combate; ignora lixo / tipos inválidos no JSON guardado. */
+function mergeEssencesFromSave(
+  saved: unknown,
+  defaults: Partial<Record<ForgeEssenceId, number>>,
+): Partial<Record<ForgeEssenceId, number>> {
+  const out: Partial<Record<ForgeEssenceId, number>> = { ...defaults };
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return out;
+  const o = saved as Record<string, unknown>;
+  for (const id of COMBAT_BIOMES) {
+    const k = id as ForgeEssenceId;
+    const raw = o[k as string];
+    if (raw === undefined || raw === null) continue;
+    const n =
+      typeof raw === "number"
+        ? raw
+        : typeof raw === "string"
+          ? Number(raw)
+          : NaN;
+    if (Number.isFinite(n) && n >= 0) out[k] = Math.floor(n);
+  }
+  return out;
+}
+
 const emptyForgeSlot = (): ForgeHeroLoadout => ({});
 
 /** Lê 3 slots do save principal sem perder mapas (antes de `normalizeForgeMeta`). */
@@ -135,7 +158,8 @@ export const defaultMeta = (): MetaProgress => ({
 function applyTestForgeEssences(
   essences: Partial<Record<ForgeEssenceId, number>>,
 ): Partial<Record<ForgeEssenceId, number>> {
-  if (TEST_FORGE_ESSENCES_EACH <= 0) return essences;
+  /** Em build de produção nunca sobrepõe o save (evita essências tipo 100 por constante de teste). */
+  if (TEST_FORGE_ESSENCES_EACH <= 0 || !import.meta.env.DEV) return essences;
   const out = { ...essences };
   for (const id of COMBAT_BIOMES) {
     out[id as ForgeEssenceId] = TEST_FORGE_ESSENCES_EACH;
@@ -149,10 +173,7 @@ function buildMetaFromMainBlob(raw: string): MetaProgress {
   return {
     ...d,
     ...o,
-    essences: {
-      ...d.essences,
-      ...(o.essences ?? {}),
-    },
+    essences: mergeEssencesFromSave(o.essences, d.essences),
     forgeGlobalProgress: sanitizeForgeGlobalProgress(
       o.forgeGlobalProgress ?? d.forgeGlobalProgress,
     ),
