@@ -194,8 +194,8 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
       ]);
       break;
     case "range":
-      core = wrap(display, [
-        `Representa quantos hexágonos de alcance serão aplicados às suas habilidades que escalam com esse atributo.`,
+      core = wrap("Alcance", [
+        `<strong>${v}</strong>. Representa quantos hexágonos de alcance serão aplicados às suas habilidades que escalam com esse atributo.`,
       ]);
       break;
     case "pot": {
@@ -234,8 +234,8 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
       ]);
       break;
     case "fly":
-      core = wrap(display, [
-        `Capacidade de transitar livremente pelo mapa. Criaturas voadoras não podem ser encurraladas por criaturas não voadoras. Você só pode ser atingido por habilidades com alcance 3 ou mais.`,
+      core = wrap("Voo", [
+        `<strong>${v}</strong>. Capacidade de transitar livremente pelo mapa. Criaturas voadoras não podem ser encurraladas por criaturas não voadoras. Você só pode ser atingido por habilidades com alcance 3 ou mais.`,
       ]);
       break;
     case "basic": {
