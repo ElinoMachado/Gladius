@@ -1894,7 +1894,10 @@ function showHeroSetup(): void {
         heroSetupWeaponAbilitiesTooltipHtml(hid, wl, baseD),
       );
       const host = card.querySelector(`[data-slot-model="${i}"]`) as HTMLElement;
-      const prev = new HeroPreview3D(host, 200, 200);
+      const prev = new HeroPreview3D(host, 220, 300, {
+        cameraZ: 2.95,
+        lookAtY: 0.7,
+      });
       prev.setHero(
         hid,
         colorHintToDisplayColor(HEROES[hid].colorHint),

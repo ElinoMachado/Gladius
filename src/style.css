@@ -1162,13 +1162,14 @@ h1 {
 
 .hero-slot-model-host {
   flex: 0 0 auto;
-  align-self: stretch;
-  width: 100%;
+  align-self: center;
+  width: min(100%, 248px);
   max-width: 100%;
   box-sizing: border-box;
-  margin: 0.45rem 0 0;
-  height: 200px;
-  min-height: 200px;
+  margin: 0.45rem auto 0;
+  aspect-ratio: 220 / 300;
+  height: auto;
+  min-height: 0;
   border-radius: 6px;
   overflow: hidden;
   background: radial-gradient(

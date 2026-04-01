@@ -13,6 +13,13 @@ function disposeObject3D(o: THREE.Object3D): void {
   });
 }
 
+export type HeroPreview3DOptions = {
+  /** Maior = modelo mais afastado (menos cortado nas bordas do quadro). */
+  cameraZ?: number;
+  /** Ponto de interesse vertical da câmara. */
+  lookAtY?: number;
+};
+
 /** Preview rotativo para ecrãs de setup (não partilha o renderer principal do jogo). */
 export class HeroPreview3D {
   private renderer: THREE.WebGLRenderer;
@@ -23,7 +30,12 @@ export class HeroPreview3D {
   private raf = 0;
   private running = false;
 
-  constructor(host: HTMLElement, width: number, height: number) {
+  constructor(
+    host: HTMLElement,
+    width: number,
+    height: number,
+    opts?: HeroPreview3DOptions,
+  ) {
     this.host = host;
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -34,9 +46,11 @@ export class HeroPreview3D {
     this.renderer.setClearColor(0x000000, 0);
     host.appendChild(this.renderer.domElement);
 
+    const camZ = opts?.cameraZ ?? 2.35;
+    const lookY = opts?.lookAtY ?? 0.72;
     this.camera = new THREE.PerspectiveCamera(40, width / Math.max(height, 1), 0.1, 50);
-    this.camera.position.set(0, 1.05, 2.35);
-    this.camera.lookAt(0, 0.72, 0);
+    this.camera.position.set(0, 1.05, camZ);
+    this.camera.lookAt(0, lookY, 0);
 
     const amb = new THREE.AmbientLight(0xccccee, 0.58);
     const dir = new THREE.DirectionalLight(0xfff2dd, 0.9);
