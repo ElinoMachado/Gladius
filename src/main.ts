@@ -2270,6 +2270,10 @@ function showGoldShop(isInitial: boolean): void {
           <div class="shop-hero-stats-col">
             <p class="shop-hero-stats-head">Atributos atuais (como no combate)</p>
             <div id="gold-shop-hero-stats" class="lol-stats-list gold-shop-hero-stats-grid"></div>
+            <div id="gold-shop-hero-skills-wrap" class="gold-shop-hero-skills-wrap" hidden>
+              <p class="shop-hero-stats-head">Habilidades (como no combate)</p>
+              <div id="gold-shop-hero-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do herói"></div>
+            </div>
           </div>
         </div>
         <div class="shop-mid-row">
@@ -2369,7 +2373,14 @@ function showGoldShop(isInitial: boolean): void {
     const heroStatsEl = panel.querySelector(
       "#gold-shop-hero-stats",
     ) as HTMLElement;
+    const skillsWrap = panel.querySelector(
+      "#gold-shop-hero-skills-wrap",
+    ) as HTMLElement | null;
+    const skillsRow = panel.querySelector(
+      "#gold-shop-hero-skills",
+    ) as HTMLElement | null;
     if (h.heroClass) {
+      if (skillsWrap) skillsWrap.hidden = false;
       goldShopHeroPreview3d = new HeroPreview3D(hero3dHost, 220, 260);
       goldShopHeroPreview3d.setHero(
         h.heroClass,
@@ -2378,7 +2389,12 @@ function showGoldShop(isInitial: boolean): void {
       );
       goldShopHeroPreview3d.start();
       renderHeroStatsGrid(heroStatsEl, heroStatCells(h, model));
+      if (skillsRow) mountGoldShopHeroSkillsRow(skillsRow, h, model);
     } else {
+      if (skillsWrap) {
+        skillsWrap.hidden = true;
+        if (skillsRow) skillsRow.innerHTML = "";
+      }
       hero3dHost.style.display = "none";
       heroStatsEl.innerHTML =
         '<p class="shop-hero-stats-fallback">Sem classe — sem pré-visualização 3D.</p>';
@@ -2463,6 +2479,189 @@ function combatSquareSkillHtml(opts: {
       selAttr += ` data-combat-select-id="${escapeHtml(opts.selectId)}"`;
   }
   return `<button type="button" class="${cls}"${dis}${st}${hkAttr}${selAttr} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${fill}${opts.iconHtml}<span class="lol-skill-key-wrap"><span class="lol-key">${escapeHtml(opts.hotkey)}</span></span><span class="lol-mana-badge" aria-hidden="true">${escapeHtml(opts.manaBadge)}</span></button>`;
+}
+
+/** Ícone de skill na loja (sem tecla de combate); tooltips iguais ao HUD. */
+function goldShopSkillChipHtml(opts: {
+  iconHtml: string;
+  manaBadge: string;
+  ariaLabel: string;
+  cdTurns?: number;
+  extraClass?: string;
+  extraStyle?: string;
+  ultFill?: boolean;
+}): string {
+  const parts = [
+    "btn",
+    "lol-skill-btn",
+    "lol-skill-btn--square",
+    "gold-shop-skill-chip",
+  ];
+  if (opts.extraClass) parts.push(opts.extraClass);
+  const cls = parts.join(" ");
+  const st = opts.extraStyle ? ` style="${opts.extraStyle}"` : "";
+  const fill = opts.ultFill
+    ? '<span class="lol-weapon-ult-fill" aria-hidden="true"></span>'
+    : "";
+  const cdBadge =
+    opts.cdTurns != null && opts.cdTurns > 0
+      ? `<span class="lol-skill-cd-badge" aria-hidden="true">${String(opts.cdTurns)}</span>`
+      : "";
+  return `<button type="button" class="${cls}" tabindex="0"${st} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${fill}${opts.iconHtml}<span class="lol-mana-badge" aria-hidden="true">${escapeHtml(opts.manaBadge)}</span></button>`;
+}
+
+/** Preenche a fila de skills na loja com os mesmos tooltips que no combate. */
+function mountGoldShopHeroSkillsRow(
+  row: HTMLElement,
+  h: Unit,
+  m: GameModel,
+): void {
+  row.innerHTML = "";
+  if (!h.heroClass) return;
+  const tmpl = HEROES[h.heroClass];
+  const cdEff = (cd: number) => (m.devSandboxMode ? 0 : cd);
+  const append = (html: string, tip: () => string): void => {
+    const b = el(html);
+    b.addEventListener("click", (e) => e.preventDefault());
+    bindGameTooltip(b, tip);
+    row.appendChild(b);
+  };
+
+  append(
+    goldShopSkillChipHtml({
+      iconHtml: basicAttackIconHtml(),
+      manaBadge: "0",
+      ariaLabel: "Ataque básico",
+    }),
+    () => tooltipBasicAttack(h, m),
+  );
+
+  const bunk = m.bunkerAtHex(h.q, h.r);
+  const inBunker = !!bunk && bunk.occupantId === h.id;
+  if (inBunker && bunk) {
+    const cdM = cdEff(h.skillCd["bunker_minas"] ?? 0);
+    append(
+      goldShopSkillChipHtml({
+        iconHtml: skillButtonIconHtml("bunker_minas"),
+        manaBadge: "0",
+        ariaLabel: ariaSkillLabel("Minas terrestres", cdM),
+        cdTurns: cdM > 0 ? cdM : undefined,
+      }),
+      () => tooltipBunkerMinasCombat(h, m),
+    );
+    if (bunk.tier >= 2) {
+      const cdT = cdEff(h.skillCd["bunker_tiro_preciso"] ?? 0);
+      append(
+        goldShopSkillChipHtml({
+          iconHtml: skillButtonIconHtml("bunker_tiro_preciso"),
+          manaBadge: "0",
+          ariaLabel: ariaSkillLabel("Tiro preciso", cdT),
+          cdTurns: cdT > 0 ? cdT : undefined,
+        }),
+        () => tooltipBunkerTiroCombat(h, m),
+      );
+    }
+  } else {
+    if (h.heroClass === "gladiador") {
+      const inFuria = (h.furiaGiganteTurns ?? 0) > 0;
+      if (inFuria) {
+        const cd = cdEff(h.skillCd["pisotear"] ?? 0);
+        const mc = pisotearManaCost(h.weaponLevel);
+        append(
+          goldShopSkillChipHtml({
+            iconHtml: skillButtonIconHtml("pisotear"),
+            manaBadge: String(mc),
+            ariaLabel: ariaSkillLabel("Pisotear", cd),
+            cdTurns: cd > 0 ? cd : undefined,
+          }),
+          () => tooltipSkillPisotear(h, m),
+        );
+      } else {
+        const sk0 = tmpl.skills[0]!;
+        const skA: SkillDef = {
+          id: "ate_a_morte",
+          name: sk0.name,
+          description: sk0.description,
+          cooldownWaves: ateMorteCooldownWaves(h.weaponLevel),
+          manaCost: ateMorteManaCost(h.weaponLevel),
+        };
+        const cd = cdEff(h.skillCd["ate_a_morte"] ?? 0);
+        append(
+          goldShopSkillChipHtml({
+            iconHtml: skillButtonIconHtml("ate_a_morte"),
+            manaBadge: String(ateMorteManaCost(h.weaponLevel)),
+            ariaLabel: ariaSkillLabel(skA.name, cd),
+            cdTurns: cd > 0 ? cd : undefined,
+          }),
+          () => tooltipSkillAteMorte(h, m, skA),
+        );
+      }
+    } else {
+      for (const sk of tmpl.skills) {
+        if (sk.id === "sentenca") {
+          const sm = sentencaManaCost(h.weaponLevel);
+          const cdS = cdEff(h.skillCd[sk.id] ?? 0);
+          append(
+            goldShopSkillChipHtml({
+              iconHtml: skillButtonIconHtml(sk.id),
+              manaBadge: String(sm),
+              ariaLabel: ariaSkillLabel(sk.name, cdS),
+              cdTurns: cdS > 0 ? cdS : undefined,
+            }),
+            () => tooltipSkillById(h, m, sk),
+          );
+          continue;
+        }
+        const cd = cdEff(h.skillCd[sk.id] ?? 0);
+        append(
+          goldShopSkillChipHtml({
+            iconHtml: skillButtonIconHtml(sk.id),
+            manaBadge: String(sk.manaCost ?? 0),
+            ariaLabel: ariaSkillLabel(sk.name, cd),
+            cdTurns: cd > 0 ? cd : undefined,
+          }),
+          () => tooltipSkillById(h, m, sk),
+        );
+      }
+    }
+
+    if (
+      h.heroClass === "sacerdotisa" ||
+      h.heroClass === "pistoleiro" ||
+      h.heroClass === "gladiador"
+    ) {
+      const cls = h.heroClass!;
+      const ready = m.devSandboxMode || h.weaponUltMeter >= 1;
+      const pct = Math.round(m.devSandboxMode ? 100 : h.weaponUltMeter * 100);
+      const wname = weaponUltNamePt(cls);
+      const wid = weaponUltIconId(cls);
+      append(
+        goldShopSkillChipHtml({
+          iconHtml: skillButtonIconHtml(wid),
+          manaBadge: "0",
+          ariaLabel: wname,
+          extraClass: `lol-skill-btn--weapon-ult ${ready ? "lol-skill-btn--weapon-ult--ready" : ""}`,
+          extraStyle: `--weapon-ult-pct:${pct}`,
+          ultFill: true,
+        }),
+        () => tooltipWeaponUltimate(h),
+      );
+    }
+
+    if (h.ultimateId === "especialista_destruicao") {
+      const ult = HEROES.pistoleiro.ultimates.find(
+        (u) => u.id === "especialista_destruicao",
+      )!;
+      append(
+        goldShopSkillChipHtml({
+          iconHtml: skillButtonIconHtml("especialista_destruicao"),
+          manaBadge: "0",
+          ariaLabel: ult.name,
+        }),
+        () => tooltipEspecialista(h, m),
+      );
+    }
+  }
 }
 
 function displayColorCss(n: number): string {

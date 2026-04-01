@@ -4766,6 +4766,24 @@ body.enemy-inspect--dragging-body {
   padding-right: 0.25rem;
 }
 
+.gold-shop-hero-skills-wrap {
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid rgba(201, 168, 90, 0.12);
+}
+
+.gold-shop-hero-skills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.shop-screen__panel--gold .gold-shop-skill-chip {
+  cursor: default;
+  flex-shrink: 0;
+}
+
 .shop-hero-stats-fallback {
   margin: 0;
   font-size: 0.82rem;
