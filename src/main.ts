@@ -1828,6 +1828,7 @@ function showHeroSetup(): void {
   `);
   uiRoot.appendChild(s);
   const slotsRoot = s.querySelector("#hero-slots")!;
+  const heroSetupSlotLabels = ["1º a começar", "2º a começar", "3º a começar"];
   const opts: { value: string; label: string }[] = [
     { value: "", label: "— Vazio —" },
     ...(["pistoleiro", "gladiador", "sacerdotisa"] as HeroClassId[]).map(
@@ -1836,7 +1837,9 @@ function showHeroSetup(): void {
   ];
   for (let i = 0; i < 3; i++) {
     const wrap = el(`<div class="hero-slot" data-slot="${i}"></div>`);
-    const label = el(`<label class="hero-slot-label">Slot ${i + 1}</label>`);
+    const label = el(
+      `<label class="hero-slot-label">${heroSetupSlotLabels[i]}</label>`,
+    );
     const sel = document.createElement("select");
     sel.className = "hero-slot-select";
     for (const o of opts) {
@@ -1861,7 +1864,7 @@ function showHeroSetup(): void {
       i as 0 | 1 | 2,
     );
     const forgePanel = el(
-      `<div class="hero-slot-forge" role="region" aria-label="Equipamentos forjados no slot ${i + 1} da party"></div>`,
+      `<div class="hero-slot-forge" role="region" aria-label="Equipamentos forjados (${heroSetupSlotLabels[i]})"></div>`,
     );
     forgePanel.innerHTML = `<div class="hero-slot-forge__title">Equipamentos forjados neste slot</div>${heroSlotForgeEquipSummaryHtml(model.meta, i as 0 | 1 | 2)}`;
     wrap.appendChild(forgePanel);
