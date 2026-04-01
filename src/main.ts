@@ -53,6 +53,7 @@ import {
 } from "./ui/colorTriangle";
 import { initMusicVolumeControl } from "./ui/musicVolumeControl";
 import { mountCrystalSelect } from "./ui/crystalSelect";
+import { biomeCrestWrap } from "./ui/biomeCrests";
 import { axialKey, hexDistance } from "./game/hex";
 import {
   permPercent,
@@ -1214,7 +1215,8 @@ function heroSlotForgeEquipSummaryHtml(
     }
     const bio = BIOME_LABELS[cur.biome as BiomeId];
     const t = cur.level;
-    return `<div class="hero-slot-forge__row hero-slot-forge__row--forge-tier-${t}"><span class="hero-slot-forge__k">${escapeHtml(label)}</span><span class="hero-slot-forge__v">${escapeHtml(bio)} <span class="hero-slot-forge__nv hero-slot-forge__nv--tier-${t}">nv ${t}</span></span></div>`;
+    const crest = biomeCrestWrap(cur.biome as ForgeEssenceId, 22);
+    return `<div class="hero-slot-forge__row hero-slot-forge__row--forge-tier-${t}"><span class="hero-slot-forge__k">${escapeHtml(label)}</span><span class="hero-slot-forge__v"><span class="hero-slot-forge__syn-name"><span class="hero-slot-forge__syn-crest" aria-hidden="true">${crest}</span><span class="hero-slot-forge__syn-txt">${escapeHtml(bio)}</span></span> <span class="hero-slot-forge__nv hero-slot-forge__nv--tier-${t}">nv ${t}</span></span></div>`;
   }).join("");
   return `<div class="hero-slot-forge__box" role="status">${rows}</div>`;
 }

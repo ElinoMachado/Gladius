@@ -1038,6 +1038,25 @@ h1 {
   color: #e4dce8;
   flex: 1 1 auto;
   min-width: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.35rem;
+}
+
+.hero-slot-forge__syn-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+}
+
+.hero-slot-forge__syn-crest {
+  flex: 0 0 auto;
+  line-height: 0;
+}
+
+.hero-slot-forge__syn-crest .forge-biome-crest-wrap {
+  display: block;
 }
 
 .hero-slot-forge__v--empty {
