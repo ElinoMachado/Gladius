@@ -515,6 +515,17 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
       }
     } else if (m.biome === "rochoso") {
       if (m.level === 1) {
+        u.dano += 10;
+        u.danoCritico += 0.75;
+      } else if (m.level === 2) {
+        u.dano += 20;
+        u.danoCritico += 1.5;
+      } else {
+        u.dano += 30;
+        u.danoCritico += 3;
+      }
+    } else if (m.biome === "vulcanico") {
+      if (m.level === 1) {
         u.dano += 30;
         u.acertoCritico += 50;
       } else if (m.level === 2) {
@@ -636,6 +647,11 @@ export function forgePieceDescription(
     return "+60 dano, +75% crítico, +25% roubo de vida";
   }
   if (biome === "rochoso") {
+    if (level === 1) return "+10 dano, +75% dano crítico";
+    if (level === 2) return "+20 dano, +150% dano crítico";
+    return "+30 dano, +300% dano crítico";
+  }
+  if (biome === "vulcanico") {
     if (level === 1) return "+30 dano, +50% chance crítica";
     if (level === 2) return "+75 dano, +75% chance crítica";
     return "+120 dano, +100% chance crítica";
@@ -819,6 +835,17 @@ export function forgePieceEffectHtml(
       p.push(forgeFxSeg("lifesteal", u, "+25% roubo de vida"));
     }
   } else if (biome === "rochoso") {
+    if (level === 1) {
+      p.push(forgeFxSeg("dmg", u, "+10 dano, "));
+      p.push(forgeFxSeg("crit_dmg", u, "+75% dano crítico"));
+    } else if (level === 2) {
+      p.push(forgeFxSeg("dmg", u, "+20 dano, "));
+      p.push(forgeFxSeg("crit_dmg", u, "+150% dano crítico"));
+    } else {
+      p.push(forgeFxSeg("dmg", u, "+30 dano, "));
+      p.push(forgeFxSeg("crit_dmg", u, "+300% dano crítico"));
+    }
+  } else if (biome === "vulcanico") {
     if (level === 1) {
       p.push(forgeFxSeg("dmg", u, "+30 dano, "));
       p.push(forgeFxSeg("crit_hit", u, "+50% chance crítica"));
