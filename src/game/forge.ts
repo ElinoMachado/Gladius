@@ -849,51 +849,47 @@ export function forgeSynergyDescriptionLines(
 ): string[] {
   if (biome === "vulcanico") {
     return [
-      "1 peça: ignora dano vulcânico no fim do turno. Com Ruler: +10 vida em vez de perder.",
-      "2 peças: dano ambiental vulcânico contra inimigos é dobrado.",
-      "3 peças: crítico com ataque básico aplica 50% do dano a todos os inimigos.",
+      "Ignora dano vulcânico no fim do turno. Com Ruler: +10 vida em vez de perder.",
+      "Dano ambiental vulcânico contra inimigos é dobrado.",
+      "Crítico com ataque básico aplica 50% do dano a todos os inimigos.",
     ];
   }
   if (biome === "deserto") {
     return [
-      "1 peça: ignora anulação de regen no deserto. Com Ruler: +2 regen de vida e mana.",
-      "2 peças: no deserto, dobra regen de vida e mana; aliados recebem 50% da tua regen de vida e mana.",
-      "3 peças: ao subir de nível: cura 100% vida/mana da party; excesso vira escudo (100%).",
+      "Ignora anulação de regen no deserto. Com Ruler: +2 regen de vida e mana.",
+      "No deserto, dobra regen de vida e mana; aliados recebem 50% da tua regen de vida e mana.",
+      "Ao subir de nível: cura 100% vida/mana da party; excesso vira escudo (100%).",
     ];
   }
   if (biome === "floresta") {
     return [
-      "1 peça: na floresta, +2 alcance; inimigos na floresta não ganham +1 de alcance.",
-      "2 peças: voo; mantém o bônus de alcance da floresta fora dela.",
-      "3 peça: sorte dobrada.",
+      "Na floresta, +2 alcance; inimigos na floresta não ganham +1 de alcance.",
+      "Voo; mantém o bônus de alcance da floresta fora dela.",
+      "Sorte dobrada.",
     ];
   }
   if (biome === "pantano") {
     return [
-      "1 peça: ignora penalidade de movimento no pântano; com Ruler: +1 movimento para ti e todos os aliados.",
-      "2 peças: inimigos com movimento < 4 causam 50% menos dano.",
-      "3 peças: dobra os teus pontos de movimento no turno.",
+      "Ignora penalidade de movimento no pântano; com Ruler: +1 movimento para ti e todos os aliados.",
+      "Inimigos com movimento < 4 causam 50% menos dano.",
+      "Dobra os teus pontos de movimento no turno.",
     ];
   }
   if (biome === "montanhoso") {
     return [
-      "1 peça: +100% armadura no montanhoso, +50% fora; com Ruler: inimigos no montanhoso perdem 50% defesa.",
-      "2 peças: aliados ganham 25% da tua defesa; +10% da tua defesa como dano extra nos teus golpes.",
-      "3 peças: dobra os teus pontos de defesa.",
+      "+100% armadura no montanhoso, +50% fora; com Ruler: inimigos no montanhoso perdem 50% defesa.",
+      "Aliados ganham 25% da tua defesa; +10% da tua defesa como dano extra nos teus golpes.",
+      "Dobra os teus pontos de defesa.",
     ];
   }
   if (biome === "rochoso") {
     return [
-      "1 peça: no rochoso, +200% ao multiplicador de crítico; com Ruler: +50% dano crítico por titular (aliados).",
-      "2 peças: críticos com básico atingem inimigos até 2 hex do alvo.",
-      "3 peças: adjacentes a ti levam 100% do teu dano no fim do turno deles (pode crítar); ao moveres, inimigos focam-te.",
+      "No rochoso, +200% ao multiplicador de crítico; com Ruler: +50% dano crítico por titular (aliados).",
+      "Críticos com básico atingem inimigos até 2 hex do alvo.",
+      "Adjacentes a ti levam 100% do teu dano no fim do turno deles (pode crítar); ao moveres, inimigos focam-te.",
     ];
   }
-  return [
-    "1 peça: sem efeito.",
-    "2 peças: sem efeito.",
-    "3 peças: sem efeito.",
-  ];
+  return ["Sem efeito.", "Sem efeito.", "Sem efeito."];
 }
 
 /** Tooltip do brasão no cartão de sinergia (3 níveis com destaque do que está ativo). */
