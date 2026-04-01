@@ -526,9 +526,7 @@ function bindSetupStatCells(
   container: HTMLElement,
   heroClass: HeroClassId,
 ): void {
-  const t = HEROES[heroClass];
-  const critMultStr =
-    heroClass === "sacerdotisa" ? "150%" : heroClass === "gladiador" ? "175%" : "200%";
+  void heroClass;
   container.querySelectorAll(".setup-stat-cell .lol-stat-ico[data-ico]").forEach((ico) => {
     const sub = ico as HTMLElement;
     const sid = sub.dataset.ico as StatIconId;
@@ -540,13 +538,7 @@ function bindSetupStatCells(
     const value = el.dataset.value ?? "";
     bindGameTooltip(el, () =>
       stat
-        ? setupHeroStatTooltip({
-            stat,
-            heroClass,
-            display: value,
-            baseDano: t.dano,
-            critMultStr,
-          })
+        ? setupHeroStatTooltip({ stat, display: value })
         : tooltipStatCell(el.dataset.label ?? "", value),
     );
   });
@@ -3604,8 +3596,6 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         combatHeroStatTooltip({
           stat: "crit_dmg",
           display: `${Math.round(critMultCur * 100)}%`,
-          dano: heroDanoPlusRoninOverflow(h),
-          critMultEffective: critMultCur,
           detailPlain: plain.includes("(") ? plain : undefined,
         }),
     );
@@ -3879,8 +3869,6 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       tooltipHtml: combatHeroStatTooltip({
         stat: "crit_dmg",
         display: critDmgDE,
-        dano: heroDanoPlusRoninOverflow(h),
-        critMultEffective: critMultCur,
       }),
     });
     cells.push({

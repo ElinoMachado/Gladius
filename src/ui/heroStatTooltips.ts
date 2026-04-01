@@ -1,5 +1,4 @@
 import { damageReductionPercentFromDefense } from "../game/combatMath";
-import type { HeroClassId } from "../game/types";
 import type { StatIconId } from "./statIcons";
 
 function formatReductionPctFromDefense(effDef: number): string {
@@ -27,24 +26,14 @@ function wrap(title: string, bodies: string[]): string {
   return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">${esc(title)}</div>${bodies.map(p).join("")}</div>`;
 }
 
-function critMultFromDisplayPercent(critMultStr: string): number {
-  const n = parseInt(critMultStr.replace(/%/g, ""), 10);
-  return Number.isFinite(n) ? n / 100 : 1.5;
-}
-
 export interface SetupStatTooltipInput {
   stat: StatIconId;
-  heroClass: HeroClassId;
   display: string;
-  baseDano: number;
-  critMultStr: string;
 }
 
 /** Setup: corpo sem repetir o nome do atributo antes dos dois pontos; título identifica o stat. */
 export function setupHeroStatTooltip(t: SetupStatTooltipInput): string {
-  const { stat, display, baseDano, critMultStr } = t;
-  const mult = critMultFromDisplayPercent(critMultStr);
-  const approxCrit = Math.max(0, Math.round(baseDano * mult));
+  const { stat, display } = t;
   const v = esc(display);
 
   switch (stat) {
@@ -74,7 +63,7 @@ export function setupHeroStatTooltip(t: SetupStatTooltipInput): string {
       ]);
     case "crit_dmg":
       return wrap("Dano crítico", [
-        `<strong>${v}</strong>. Representa o seu dano crítico caso acerte um golpe crítico. Você pode causar <strong>${approxCrit}</strong> (<strong>${esc(String(baseDano))}</strong> × <strong>${v}</strong>)!`,
+        `<strong>${v}</strong>. Representa o seu dano crítico caso acerte um golpe crítico. Você pode causar (dano x dano critico) de dano!`,
       ]);
     case "def": {
       const n = parseInt(String(display).trim(), 10);
@@ -98,8 +87,6 @@ export interface CombatStatTooltipInput {
   detailPlain?: string;
   defenseNumeric?: string;
   defenseReductionPct?: string;
-  dano?: number;
-  critMultEffective?: number;
   potencialNumeric?: number;
 }
 
@@ -116,8 +103,6 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
     detailPlain,
     defenseNumeric,
     defenseReductionPct,
-    dano,
-    critMultEffective,
     potencialNumeric,
   } = i;
 
@@ -155,24 +140,11 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
         `<strong>${v}</strong>. Representa a chance de acertar um golpe crítico.`,
       ]);
       break;
-    case "crit_dmg": {
-      const approx =
-        dano != null &&
-        critMultEffective != null &&
-        Number.isFinite(dano) &&
-        Number.isFinite(critMultEffective)
-          ? Math.max(0, Math.round(dano * critMultEffective))
-          : null;
-      const dStr = dano != null && Number.isFinite(dano) ? esc(String(dano)) : "";
-      const critPart =
-        approx != null && dStr
-          ? ` Você pode causar <strong>${approx}</strong> (<strong>${dStr}</strong> × <strong>${v}</strong>)!`
-          : "";
+    case "crit_dmg":
       core = wrap("Dano crítico", [
-        `<strong>${v}</strong>. Representa o seu dano crítico caso acerte um golpe crítico.${critPart}`,
+        `<strong>${v}</strong>. Representa o seu dano crítico caso acerte um golpe crítico. Você pode causar (dano x dano critico) de dano!`,
       ]);
       break;
-    }
     case "def": {
       const numShown = defenseNumeric ?? display;
       const n = parseInt(String(numShown).trim(), 10);
