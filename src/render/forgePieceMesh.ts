@@ -32,6 +32,57 @@ function stdMat(
   });
 }
 
+/** Rebites, fechos, crista, asas: bronze (1) · prata (2) · ouro (3), com emissivo. */
+export function forgeTierAccentMaterial(level: 1 | 2 | 3): THREE.MeshStandardMaterial {
+  if (level === 1) {
+    return new THREE.MeshStandardMaterial({
+      color: 0x8b4a1e,
+      metalness: 0.91,
+      roughness: 0.19,
+      emissive: 0xff6a1a,
+      emissiveIntensity: 0.52,
+    });
+  }
+  if (level === 2) {
+    return new THREE.MeshStandardMaterial({
+      color: 0x9caec8,
+      metalness: 0.94,
+      roughness: 0.15,
+      emissive: 0xc8e4ff,
+      emissiveIntensity: 0.46,
+    });
+  }
+  return new THREE.MeshStandardMaterial({
+    color: 0xd99a10,
+    metalness: 0.92,
+    roughness: 0.13,
+    emissive: 0xffe24a,
+    emissiveIntensity: 0.62,
+  });
+}
+
+/** Gemas / orbes: mistura bioma + brilho do tier. */
+export function forgeTierJewelMaterial(
+  biomeHex: number,
+  level: 1 | 2 | 3,
+): THREE.MeshStandardMaterial {
+  const b = new THREE.Color(biomeHex);
+  const tierEm =
+    level === 1
+      ? new THREE.Color(0xff9444).lerp(b, 0.38)
+      : level === 2
+        ? new THREE.Color(0xdcedff).lerp(b, 0.28)
+        : new THREE.Color(0xfff0a0).lerp(b, 0.22);
+  const intens = level === 1 ? 0.52 : level === 2 ? 0.58 : 0.78;
+  return new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    metalness: 0.2,
+    roughness: 0.14,
+    emissive: tierEm,
+    emissiveIntensity: intens,
+  });
+}
+
 function addRivet(
   parent: THREE.Group,
   x: number,
@@ -58,13 +109,8 @@ export function buildHelmetForgeDetail(
     emissiveIntensity: level * 0.06,
   });
   const dark = stdMat(tone(col, 0.35), { metalness: 0.35, roughness: 0.55 });
-  const trim = stdMat(0xc9a040, { metalness: 0.75, roughness: 0.28 });
-  const gem = stdMat(0xffffff, {
-    metalness: 0.2,
-    emissive: col,
-    emissiveIntensity: 0.45,
-    roughness: 0.2,
-  });
+  const accent = forgeTierAccentMaterial(level);
+  const gem = forgeTierJewelMaterial(col, level);
 
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(0.32, 36, 28, 0, Math.PI * 2, 0, Math.PI * 0.52),
@@ -133,13 +179,13 @@ export function buildHelmetForgeDetail(
       Math.sin(a) * r,
       0.02 + (i % 3) * 0.02,
       Math.cos(a) * r * 0.35 - 0.02,
-      trim,
+      accent,
     );
   }
 
   const crestBase = new THREE.Mesh(
     new THREE.CylinderGeometry(0.04, 0.09, 0.12, 8),
-    trim,
+    accent,
   );
   crestBase.position.set(0, 0.38, -0.06);
   root.add(crestBase);
@@ -160,7 +206,7 @@ export function buildHelmetForgeDetail(
   if (level >= 2) {
     const wingL = new THREE.Mesh(
       new THREE.BoxGeometry(0.22, 0.04, 0.12),
-      trim,
+      accent,
     );
     wingL.position.set(-0.36, 0.12, -0.05);
     wingL.rotation.z = 0.5;
@@ -176,7 +222,7 @@ export function buildHelmetForgeDetail(
   if (level >= 3) {
     const halo = new THREE.Mesh(
       new THREE.TorusGeometry(0.22, 0.012, 8, 32),
-      trim,
+      accent,
     );
     halo.rotation.x = Math.PI / 2;
     halo.position.set(0, 0.44, -0.12);
@@ -206,8 +252,7 @@ export function buildCapeForgeDetail(
     roughness: 0.88,
     side: THREE.DoubleSide,
   });
-  const clasp = stdMat(0xb89250, { metalness: 0.65, roughness: 0.35 });
-  const trim = stdMat(0xd4c4a0, { metalness: 0.4, roughness: 0.45 });
+  const accent = forgeTierAccentMaterial(level);
 
   const segs = 14;
   const capeGeo = new THREE.PlaneGeometry(0.95, 1.15, segs, segs);
@@ -251,7 +296,7 @@ export function buildCapeForgeDetail(
 
   const claspRing = new THREE.Mesh(
     new THREE.TorusGeometry(0.055, 0.022, 8, 20),
-    clasp,
+    accent,
   );
   claspRing.rotation.y = Math.PI / 2;
   claspRing.position.set(0, 0.58, 0.08);
@@ -259,11 +304,7 @@ export function buildCapeForgeDetail(
 
   const gem = new THREE.Mesh(
     new THREE.OctahedronGeometry(0.05, 0),
-    stdMat(0xfff8e8, {
-      emissive: col,
-      emissiveIntensity: 0.25 + level * 0.08,
-      metalness: 0.3,
-    }),
+    forgeTierJewelMaterial(col, level),
   );
   gem.position.set(0, 0.58, 0.095);
   root.add(gem);
@@ -272,7 +313,7 @@ export function buildCapeForgeDetail(
   for (let i = 0; i < 6; i++) {
     const ch = new THREE.Mesh(
       new THREE.CylinderGeometry(0.012, 0.012, 0.14, 6),
-      trim,
+      accent,
     );
     ch.position.set(-0.35 + i * 0.14, 0.05, -0.09);
     ch.rotation.z = 0.15 + i * 0.05;
@@ -297,7 +338,7 @@ export function buildCapeForgeDetail(
   if (level >= 3) {
     const chain = new THREE.Mesh(
       new THREE.TorusGeometry(0.4, 0.015, 6, 40),
-      clasp,
+      accent,
     );
     chain.rotation.x = Math.PI / 2;
     chain.position.set(0, -0.35, -0.06);
@@ -325,7 +366,7 @@ export function buildManoplasForgeDetail(
     metalness: 0.15,
     roughness: 0.72,
   });
-  const rivetM = stdMat(0x8a7a60, { metalness: 0.5, roughness: 0.4 });
+  const accent = forgeTierAccentMaterial(level);
 
   function gauntlet(side: 1 | -1): THREE.Group {
     const g = new THREE.Group();
@@ -376,14 +417,14 @@ export function buildManoplasForgeDetail(
     thumb.rotation.x = 0.35;
     g.add(thumb);
 
-    addRivet(g, side * 0.06, 0.12, 0.11, rivetM);
-    addRivet(g, side * -0.04, 0.06, 0.09, rivetM);
-    addRivet(g, side * 0.04, -0.02, 0.02, rivetM);
+    addRivet(g, side * 0.06, 0.12, 0.11, accent);
+    addRivet(g, side * -0.04, 0.06, 0.09, accent);
+    addRivet(g, side * 0.04, -0.02, 0.02, accent);
 
     if (level >= 2) {
       const spike = new THREE.Mesh(
         new THREE.ConeGeometry(0.025, 0.1, 6),
-        plate,
+        accent,
       );
       spike.position.set(side * 0.1, 0.14, 0.02);
       spike.rotation.x = -0.8;
@@ -393,11 +434,7 @@ export function buildManoplasForgeDetail(
     if (level >= 3) {
       const orb = new THREE.Mesh(
         new THREE.SphereGeometry(0.045, 12, 10),
-        stdMat(0xffffff, {
-          emissive: col,
-          emissiveIntensity: 0.5,
-          metalness: 0.2,
-        }),
+        forgeTierJewelMaterial(col, level),
       );
       orb.position.set(side * 0.02, 0.02, 0.14);
       g.add(orb);

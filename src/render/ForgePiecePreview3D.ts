@@ -46,6 +46,9 @@ export class ForgePiecePreview3D {
   private running = false;
   private onResize = (): void => this.fit();
   private kind: ForgeSlotKind = "helmo";
+  /** Luz pontual pulsante (cor do tier) para realçar bronze/prata/ouro. */
+  private tierGlow: THREE.PointLight | null = null;
+  private tierGlowBase = 0.9;
 
   constructor(host: HTMLElement) {
     this.host = host;
@@ -83,6 +86,10 @@ export class ForgePiecePreview3D {
     level: 1 | 2 | 3,
   ): void {
     this.kind = kind;
+    if (this.tierGlow) {
+      this.scene.remove(this.tierGlow);
+      this.tierGlow = null;
+    }
     disposeObject3D(this.pivot);
     this.pivot.clear();
     if (biome != null) {
@@ -91,6 +98,19 @@ export class ForgePiecePreview3D {
       else if (kind === "capa") piece.scale.setScalar(1.02);
       else piece.scale.setScalar(0.92);
       this.pivot.add(piece);
+
+      const glowColor =
+        level === 1 ? 0xff6630 : level === 2 ? 0xb8d8ff : 0xffe566;
+      this.tierGlowBase = level === 1 ? 0.92 : level === 2 ? 0.85 : 1.02;
+      const lg = new THREE.PointLight(
+        glowColor,
+        this.tierGlowBase,
+        4.2,
+        1.85,
+      );
+      lg.position.set(0.48, 0.34, 0.58);
+      this.tierGlow = lg;
+      this.scene.add(lg);
     }
 
     const { pos, target } = cameraSetupForKind(kind);
@@ -119,6 +139,10 @@ export class ForgePiecePreview3D {
       const t = (now - t0) * 0.001;
       this.pivot.rotation.y = Math.sin(t * 0.5) * 0.22;
       this.pivot.rotation.x = Math.sin(t * 0.35) * 0.06;
+      if (this.tierGlow) {
+        const pulse = 0.86 + 0.14 * Math.sin(t * 2.35);
+        this.tierGlow.intensity = this.tierGlowBase * pulse;
+      }
       this.renderer.render(this.scene, this.camera);
     };
     this.raf = requestAnimationFrame(loop);
