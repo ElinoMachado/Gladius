@@ -4,8 +4,8 @@ import type { Unit } from "./types";
 export interface DamageContext {
   attackerBiome: BiomeId;
   defenderBiome: BiomeId;
-  /** Atacante em rochoso: +100% ao multiplicador de dano crítico */
-  rochosoCritBonus?: boolean;
+  /** Soma extra ao multiplicador de crítico por bioma rochoso (0, 1 ou 2). */
+  rochosoCritAdd?: number;
 }
 
 export function rollCrit(chancePercent: number): boolean {
@@ -68,15 +68,15 @@ export function computeMitigatedDamage(
   return Math.max(1, mitigated);
 }
 
+/** `rochosoCritAdd`: bónus plano ao multiplicador (ex. +1 base no rochoso, +2 com sinergia forja nv1). */
 export function applyCritMultiplier(
   mitigated: number,
   critDamageMult: number,
   isCrit: boolean,
-  rochosoBonus: boolean,
+  rochosoCritAdd = 0,
 ): number {
   if (!isCrit) return mitigated;
-  let m = critDamageMult;
-  if (rochosoBonus) m += 1;
+  const m = critDamageMult + rochosoCritAdd;
   return Math.max(1, Math.floor(mitigated * m));
 }
 

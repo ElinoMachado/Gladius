@@ -25,9 +25,10 @@ describe("combatMath", () => {
   });
 
   it("applies crit multiplier", () => {
-    expect(applyCritMultiplier(10, 1.5, false, false)).toBe(10);
-    expect(applyCritMultiplier(10, 1.5, true, false)).toBe(15);
-    expect(applyCritMultiplier(10, 1.5, true, true)).toBe(25);
+    expect(applyCritMultiplier(10, 1.5, false, 0)).toBe(10);
+    expect(applyCritMultiplier(10, 1.5, true, 0)).toBe(15);
+    expect(applyCritMultiplier(10, 1.5, true, 1)).toBe(25);
+    expect(applyCritMultiplier(10, 1.5, true, 2)).toBe(35);
   });
 
   it("montanhoso adds defense", () => {

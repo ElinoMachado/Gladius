@@ -29,6 +29,7 @@ import {
   resolveEssenceDropCount,
   FORGE_ESSENCE_LABELS,
   forgeSynergyTier,
+  getForgeLevel,
   pantanoHelmoXpBonusPercent,
 } from "./forge";
 import { createEnemyUnit, createHeroUnit, xpCurve, biomeAt } from "./unitFactory";
@@ -292,6 +293,8 @@ export class GameModel {
   } | null = null;
   /** 1 = normal; menor que 1 acelera movimento/pausa na fase inimiga (muitos inimigos). */
   private enemyPhaseTimingMult = 1;
+  /** Sinergia rochosa nv3: último herói com forja que se moveu — inimigos priorizam-no. */
+  private rochosoTauntHeroId: string | null = null;
 
   private combatFloats: CombatFloatEvent[] = [];
 
@@ -582,6 +585,22 @@ export class GameModel {
     return add;
   }
 
+  /**
+   * Soma ao multiplicador de dano crítico: +0,5 por aliado vivo com sinergia rochosa nv1+ e Ruler
+   * (inclui o próprio atacante se cumprir).
+   */
+  rochosoRulerAllyCritMultBonus(att: Unit): number {
+    if (!att.isPlayer) return 0;
+    let add = 0;
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      if (forgeSynergyTier(h.forgeLoadout, "rochoso") < 1) continue;
+      if ((h.artifacts["ruler"] ?? 0) <= 0) continue;
+      add += 0.5;
+    }
+    return add;
+  }
+
   /** Sorte efetiva (ex.: sinergia floresta nv3 dobra). */
   effectiveSorte(u: Unit): number {
     let s = u.sorte;
@@ -762,6 +781,7 @@ export class GameModel {
     this.pendingUltimate = null;
     this.phase = "shop_initial";
     this.currentHeroIndex = 0;
+    this.rochosoTauntHeroId = null;
     this.emit();
   }
 
@@ -784,6 +804,7 @@ export class GameModel {
     this.wave = n;
     this.inEnemyPhase = false;
     this.lastEnemyActedId = null;
+    this.rochosoTauntHeroId = null;
     this.enemyTurnQueue = [];
     this.clearDead();
     for (const u of this.units) {
@@ -1170,6 +1191,10 @@ export class GameModel {
   private pickEnemyHeroTarget(e: Unit): Unit | null {
     const party = this.getParty().filter((u) => u.hp > 0);
     if (!party.length) return null;
+    if (this.rochosoTauntHeroId) {
+      const taunt = party.find((u) => u.id === this.rochosoTauntHeroId);
+      if (taunt) return taunt;
+    }
     const bio =
       e.enemySpawnBiome && e.enemySpawnBiome !== "hub"
         ? e.enemySpawnBiome
@@ -1561,6 +1586,7 @@ export class GameModel {
       if (this.phase !== "combat" || !this.inEnemyPhase) return;
       const u = this.units.find((x) => x.id === enemyId);
       if (u && !u.isPlayer && u.hp > 0) {
+        this.applyRochosoTier3EndOfEnemyTurnRiposte(u);
         this.applyPoisonAndHotTick(u);
         this.onDeaths();
       }
@@ -1697,6 +1723,20 @@ export class GameModel {
       for (const hero of this.getParty()) {
         if (hero.hp > 0) this.flushCombatLevelUp(hero);
       }
+    }
+  }
+
+  /** Sinergia rochosa nv3: dano reflexo dos heróis adjacentes ao inimigo no fim do turno dele. */
+  private applyRochosoTier3EndOfEnemyTurnRiposte(e: Unit): void {
+    if (e.isPlayer || e.hp <= 0) return;
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      if (forgeSynergyTier(h.forgeLoadout, "rochoso") < 3) continue;
+      if (hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r }) > 1) continue;
+      const raw = this.computeBasicAttackRawDamage(h);
+      if (raw <= 0) continue;
+      const cr = rollCrit(h.acertoCritico + roninCritBonus(h));
+      this.dealDamage(h, e, raw, cr, true, true);
     }
   }
 
@@ -1885,6 +1925,9 @@ export class GameModel {
       bTo.occupantId = h.id;
     }
     h.immobileThisTurn = false;
+    if (forgeSynergyTier(h.forgeLoadout, "rochoso") >= 3) {
+      this.rochosoTauntHeroId = h.id;
+    }
     this.log(`${h.name} move para (${toQ},${toR}).`);
     this.emit();
     return true;
@@ -1942,7 +1985,10 @@ export class GameModel {
   }
 
   private maxBasicAttacksForHero(h: Unit): number {
-    return 1 + (h.artifacts["braco_forte"] ?? 0);
+    let cap = 1 + (h.artifacts["braco_forte"] ?? 0);
+    const rh = getForgeLevel(h.forgeLoadout, "helmo", "rochoso");
+    if (rh === 1 || rh === 2 || rh === 3) cap += rh;
+    return cap;
   }
 
   private syncBasicLeftFromSpent(h: Unit): void {
@@ -2431,6 +2477,29 @@ export class GameModel {
         this.dealDamage(att, e, splash, false, false, false);
       }
     }
+    if (
+      hpDmg > 0 &&
+      crit &&
+      att.isPlayer &&
+      forgeSynergyTier(att.forgeLoadout, "rochoso") >= 2
+    ) {
+      for (const e of this.enemies()) {
+        if (e.id === def.id || e.hp <= 0) continue;
+        const d = hexDistance(
+          { q: def.q, r: def.r },
+          { q: e.q, r: e.r },
+        );
+        if (d < 1 || d > 2) continue;
+        this.dealDamage(
+          att,
+          e,
+          raw,
+          rollCrit(att.acertoCritico + roninCritBonus(att)),
+          true,
+          true,
+        );
+      }
+    }
   }
 
   private dealDamage(
@@ -2503,8 +2572,18 @@ export class GameModel {
       defStat = Math.max(0, Math.floor(defStat * 0.5));
     }
     let mit = computeMitigatedDamage(rawUse, defStat, src.penetracao);
-    const rochoso =
-      atkBio === "rochoso" && !unitIgnoresTerrain(src);
+    const ignAtk = unitIgnoresTerrain(src);
+    let rochosoCritAdd = 0;
+    if (atkBio === "rochoso" && !ignAtk) {
+      if (
+        src.isPlayer &&
+        forgeSynergyTier(src.forgeLoadout, "rochoso") >= 1
+      ) {
+        rochosoCritAdd = 2;
+      } else {
+        rochosoCritAdd = 1;
+      }
+    }
     const totalCrit = src.acertoCritico + roninCritBonus(src);
     if (totalCrit > 100) {
       mit = Math.floor(mit * (1 + (totalCrit - 100) * 0.02));
@@ -2521,9 +2600,11 @@ export class GameModel {
     }
     mit = applyCritMultiplier(
       mit,
-      src.danoCritico + critMultExtra,
+      src.danoCritico +
+        critMultExtra +
+        this.rochosoRulerAllyCritMultBonus(src),
       useCrit,
-      rochoso,
+      rochosoCritAdd,
     );
     let dmg = mit;
     if (useBunkerDefense) {

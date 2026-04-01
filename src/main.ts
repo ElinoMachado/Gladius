@@ -3179,7 +3179,16 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   const movPool = m.heroMovementPool(h);
   const effAlc = m.effectiveAlcanceForHero(h);
   const roch = bio === "rochoso" && !ign;
-  const critMultCur = h.danoCritico + (roch ? 1 : 0);
+  const rochCritTileAdd =
+    roch && h.isPlayer && forgeSynergyTier(h.forgeLoadout, "rochoso") >= 1
+      ? 2
+      : roch
+        ? 1
+        : 0;
+  const critMultCur =
+    h.danoCritico +
+    rochCritTileAdd +
+    (h.isPlayer ? m.rochosoRulerAllyCritMultBonus(h) : 0);
   const fd = forgeSynergyTier(h.forgeLoadout, "deserto");
   const desertoBlock = bio === "deserto" && !ign && fd < 1;
   const regMult =
@@ -3225,7 +3234,14 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       Math.floor((baseDeserto ? 0 : b.regenMana) * baseRegMult) +
       m.desertoAllyRegenExtraMana(h, (u) => u.statBaseline?.regenMana ?? u.regenMana) +
       baseRulerDesertRegen;
-    const critMultBase = b.danoCritico + (roch ? 1 : 0);
+    const critMultBase =
+      b.danoCritico +
+      (roch && forgeSynergyTier(h.forgeLoadout, "rochoso") >= 1
+        ? 2
+        : roch
+          ? 1
+          : 0) +
+      m.rochosoRulerAllyCritMultBonus(h);
 
     const waveExtra = h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
 
