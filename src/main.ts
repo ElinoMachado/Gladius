@@ -1243,17 +1243,35 @@ function syncForgeKindRow(
       : null;
   const preservedPick = forgeUiBiomePicksByHero[hi][kind];
   /** Select novo após paint vem vazio: usa escolha memorizada, depois linha equipada neste slot. */
-  const selectedEssence: ForgeEssenceId =
+  let selectedEssence: ForgeEssenceId =
     fromUser ??
     preservedPick ??
     resolveEquippedBiome(L, kind, g) ??
     ("floresta" as ForgeEssenceId);
 
+  const biomeForgeSelectable = (eid: ForgeEssenceId) =>
+    !forgeBiomeEquippedOnOtherSlot(meta, hi, kind, eid);
+  if (!biomeForgeSelectable(selectedEssence)) {
+    const eq = resolveEquippedBiome(L, kind, g);
+    selectedEssence =
+      (eq != null && biomeForgeSelectable(eq) ? eq : null) ??
+      (COMBAT_BIOMES.find((b) => biomeForgeSelectable(b as ForgeEssenceId)) as
+        | ForgeEssenceId
+        | undefined) ??
+      ("floresta" as ForgeEssenceId);
+    forgeUiBiomePicksByHero[hi][kind] = selectedEssence;
+  }
+
   bioSel.disabled = false;
+  const forgeOptLockedTitle = "Já equipado noutro slot da party";
   bioSel.innerHTML = COMBAT_BIOMES.map((b) => {
     const eid = b as ForgeEssenceId;
     const sel = eid === selectedEssence ? " selected" : "";
-    return `<option value="${eid}"${sel}>${escapeHtml(FORGE_ESSENCE_LABELS[eid])}</option>`;
+    const onOther = forgeBiomeEquippedOnOtherSlot(meta, hi, kind, eid);
+    const dis = onOther
+      ? ` disabled title="${escapeHtml(forgeOptLockedTitle)}"`
+      : "";
+    return `<option value="${eid}"${sel}${dis}>${escapeHtml(FORGE_ESSENCE_LABELS[eid])}</option>`;
   }).join("");
   if (![...bioSel.options].some((o) => o.selected)) {
     bioSel.selectedIndex = 0;

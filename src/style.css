@@ -570,6 +570,16 @@ body {
   color: #fff8e8;
 }
 
+.crystal-select__option--disabled,
+.crystal-select__option--disabled:hover,
+.crystal-select__option--disabled:focus {
+  opacity: 0.45;
+  color: #6a6278;
+  cursor: not-allowed;
+  background: transparent;
+  pointer-events: none;
+}
+
 .hero-setup-screen .crystal-select--hero .crystal-select__trigger {
   border: 2px solid rgba(201, 162, 39, 0.45);
   border-radius: 8px;
@@ -681,9 +691,12 @@ body {
   color: #9aa4b0;
 }
 
-.hero-setup-screen .hero-slot-passive,
-.hero-setup-screen .hero-slot-passive small {
-  color: #b8c0cc;
+.hero-setup-screen .hero-slot-passive__title {
+  color: #f0d878;
+}
+
+.hero-setup-screen .hero-slot-passive {
+  color: #e8c547;
 }
 
 .hero-setup-screen .setup-stat-cell .lol-stat-val {
@@ -1106,9 +1119,20 @@ h1 {
   padding-right: 0.2rem;
 }
 
+.hero-slot-passive__title {
+  margin: 0 0 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #e6c65c;
+  text-shadow: 0 0 12px rgba(201, 162, 39, 0.25);
+}
+
 .hero-slot-passive {
   margin: 0;
-  color: #a89880;
+  font-size: 0.78rem;
+  color: #d4af37;
   line-height: 1.35;
 }
 
@@ -4033,6 +4057,24 @@ body.enemy-inspect--dragging-body {
   font-size: 0.88rem;
 }
 
+.shop-hero-gold-multi-hint {
+  margin: -0.15rem 0 0.65rem;
+  padding: 0.5rem 0.6rem 0.5rem 0.65rem;
+  max-width: 44rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(210, 198, 170, 0.95);
+  border-left: 3px solid rgba(201, 162, 39, 0.55);
+  background: rgba(8, 6, 14, 0.35);
+  border-radius: 0 5px 5px 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.shop-hero-gold-multi-hint strong {
+  color: #e8c547;
+  font-weight: 700;
+}
+
 .shop-screen__panel--gold .shop-hero-viz {
   background: linear-gradient(
     168deg,
@@ -5125,6 +5167,11 @@ select.forge-slot-sel option,
 select.forge-biome-sel option {
   background: #25222e;
   color: #e8e4dc;
+}
+
+select.forge-biome-sel option:disabled {
+  color: #6a6278;
+  opacity: 0.65;
 }
 
 .forge-essence-bar {

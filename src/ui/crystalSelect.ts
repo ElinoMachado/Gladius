@@ -107,13 +107,19 @@ export function mountCrystalSelect(select: HTMLSelectElement): void {
       li.setAttribute("role", "option");
       li.dataset.value = opt.value;
       li.textContent = opt.text;
+      const disabled = opt.disabled;
+      li.classList.toggle("crystal-select__option--disabled", disabled);
+      li.setAttribute("aria-disabled", disabled ? "true" : "false");
+      if (disabled) li.tabIndex = -1;
+      const title = opt.getAttribute("title");
+      if (title) li.setAttribute("title", title);
       const selected = i === select.selectedIndex;
       li.setAttribute("aria-selected", selected ? "true" : "false");
       li.classList.toggle("crystal-select__option--selected", selected);
       li.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (select.disabled) return;
+        if (select.disabled || opt.disabled) return;
         select.selectedIndex = i;
         select.dispatchEvent(new Event("change", { bubbles: true }));
         syncLabelFromSelect();
@@ -155,7 +161,7 @@ export function mountCrystalSelect(select: HTMLSelectElement): void {
     childList: true,
     subtree: true,
     attributes: true,
-    attributeFilter: ["disabled"],
+    attributeFilter: ["disabled", "title"],
   });
 
   refresh();

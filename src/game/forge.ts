@@ -1254,12 +1254,6 @@ export function forgeUpgradeButtonTooltipHtml(
   }
   const g = meta.forgeGlobalProgress ?? {};
   const curLv = getForgeProgressLevel(g, kind, selectedBiome);
-  const onOther = forgeBiomeEquippedOnOtherSlot(
-    meta,
-    heroSlotIndex,
-    kind,
-    selectedBiome,
-  );
   if (curLv != null && curLv >= 3) {
     return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Nível máximo</div><p class="game-ui-tooltip-passive">Esta linha (${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])}) já está no nv3 em todo o grupo. Escolhe outra essência no menu.</p></div>`;
   }
@@ -1275,11 +1269,7 @@ export function forgeUpgradeButtonTooltipHtml(
   const nextLev = (curLv + 1) as 2 | 3;
   const fx = forgePieceEffectHtml(kind, nextLev, 530, selectedBiome);
   const shared = `<p class="game-ui-tooltip-passive">O nível é <strong>global</strong>: todos os slots veem nv${nextLev} nesta linha.</p>`;
-  const otherEq =
-    onOther && curLv != null
-      ? `<p class="game-ui-tooltip-passive">Esta linha está equipada noutro slot; podes aprimorar na mesma — o nível sobe para toda a party.</p>`
-      : "";
-  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Aprimorar → nv${nextLev}</div><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p>${shared}${otherEq}<p class="game-ui-tooltip-passive"><strong>Estado após aprimorar</strong></p>${fx}</div>`;
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Aprimorar → nv${nextLev}</div><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p>${shared}<p class="game-ui-tooltip-passive"><strong>Estado após aprimorar</strong></p>${fx}</div>`;
 }
 
 export function forgeTryCraftOrUpgrade(
