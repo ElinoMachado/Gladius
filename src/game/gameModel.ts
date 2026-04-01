@@ -3247,14 +3247,16 @@ export class GameModel {
     const mm = paraisoManaShieldMult(w);
     const reg = paraisoRegenBonus(w);
     const regT = paraisoRegenTurns(w);
+    const potMult = 1 + h.potencialCuraEscudo / 100;
     for (const ally of this.getParty()) {
       if (ally.hp <= 0) continue;
       const manaPart = Math.floor(ally.maxMana * mm);
-      ally.shieldGGBlue += flat + manaPart;
+      const shieldRaw = flat + manaPart;
+      ally.shieldGGBlue += Math.floor(shieldRaw * potMult);
       ally.paraisoRegenBonus = {
         turns: regT,
-        bonusHp: reg,
-        bonusMana: reg,
+        bonusHp: Math.floor(reg * potMult),
+        bonusMana: Math.floor(reg * potMult),
       };
     }
     if (!this.devSandboxMode) this.resetWeaponUltCharge(h);

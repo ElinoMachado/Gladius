@@ -2547,7 +2547,7 @@ function mountGoldShopHeroSkillsRow(
   append(
     goldShopSkillChipHtml({
       iconHtml: basicAttackIconHtml(),
-      manaBadge: "0",
+      manaBadge: formatTooltipNumber(0),
       ariaLabel: "Ataque básico",
     }),
     () => tooltipBasicAttack(h, m),
@@ -2558,9 +2558,9 @@ function mountGoldShopHeroSkillsRow(
   if (inBunker && bunk) {
     const cdM = cdEff(h.skillCd["bunker_minas"] ?? 0);
     append(
-      goldShopSkillChipHtml({
-        iconHtml: skillButtonIconHtml("bunker_minas"),
-        manaBadge: "0",
+        goldShopSkillChipHtml({
+          iconHtml: skillButtonIconHtml("bunker_minas"),
+          manaBadge: formatTooltipNumber(0),
         ariaLabel: ariaSkillLabel("Minas terrestres", cdM),
         cdTurns: cdM > 0 ? cdM : undefined,
       }),
@@ -2571,7 +2571,7 @@ function mountGoldShopHeroSkillsRow(
       append(
         goldShopSkillChipHtml({
           iconHtml: skillButtonIconHtml("bunker_tiro_preciso"),
-          manaBadge: "0",
+          manaBadge: formatTooltipNumber(0),
           ariaLabel: ariaSkillLabel("Tiro preciso", cdT),
           cdTurns: cdT > 0 ? cdT : undefined,
         }),
@@ -2587,7 +2587,7 @@ function mountGoldShopHeroSkillsRow(
         append(
           goldShopSkillChipHtml({
             iconHtml: skillButtonIconHtml("pisotear"),
-            manaBadge: String(mc),
+            manaBadge: formatTooltipNumber(mc),
             ariaLabel: ariaSkillLabel("Pisotear", cd),
             cdTurns: cd > 0 ? cd : undefined,
           }),
@@ -2606,7 +2606,7 @@ function mountGoldShopHeroSkillsRow(
         append(
           goldShopSkillChipHtml({
             iconHtml: skillButtonIconHtml("ate_a_morte"),
-            manaBadge: String(ateMorteManaCost(h.weaponLevel)),
+            manaBadge: formatTooltipNumber(ateMorteManaCost(h.weaponLevel)),
             ariaLabel: ariaSkillLabel(skA.name, cd),
             cdTurns: cd > 0 ? cd : undefined,
           }),
@@ -2621,7 +2621,7 @@ function mountGoldShopHeroSkillsRow(
           append(
             goldShopSkillChipHtml({
               iconHtml: skillButtonIconHtml(sk.id),
-              manaBadge: String(sm),
+              manaBadge: formatTooltipNumber(sm),
               ariaLabel: ariaSkillLabel(sk.name, cdS),
               cdTurns: cdS > 0 ? cdS : undefined,
             }),
@@ -2633,7 +2633,7 @@ function mountGoldShopHeroSkillsRow(
         append(
           goldShopSkillChipHtml({
             iconHtml: skillButtonIconHtml(sk.id),
-            manaBadge: String(sk.manaCost ?? 0),
+            manaBadge: formatTooltipNumber(sk.manaCost ?? 0),
             ariaLabel: ariaSkillLabel(sk.name, cd),
             cdTurns: cd > 0 ? cd : undefined,
           }),
@@ -2655,7 +2655,7 @@ function mountGoldShopHeroSkillsRow(
       append(
         goldShopSkillChipHtml({
           iconHtml: skillButtonIconHtml(wid),
-          manaBadge: "0",
+          manaBadge: formatTooltipNumber(0),
           ariaLabel: wname,
           extraClass: `lol-skill-btn--weapon-ult ${ready ? "lol-skill-btn--weapon-ult--ready" : ""}`,
           extraStyle: `--weapon-ult-pct:${pct}`,
@@ -2672,7 +2672,7 @@ function mountGoldShopHeroSkillsRow(
       append(
         goldShopSkillChipHtml({
           iconHtml: skillButtonIconHtml("especialista_destruicao"),
-          manaBadge: "0",
+          manaBadge: formatTooltipNumber(0),
           ariaLabel: ult.name,
         }),
         () => tooltipEspecialista(h, m),
@@ -2825,12 +2825,12 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const mul = atirarDamageMult(w);
     const approx = Math.floor(baseDano * mul);
     skillBlock = tipLines(sk.name, [
-      { label: "Nível arma:", value: String(w), kind: "fx" },
-      { label: "CDR:", value: `${cd} onda(s)`, kind: "cdr" },
-      { label: "Mana:", value: "0", kind: "mana" },
+      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
+      { label: "CDR:", value: `${formatTooltipNumber(cd)} onda(s)`, kind: "cdr" },
+      { label: "Mana:", value: formatTooltipNumber(0), kind: "mana" },
       {
         label: "Dano:",
-        value: `${Math.round(mul * 100)}% do dano base (~${approx} bruto por alvo no nível 1)`,
+        value: `${formatTooltipNumber(Math.round(mul * 100))}% do dano base (~${formatTooltipNumber(approx)} bruto por alvo no nível 1)`,
         kind: "dmg",
       },
     ]);
@@ -2840,12 +2840,12 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const mc = ateMorteManaCost(w);
     const approx = Math.floor(baseDano * mul);
     skillBlock = tipLines(sk.name, [
-      { label: "Nível arma:", value: String(w), kind: "fx" },
-      { label: "CDR:", value: `${cd} onda(s)`, kind: "cdr" },
-      { label: "Mana:", value: String(mc), kind: "mana" },
+      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
+      { label: "CDR:", value: `${formatTooltipNumber(cd)} onda(s)`, kind: "cdr" },
+      { label: "Mana:", value: formatTooltipNumber(mc), kind: "mana" },
       {
         label: "Dano:",
-        value: `${Math.round(mul * 100)}% do dano base no duelo (~${approx} bruto por teu golpe no nv. 1)`,
+        value: `${formatTooltipNumber(Math.round(mul * 100))}% do dano base no duelo (~${formatTooltipNumber(approx)} bruto por teu golpe no nv. 1)`,
         kind: "dmg",
       },
     ]);
@@ -2857,22 +2857,22 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const sh = sentencaShieldOverflowRatio(w);
     const approx = Math.floor(baseDano * dm);
     skillBlock = tipLines(sk.name, [
-      { label: "Nível arma:", value: String(w), kind: "fx" },
-      { label: "CDR:", value: `${cd} onda(s)`, kind: "cdr" },
-      { label: "Mana:", value: String(mc), kind: "mana" },
+      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
+      { label: "CDR:", value: `${formatTooltipNumber(cd)} onda(s)`, kind: "cdr" },
+      { label: "Mana:", value: formatTooltipNumber(mc), kind: "mana" },
       {
         label: "Dano:",
-        value: `${Math.round(dm * 100)}% dano base inimigos no teu bioma (~${approx} bruto/alvo no nv. 1)`,
+        value: `${formatTooltipNumber(Math.round(dm * 100))}% dano base inimigos no teu bioma (~${formatTooltipNumber(approx)} bruto/alvo no nv. 1)`,
         kind: "dmg",
       },
       {
         label: "Cura aliados:",
-        value: `${Math.round(hm * 100)}% do dano causado`,
+        value: `${formatTooltipNumber(Math.round(hm * 100))}% do dano causado (potencial cura/escudo multiplica a cura no combate)`,
         kind: "fx",
       },
       {
         label: "Excesso → escudo:",
-        value: `${Math.round(sh * 100)}% da cura excedente`,
+        value: `${formatTooltipNumber(Math.round(sh * 100))}% da cura excedente`,
         kind: "fx",
       },
     ]);
@@ -2880,16 +2880,20 @@ function heroSetupWeaponAbilitiesTooltipHtml(
 
   let ultBlock: string;
   if (cls === "sacerdotisa") {
+    const flat = paraisoShieldFlat(w);
+    const mm = paraisoManaShieldMult(w);
+    const reg = paraisoRegenBonus(w);
+    const regT = paraisoRegenTurns(w);
     ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
-      { label: "Nível arma:", value: String(w), kind: "fx" },
+      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
       {
         label: "Carga:",
-        value: `Acumula ao curar e aplicar escudo em aliados vivos (${th} pontos no total; Sentença conta; o Paraíso não adiciona carga)`,
+        value: `Acumula ao curar e aplicar escudo em aliados vivos (${formatTooltipNumber(th)} pontos no total; Sentença conta; o Paraíso não adiciona carga)`,
         kind: "cdr",
       },
       {
         label: "Efeito:",
-        value: `Escudo ${paraisoShieldFlat(w)} + ${Math.round(paraisoManaShieldMult(w) * 100)}% mana máx.; regen +${paraisoRegenBonus(w)} PV e mana por ${paraisoRegenTurns(w)} turnos (aliados)`,
+        value: `Por aliado: escudo ⌊(fixo ${formatTooltipNumber(flat)} + ${formatTooltipNumber(Math.round(mm * 100))}% mana máx.) × (1 + potencial cura/escudo %)⌋; regen +${formatTooltipNumber(reg)} PV/mana base por ${formatTooltipNumber(regT)} turno(s) (ambos × potencial no combate)`,
         kind: "fx",
       },
     ]);
@@ -2897,40 +2901,39 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const mul = furacaoDamageMult(w);
     const approx = Math.floor(baseDano * mul);
     ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
-      { label: "Nível arma:", value: String(w), kind: "fx" },
+      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
       {
         label: "Carga:",
-        value: `${th} golpes que causem dano`,
+        value: `${formatTooltipNumber(th)} golpes que causem dano`,
         kind: "cdr",
       },
       {
         label: "Dano:",
-        value: `${Math.round(mul * 100)}% dano base em toda a arena (~${approx} bruto/alvo no nv. 1)`,
+        value: `${formatTooltipNumber(Math.round(mul * 100))}% dano base em toda a arena (~${formatTooltipNumber(approx)} bruto/alvo no nv. 1)`,
         kind: "dmg",
       },
       {
         label: "Crítico:",
-        value: `Sangramento ${Math.round(furacaoBleedPct(w) * 100)}% do dano em ${furacaoBleedTurns(w)} turno(s)`,
+        value: `Sangramento ${formatTooltipNumber(Math.round(furacaoBleedPct(w) * 100))}% do dano em ${formatTooltipNumber(furacaoBleedTurns(w))} turno(s)`,
         kind: "fx",
       },
     ]);
   } else {
     ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
-      { label: "Nível arma:", value: String(w), kind: "fx" },
+      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
       {
         label: "Carga:",
-        value: `${th} de dano sofrido (acumulado)`,
+        value: `${formatTooltipNumber(th)} de dano sofrido (acumulado)`,
         kind: "cdr",
       },
       {
         label: "Efeito:",
-        value:
-          "+50% vida máxima e PV atuais, dano = 10% da vida máxima atual, 3 turnos; desbloqueia Pisotear",
+        value: `+${formatTooltipNumber(50)}% vida máxima e PV atuais, dano = ${formatTooltipNumber(10)}% da vida máxima atual, ${formatTooltipNumber(3)} turnos; desbloqueia Pisotear`,
         kind: "fx",
       },
       {
         label: "Pisotear (na Fúria):",
-        value: `Mana ${pisotearManaCost(w)}, CDR ${pisotearCooldownWaves(w)} onda(s), alcance 1–${pisotearMaxHexDistance(w)} hex, ${pisotearDamageMult(w)}× dano atual por alvo`,
+        value: `Mana ${formatTooltipNumber(pisotearManaCost(w))}, CDR ${formatTooltipNumber(pisotearCooldownWaves(w))} onda(s), alcance ${formatTooltipNumber(1)}–${formatTooltipNumber(pisotearMaxHexDistance(w))} hex, ${formatTooltipNumber(pisotearDamageMult(w))}× dano atual por alvo`,
         kind: "fx",
       },
     ]);
@@ -2969,7 +2972,7 @@ function hudWeaponIconSvg(cls: HeroClassId): string {
 function combatPassiveDescription(h: Unit): string {
   if (h.heroClass === "sacerdotisa") {
     const p = priestPassivePotencialPoints(h.level);
-    return `Reduz perda de ouro entre rodadas em 1. +${p}% potencial de cura/escudo (25% base + 25% a cada 10 níveis do herói).`;
+    return `Reduz perda de ouro entre rodadas em ${formatTooltipNumber(1)}. +${formatTooltipNumber(p)}% potencial de cura/escudo (${formatTooltipNumber(25)}% base + ${formatTooltipNumber(25)}% a cada ${formatTooltipNumber(10)} níveis do herói).`;
   }
   if (h.heroClass === "pistoleiro") {
     return HEROES.pistoleiro.passiveDescription;
@@ -2998,46 +3001,64 @@ function tooltipWeaponUltimate(h: Unit): string {
   const th = weaponUltThreshold(cls);
   const pct = Math.round(h.weaponUltMeter * 100);
   if (cls === "sacerdotisa") {
+    const flat = paraisoShieldFlat(w);
+    const mm = paraisoManaShieldMult(w);
+    const reg = paraisoRegenBonus(w);
+    const regT = paraisoRegenTurns(w);
+    const potMult = 1 + h.potencialCuraEscudo / 100;
+    const mmPct = formatTooltipNumber(Math.round(mm * 100));
+    const effReg = Math.floor(reg * potMult);
     return tooltipAbilityHtml(weaponUltNamePt(cls), [
-      { label: "Nível da arma:", value: String(w), kind: "fx" },
+      {
+        label: "Nível da arma:",
+        value: formatTooltipNumber(w),
+        kind: "fx",
+      },
       {
         label: "Carga:",
-        value: `${pct}% (somar ${th} entre PV curados e escudo aplicado por ti em heróis vivos, você incluída; o Paraíso não adiciona carga)`,
+        value: `${formatTooltipNumber(pct)}% (somar ${formatTooltipNumber(th)} entre PV curados e escudo aplicado por ti em heróis vivos, você incluída; o Paraíso não adiciona carga)`,
         kind: "cdr",
       },
       {
         label: "Efeito:",
-        value: `Escudo fixo ${paraisoShieldFlat(w)} + ${Math.round(paraisoManaShieldMult(w) * 100)}% da mana máx. em escudo; regen +${paraisoRegenBonus(w)} PV/mana por ${paraisoRegenTurns(w)} turnos`,
+        value: `Por aliado: escudo ⌊(fixo ${formatTooltipNumber(flat)} + ${mmPct}% da mana máx.) × ${formatTooltipNumber(potMult)}⌋ (potencial cura/escudo +${formatTooltipNumber(h.potencialCuraEscudo)}%); regen +${formatTooltipNumber(effReg)} PV/mana por ${formatTooltipNumber(regT)} turno(s)`,
         kind: "fx",
       },
     ]);
   }
   if (cls === "pistoleiro") {
     return tooltipAbilityHtml(weaponUltNamePt(cls), [
-      { label: "Nível da arma:", value: String(w), kind: "fx" },
+      {
+        label: "Nível da arma:",
+        value: formatTooltipNumber(w),
+        kind: "fx",
+      },
       {
         label: "Carga:",
-        value: `${pct}% (${th} golpes que causam dano)`,
+        value: `${formatTooltipNumber(pct)}% (${formatTooltipNumber(th)} golpes que causam dano)`,
         kind: "cdr",
       },
       {
         label: "Dano:",
-        value: `${Math.round(furacaoDamageMult(w) * 100)}% do dano base à arena inteira; crítico aplica sangramento`,
+        value: `${formatTooltipNumber(Math.round(furacaoDamageMult(w) * 100))}% do dano base à arena inteira; crítico aplica sangramento`,
         kind: "dmg",
       },
     ]);
   }
   return tooltipAbilityHtml(weaponUltNamePt(cls), [
-    { label: "Nível da arma:", value: String(w), kind: "fx" },
+    {
+      label: "Nível da arma:",
+      value: formatTooltipNumber(w),
+      kind: "fx",
+    },
     {
       label: "Carga:",
-      value: `${pct}% (${th} dano sofrido)`,
+      value: `${formatTooltipNumber(pct)}% (${formatTooltipNumber(th)} dano sofrido)`,
       kind: "cdr",
     },
     {
       label: "Efeito:",
-      value:
-        "+50% vida máx., dano = 10% vida máx. atual, 3 turnos; Até a morte → Pisotear",
+      value: `+${formatTooltipNumber(50)}% vida máx., dano = ${formatTooltipNumber(10)}% vida máx. atual, ${formatTooltipNumber(3)} turnos; Até a morte → Pisotear`,
       kind: "fx",
     },
   ]);
@@ -3305,12 +3326,12 @@ function tooltipBasicAttack(h: Unit, m: GameModel): string {
   const arauto =
     h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos";
   const dmgLine = arauto
-    ? `${raw} de dano bruto por inimigo no alcance (cada um: crítico/defesa separados)`
-    : `${raw} de dano bruto (crítico e defesa do alvo aplicam depois)`;
+    ? `${formatTooltipNumber(raw)} de dano bruto por inimigo no alcance (cada um: crítico/defesa separados)`
+    : `${formatTooltipNumber(raw)} de dano bruto (crítico e defesa do alvo aplicam depois)`;
   return tooltipAbilityHtml("Ataque básico", [
-    { label: "Custo de mana:", value: "0", kind: "mana" },
+    { label: "Custo de mana:", value: formatTooltipNumber(0), kind: "mana" },
     { label: "CDR:", value: "—", kind: "cdr" },
-    { label: "Alcance:", value: String(alc), kind: "range" },
+    { label: "Alcance:", value: formatTooltipNumber(alc), kind: "range" },
     { label: "Dano:", value: dmgLine, kind: "dmg" },
     {
       label: "Efeito:",
@@ -3322,9 +3343,10 @@ function tooltipBasicAttack(h: Unit, m: GameModel): string {
 
 function cdrSkillValue(h: Unit, sk: SkillDef): string {
   const rest = h.skillCd[sk.id] ?? 0;
-  if (rest > 0) return `${rest} onda(s) até disponível`;
+  if (rest > 0)
+    return `${formatTooltipNumber(rest)} onda(s) até disponível`;
   if (sk.cooldownWaves <= 0) return "—";
-  return String(sk.cooldownWaves);
+  return formatTooltipNumber(sk.cooldownWaves);
 }
 
 function tooltipSkillAtirar(h: Unit, m: GameModel, sk: SkillDef): string {
@@ -3334,19 +3356,21 @@ function tooltipSkillAtirar(h: Unit, m: GameModel, sk: SkillDef): string {
   const cdv = h.skillCd[sk.id] ?? 0;
   const cdB = atirarCooldownWaves(w);
   const cdrStr =
-    cdv > 0 ? `${cdv} onda(s) até disponível` : `${cdB} onda(s)`;
+    cdv > 0
+      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
+      : `${formatTooltipNumber(cdB)} onda(s)`;
   return tooltipAbilityHtml(sk.name, [
-    { label: "Nível arma:", value: String(w), kind: "fx" },
+    { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
     {
       label: "Custo de mana:",
-      value: String(sk.manaCost ?? 0),
+      value: formatTooltipNumber(sk.manaCost ?? 0),
       kind: "mana",
     },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
-    { label: "Alcance:", value: String(alc), kind: "range" },
+    { label: "Alcance:", value: formatTooltipNumber(alc), kind: "range" },
     {
       label: "Dano:",
-      value: `${per} bruto por inimigo (${Math.round(atirarDamageMult(w) * 100)}% dano base)`,
+      value: `${formatTooltipNumber(per)} bruto por inimigo (${formatTooltipNumber(Math.round(atirarDamageMult(w) * 100))}% dano base)`,
       kind: "dmg",
     },
     {
@@ -3363,25 +3387,29 @@ function tooltipSkillAteMorte(h: Unit, m: GameModel, sk: SkillDef): string {
   const cdv = h.skillCd[sk.id] ?? 0;
   const cdB = ateMorteCooldownWaves(w);
   const cdrStr =
-    cdv > 0 ? `${cdv} onda(s) até disponível` : cdB <= 0 ? "—" : `${cdB} onda(s)`;
+    cdv > 0
+      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
+      : cdB <= 0
+        ? "—"
+        : `${formatTooltipNumber(cdB)} onda(s)`;
   const perWin = gladiadorDuelHpPerWin(h.level);
   return tooltipAbilityHtml(sk.name, [
-    { label: "Nível arma:", value: String(w), kind: "fx" },
+    { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
     {
       label: "Custo de mana:",
-      value: String(ateMorteManaCost(w)),
+      value: formatTooltipNumber(ateMorteManaCost(w)),
       kind: "mana",
     },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
-    { label: "Alcance:", value: "1", kind: "range" },
+    { label: "Alcance:", value: formatTooltipNumber(1), kind: "range" },
     {
       label: "Dano:",
-      value: `${gDmg} bruto por teu golpe (${Math.round(ateMorteDamageMult(w) * 100)}% dano base)`,
+      value: `${formatTooltipNumber(gDmg)} bruto por teu golpe (${formatTooltipNumber(Math.round(ateMorteDamageMult(w) * 100))}% dano base)`,
       kind: "dmg",
     },
     {
       label: "Efeito:",
-      value: `Duelo até morrer; vitória +${perWin} PV máx e atual (escala com nível)`,
+      value: `Duelo até morrer; vitória +${formatTooltipNumber(perWin)} PV máx e atual (escala com nível)`,
       kind: "fx",
     },
   ]);
@@ -3395,24 +3423,28 @@ function tooltipSkillPisotear(h: Unit, _m: GameModel): string {
   const cdv = h.skillCd["pisotear"] ?? 0;
   const cdB = pisotearCooldownWaves(w);
   const cdrStr =
-    cdv > 0 ? `${cdv} onda(s) até disponível` : cdB <= 0 ? "—" : `${cdB} onda(s)`;
+    cdv > 0
+      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
+      : cdB <= 0
+        ? "—"
+        : `${formatTooltipNumber(cdB)} onda(s)`;
   const maxD = pisotearMaxHexDistance(w);
   return tooltipAbilityHtml("Pisotear", [
-    { label: "Nível arma:", value: String(w), kind: "fx" },
+    { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
     {
       label: "Custo de mana:",
-      value: String(pisotearManaCost(w)),
+      value: formatTooltipNumber(pisotearManaCost(w)),
       kind: "mana",
     },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
     {
       label: "Alcance:",
-      value: `Inimigos a 1–${maxD} hex`,
+      value: `Inimigos a ${formatTooltipNumber(1)}–${formatTooltipNumber(maxD)} hex`,
       kind: "range",
     },
     {
       label: "Dano:",
-      value: `${dmgApprox} bruto por alvo (${pisotearDamageMult(w)}× dano atual)`,
+      value: `${formatTooltipNumber(dmgApprox)} bruto por alvo (${formatTooltipNumber(pisotearDamageMult(w))}× dano atual)`,
       kind: "dmg",
     },
     {
@@ -3439,18 +3471,20 @@ function tooltipBunkerMinasCombat(h: Unit, m: GameModel): string {
   const per = Math.floor(baseDano * mult);
   const cdv = h.skillCd["bunker_minas"] ?? 0;
   const cdrStr =
-    cdv > 0 ? `${cdv} onda(s) até disponível` : String(cdBase);
+    cdv > 0
+      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
+      : formatTooltipNumber(cdBase);
   return tooltipAbilityHtml("Minas terrestres (bunker)", [
-    { label: "Custo de mana:", value: "0", kind: "mana" },
+    { label: "Custo de mana:", value: formatTooltipNumber(0), kind: "mana" },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
     {
       label: "Alcance:",
-      value: `Até ${rings} anel(is) em volta do bunker`,
+      value: `Até ${formatTooltipNumber(rings)} anel(is) em volta do bunker`,
       kind: "range",
     },
     {
       label: "Dano:",
-      value: `${per} bruto por inimigo em cada anel (por onda)`,
+      value: `${formatTooltipNumber(per)} bruto por inimigo em cada anel (por onda)`,
       kind: "dmg",
     },
     {
@@ -3471,12 +3505,14 @@ function tooltipBunkerTiroCombat(h: Unit, _m: GameModel): string {
     h.curandeiroDanoWave;
   const raw = Math.floor(baseDano * 10);
   const cdrStr =
-    cdv > 0 ? `${cdv} onda(s) até disponível` : String(cd);
+    cdv > 0
+      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
+      : formatTooltipNumber(cd);
   return tooltipAbilityHtml("Tiro preciso", [
-    { label: "Custo de mana:", value: "0", kind: "mana" },
+    { label: "Custo de mana:", value: formatTooltipNumber(0), kind: "mana" },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
     { label: "Alcance:", value: "Qualquer inimigo no coliseu", kind: "range" },
-    { label: "Dano:", value: `${raw} bruto (morteiro)`, kind: "dmg" },
+    { label: "Dano:", value: `${formatTooltipNumber(raw)} bruto (morteiro)`, kind: "dmg" },
     {
       label: "Efeito:",
       value: "Projétil em arco até ao alvo selecionado",
@@ -3489,18 +3525,24 @@ function tooltipSkillSentenca(h: Unit, m: GameModel, sk: SkillDef): string {
   const w = h.weaponLevel;
   const bio = biomeAt(m.grid, h.q, h.r) as BiomeId;
   const dPv = m.computeSentencaDamagePerEnemy(h);
-  const heal = m.computeSentencaHealParty(h);
+  const healBase = m.computeSentencaHealParty(h);
+  const potMult = 1 + h.potencialCuraEscudo / 100;
+  const healEff = Math.floor(healBase * potMult);
   const cdv = h.skillCd[sk.id] ?? 0;
   const cdB = sentencaCooldownWaves(w);
   const cdrStr =
-    cdv > 0 ? `${cdv} onda(s) até disponível` : cdB <= 0 ? "—" : `${cdB} onda(s)`;
+    cdv > 0
+      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
+      : cdB <= 0
+        ? "—"
+        : `${formatTooltipNumber(cdB)} onda(s)`;
   const mc = sentencaManaCost(w);
   const shPct = Math.round(sentencaShieldOverflowRatio(w) * 100);
   return tooltipAbilityHtml(sk.name, [
-    { label: "Nível arma:", value: String(w), kind: "fx" },
+    { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
     {
       label: "Custo de mana:",
-      value: String(mc),
+      value: formatTooltipNumber(mc),
       kind: "mana",
     },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
@@ -3511,17 +3553,17 @@ function tooltipSkillSentenca(h: Unit, m: GameModel, sk: SkillDef): string {
     },
     {
       label: "Dano:",
-      value: `${dPv} bruto por inimigo (${Math.round(sentencaDamageMult(w) * 100)}% dano base)`,
+      value: `${formatTooltipNumber(dPv)} bruto por inimigo (${formatTooltipNumber(Math.round(sentencaDamageMult(w) * 100))}% dano base)`,
       kind: "dmg",
     },
     {
       label: "Cura (aliados):",
-      value: `${heal} base (${Math.round(sentencaHealMult(w) * 100)}% dano) · potencial cura/escudo aplica`,
+      value: `${formatTooltipNumber(healEff)} PV por aliado (base ${formatTooltipNumber(healBase)} × ${formatTooltipNumber(potMult)} com potencial +${formatTooltipNumber(h.potencialCuraEscudo)}%)`,
       kind: "fx",
     },
     {
       label: "Efeito:",
-      value: `Excesso de cura vira ${shPct}% em escudo azul.`,
+      value: `Excesso de cura vira ${formatTooltipNumber(shPct)}% em escudo azul.`,
       kind: "fx",
     },
   ]);
@@ -3535,7 +3577,7 @@ function tooltipSkillById(h: Unit, m: GameModel, sk: SkillDef): string {
   return tooltipAbilityHtml(sk.name, [
     {
       label: "Custo de mana:",
-      value: String(sk.manaCost ?? 0),
+      value: formatTooltipNumber(sk.manaCost ?? 0),
       kind: "mana",
     },
     { label: "CDR:", value: cdrSkillValue(h, sk), kind: "cdr" },
@@ -3549,12 +3591,12 @@ function tooltipEspecialista(h: Unit, m: GameModel): string {
   const alc = m.effectiveAlcanceForHero(h);
   const raw = m.computeEspecialistaDestruicaoRaw(h);
   return tooltipAbilityHtml("Especialista da destruição", [
-    { label: "Custo de mana:", value: "0", kind: "mana" },
+    { label: "Custo de mana:", value: formatTooltipNumber(0), kind: "mana" },
     { label: "CDR:", value: "—", kind: "cdr" },
-    { label: "Alcance:", value: String(alc), kind: "range" },
+    { label: "Alcance:", value: formatTooltipNumber(alc), kind: "range" },
     {
       label: "Dano:",
-      value: `${raw} de dano bruto (crítico e defesa do alvo aplicam depois)`,
+      value: `${formatTooltipNumber(raw)} de dano bruto (crítico e defesa do alvo aplicam depois)`,
       kind: "dmg",
     },
     {
@@ -5095,7 +5137,7 @@ function showCombatHUD(): void {
         iconHtml: basicAttackIconHtml(),
         hotkey: "Q",
         combatHotkey: "q",
-        manaBadge: "0",
+        manaBadge: formatTooltipNumber(0),
         ariaLabel: "Ataque básico",
         selectKind: "basic",
       }),
@@ -5124,7 +5166,7 @@ function showCombatHUD(): void {
       const cdEff = model.devSandboxMode ? 0 : cd;
       const dis = cdEff > 0 || extraDisabled || !isViewingActive;
       const key = hotkeys[hotkeyIdx++] ?? "?";
-      const manaBadge = String(skillDef.manaCost ?? 0);
+      const manaBadge = formatTooltipNumber(skillDef.manaCost ?? 0);
       const b = el(
         combatSquareSkillHtml({
           disabled: dis,
@@ -5163,7 +5205,7 @@ function showCombatHUD(): void {
           hotkey: keyW,
           combatHotkey:
             keyW.length === 1 && keyW !== "?" ? keyW.toLowerCase() : undefined,
-          manaBadge: "0",
+          manaBadge: formatTooltipNumber(0),
           ariaLabel: ariaSkillLabel("Minas terrestres", cdM),
           cdTurns: cdM > 0 ? cdM : undefined,
           selectKind: "skill",
@@ -5193,7 +5235,7 @@ function showCombatHUD(): void {
             hotkey: keyE,
             combatHotkey:
               keyE.length === 1 && keyE !== "?" ? keyE.toLowerCase() : undefined,
-            manaBadge: "0",
+            manaBadge: formatTooltipNumber(0),
             ariaLabel: ariaSkillLabel("Tiro preciso", cdT),
             cdTurns: cdT > 0 ? cdT : undefined,
             selectKind: "skill",
@@ -5230,7 +5272,7 @@ function showCombatHUD(): void {
               hotkey: key,
               combatHotkey:
                 key.length === 1 && key !== "?" ? key.toLowerCase() : undefined,
-              manaBadge: String(mc),
+              manaBadge: formatTooltipNumber(mc),
               ariaLabel: ariaSkillLabel("Pisotear", cd),
               cdTurns: cd > 0 ? cd : undefined,
             }),
@@ -5274,7 +5316,7 @@ function showCombatHUD(): void {
             const dis =
               cdS > 0 || h.mana < sm || !isViewingActive;
             const key = hotkeys[hotkeyIdx++] ?? "?";
-            const manaBadge = String(sm);
+            const manaBadge = formatTooltipNumber(sm);
             const b = el(
               combatSquareSkillHtml({
                 disabled: dis,
@@ -5327,7 +5369,7 @@ function showCombatHUD(): void {
             hotkey: keyU,
             combatHotkey:
               keyU.length === 1 && keyU !== "?" ? keyU.toLowerCase() : undefined,
-            manaBadge: "0",
+            manaBadge: formatTooltipNumber(0),
             ariaLabel: wname,
             extraClass: `lol-skill-btn--weapon-ult ${ready ? "lol-skill-btn--weapon-ult--ready" : ""}`,
             extraStyle: `--weapon-ult-pct:${pct}`,
@@ -5351,7 +5393,7 @@ function showCombatHUD(): void {
         const ult = HEROES.pistoleiro.ultimates.find(
           (u) => u.id === "especialista_destruicao",
         )!;
-        const manaUlt = "0";
+        const manaUlt = formatTooltipNumber(0);
         const key = hotkeys[hotkeyIdx++] ?? "?";
         const bu = el(
           combatSquareSkillHtml({
