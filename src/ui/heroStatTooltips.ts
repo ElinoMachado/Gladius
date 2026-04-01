@@ -209,8 +209,8 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
       ]);
       break;
     case "basic":
-      core = wrap("Ataque extra", [
-        `<strong>${v}</strong>. Representa o número de vezes que você pode realizar um ataque básico neste turno.`,
+      core = wrap("Ataque Extra", [
+        `Ataque Extra: <strong>${v}</strong>. Representa o numero de vezes que você pode realizar um ataque básico adicional nesse turno.`,
       ]);
       break;
     default:

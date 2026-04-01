@@ -4033,7 +4033,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   if (m.currentHero()?.id === h.id) {
     cells.push({
       icon: "basic",
-      label: "Ataque extra",
+      label: "Ataque Extra",
       value: String(m.basicLeft),
       tooltipHtml: combatHeroStatTooltip({
         stat: "basic",
