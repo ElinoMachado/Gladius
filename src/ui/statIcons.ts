@@ -7,6 +7,8 @@ export type StatIconId =
   | "crit_dmg"
   | "mov"
   | "range"
+  | "max_hp"
+  | "max_mana"
   | "regen_hp"
   | "regen_mp"
   | "lifesteal"
@@ -52,10 +54,14 @@ export function statIconSvg(id: StatIconId, uniqueIndex: number): string {
       return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#4fc3f7" stroke="#0277bd" stroke-width="1" d="M12 3.5l6.2 3.6v7.2L12 17.9l-6.2-3.6V7.1L12 3.5z"/></svg>`;
     case "range":
       return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="#eceff1" stroke-width="1.8"/><path stroke="#eceff1" stroke-width="1.8" stroke-linecap="round" d="M12 7v10M7 12h10"/></svg>`;
-    case "regen_hp":
+    case "max_hp":
       return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#43a047" d="M12 21s-6.2-4.35-6.2-9.2c0-2.55 1.65-4.6 4.1-4.6 1.3 0 2.5.7 3.1 1.7.6-1 1.8-1.7 3.1-1.7 2.45 0 4.1 2.05 4.1 4.6C20.2 16.65 12 21 12 21z"/></svg>`;
-    case "regen_mp":
+    case "max_mana":
       return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#0d47a1" d="M12 2.2c-3.3 4.5-6 7.8-6 11.2a6 6 0 1012 0c0-3.4-2.7-6.7-6-11.2z"/></svg>`;
+    case "regen_hp":
+      return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="3.2" fill="#c8e6c9" stroke="#2e7d32" stroke-width="1.15"/><path stroke="#1b5e20" stroke-width="2.35" stroke-linecap="round" d="M12 8.15v7.7M8.15 12h7.7"/></svg>`;
+    case "regen_mp":
+      return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="none" stroke="#1565c0" stroke-width="1.45" stroke-linecap="round" d="M5.2 14.8c2.1-2.6 4.2-2.6 6.2 0s4.1 2.6 6.2 0"/><path fill="none" stroke="#42a5f5" stroke-width="1.25" stroke-linecap="round" d="M5.2 11.6c2.1-2 4.2-2 6.2 0s4.1 2 6.2 0"/><circle cx="12" cy="7.8" r="1.65" fill="#64b5f6" stroke="#0d47a1" stroke-width="0.55"/></svg>`;
     case "lifesteal":
       return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#b71c1c" d="M12 2.2c-3.3 4.5-6 7.8-6 11.2a6 6 0 1012 0c0-3.4-2.7-6.7-6-11.2z"/></svg>`;
     case "pot":

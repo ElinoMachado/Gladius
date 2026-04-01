@@ -15,13 +15,24 @@ export interface ForgePiece {
   level: 1 | 2 | 3;
 }
 
+/** Níveis forjados por essência num mesmo tipo de peça (ex.: elmo pântano + elmo vulcânico). */
+export type ForgePerEssenceLevels = Partial<Record<ForgeEssenceId, 1 | 2 | 3>>;
+
 export interface ForgeHeroLoadout {
+  /** Legado: uma peça por slot (migrado para *ByEssence + *Equipped ao carregar). */
   helmo?: ForgePiece;
   capa?: ForgePiece;
   manoplas?: ForgePiece;
+  helmoByEssence?: ForgePerEssenceLevels;
+  capaByEssence?: ForgePerEssenceLevels;
+  manoplasByEssence?: ForgePerEssenceLevels;
+  /** Qual linha de essência está equipada (stats + modelo em combate). */
+  helmoEquipped?: ForgeEssenceId;
+  capaEquipped?: ForgeEssenceId;
+  manoplasEquipped?: ForgeEssenceId;
 }
 
-export type ForgeSlotKind = keyof ForgeHeroLoadout;
+export type ForgeSlotKind = "helmo" | "capa" | "manoplas";
 
 /** Nível da arma principal (meta + combate); ver `weaponData.ts`. */
 export type WeaponLevel = 1 | 2 | 3 | 4 | 5;

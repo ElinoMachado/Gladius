@@ -52,7 +52,12 @@ import {
 import { initMusicVolumeControl } from "./ui/musicVolumeControl";
 import { mountCrystalSelect } from "./ui/crystalSelect";
 import { axialKey, hexDistance } from "./game/hex";
-import { permPercent, nextMetaCost, nextInitialCardCost } from "./game/metaStore";
+import {
+  permPercent,
+  nextMetaCost,
+  nextInitialCardCost,
+  clearAllLocalProgressForFreshStart,
+} from "./game/metaStore";
 import {
   damageReductionPercentFromDefense,
   effectiveDefenseForBiome,
@@ -80,14 +85,16 @@ import {
   FORGE_ESSENCE_LABELS,
   forgeEssenceBarHtml,
   forgeKindBiomeHeldByOtherHero,
-  forgeLoadoutProjectedForSynergy,
   forgePieceEffectHtml,
-  forgePieceSynergySummaryLine,
+  getForgeLevel,
   forgeSynergyCrestTooltipHtml,
   forgeSynergyPanelHtml,
   forgeSynergyTier,
   forgeTryCraftOrUpgrade,
   forgeUpgradeButtonTooltipHtml,
+  resolveEquippedBiome,
+  resolveEquippedForgeLoadout,
+  setEquippedBiome,
 } from "./game/forge";
 import type {
   ForgeEssenceId,
@@ -445,8 +452,8 @@ function templateStatsStripHtml(cls: HeroClassId): string {
   const critMultStr =
     cls === "sacerdotisa" ? "150%" : cls === "gladiador" ? "175%" : "200%";
   const items: { icon: StatIconId; label: string; value: string }[] = [
-    { icon: "regen_hp", label: "Vida máxima", value: String(t.maxHp) },
-    { icon: "regen_mp", label: "Mana máxima", value: String(t.maxMana) },
+    { icon: "max_hp", label: "Vida máxima", value: String(t.maxHp) },
+    { icon: "max_mana", label: "Mana máxima", value: String(t.maxMana) },
     { icon: "regen_hp", label: "Regeneração de vida", value: String(t.regenVida) },
     { icon: "regen_mp", label: "Regeneração de mana", value: String(t.regenMana) },
     { icon: "dmg", label: "Dano", value: String(t.dano) },
@@ -538,9 +545,9 @@ function goldShopStatIcon(id: GoldShopId): StatIconId {
     case "dano":
       return "dmg";
     case "vida":
-      return "regen_hp";
+      return "max_hp";
     case "max_mana":
-      return "regen_mp";
+      return "max_mana";
     case "movimento":
       return "mov";
     case "crit_chance":
@@ -903,7 +910,7 @@ function showArtifactCodex(): void {
     <div class="artifact-codex-bg" aria-hidden="true"></div>
     <div class="artifact-codex-panel">
       <header class="artifact-codex-header">
-        <h1>Artefatos</h1>
+        <h1 class="hero-setup-main-title">Artefatos</h1>
         <p class="artifact-codex-sub">Cartas do level-up — passe o rato para ver todos os tiers. ${ARTIFACT_POOL.length} cartas no total.</p>
         <button type="button" class="btn" id="codex-back">Voltar ao menu</button>
       </header>
@@ -954,7 +961,7 @@ function showEnemyCompendium(): void {
     <div class="enemy-codex-bg" aria-hidden="true"></div>
     <div class="enemy-codex-panel">
       <header class="enemy-codex-header">
-        <h1>Compendium de inimigos</h1>
+        <h1 class="hero-setup-main-title">Compendium de inimigos</h1>
         <p class="enemy-codex-sub">${catalog.length} tipos · filtre por intervalo de ondas em que podem aparecer.</p>
         <button type="button" class="btn" id="enemy-codex-back">Voltar ao menu</button>
       </header>
@@ -1096,15 +1103,30 @@ const FORGE_KIND_ORDER: readonly ForgeSlotKind[] = [
 /** Mantém o herói escolhido ao repintar a forja (ex.: após forjar). */
 let forgeUiHeroIndex: 0 | 1 | 2 = 0;
 
+/**
+ * Último slot de party para o qual os &lt;select&gt; de bioma foram sincronizados.
+ * Ao mudar de slot, o DOM ainda reflete o herói anterior — não ler `.value` até repovoar.
+ */
+let forgeLastSyncedHeroForBiomeUi: 0 | 1 | 2 | null = null;
+
 /** Biomas escolhidos nos &lt;select&gt; por slot de party (sobrevive ao `innerHTML` do paint). */
 type ForgeUiBiomePicks = Partial<Record<ForgeSlotKind, ForgeEssenceId>>;
 const forgeUiBiomePicksByHero: ForgeUiBiomePicks[] = [{}, {}, {}];
 
+/** `Number("") === 0` — nunca usar Number() no slot de party da forja. */
+function parseForgePartySlot(value: string): 0 | 1 | 2 | null {
+  const t = value.trim();
+  if (t === "0") return 0;
+  if (t === "1") return 1;
+  if (t === "2") return 2;
+  return null;
+}
+
 function snapshotForgeBiomePicksFromDom(body: HTMLElement): void {
   const heroSelEl = body.querySelector("#forge-hero-sel") as HTMLSelectElement | null;
   if (!heroSelEl) return;
-  const h = Number(heroSelEl.value);
-  if (h !== 0 && h !== 1 && h !== 2) return;
+  const h = parseForgePartySlot(heroSelEl.value);
+  if (h === null) return;
   for (const kind of FORGE_KIND_ORDER) {
     const sel = body.querySelector(
       `select.forge-biome-sel[data-forge-kind="${kind}"]`,
@@ -1122,8 +1144,9 @@ function forgePieceLabelPt(kind: ForgeSlotKind): string {
 
 /** Resumo HTML do loadout forjado salvo por slot de party (menu de escolha de herói). */
 function heroSlotForgeEquipSummaryHtml(L: ForgeHeroLoadout): string {
+  const eq = resolveEquippedForgeLoadout(L);
   const rows = FORGE_KIND_ORDER.map((kind) => {
-    const cur = L[kind];
+    const cur = eq[kind];
     const label = forgePieceLabelPt(kind);
     if (!cur) {
       return `<div class="hero-slot-forge__row"><span class="hero-slot-forge__k">${escapeHtml(label)}</span><span class="hero-slot-forge__v hero-slot-forge__v--empty">— vazio</span></div>`;
@@ -1134,31 +1157,15 @@ function heroSlotForgeEquipSummaryHtml(L: ForgeHeroLoadout): string {
   return `<div class="hero-slot-forge__box" role="status">${rows}</div>`;
 }
 
-function readForgeBiomeSelects(
-  body: HTMLElement,
-): Record<ForgeSlotKind, ForgeEssenceId> {
-  const out = {} as Record<ForgeSlotKind, ForgeEssenceId>;
-  for (const kind of FORGE_KIND_ORDER) {
-    const sel = body.querySelector(
-      `select.forge-biome-sel[data-forge-kind="${kind}"]`,
-    ) as HTMLSelectElement | null;
-    const raw = sel?.value?.trim() ?? "";
-    const ok = COMBAT_BIOMES.some((id) => id === raw);
-    out[kind] = (ok ? raw : "floresta") as ForgeEssenceId;
-  }
-  return out;
-}
-
 function syncForgeKindRow(
   body: HTMLElement,
   meta: (typeof model)["meta"],
   hi: 0 | 1 | 2,
   kind: ForgeSlotKind,
   previewIndex: number,
-  synergyLoadout: ForgeHeroLoadout,
+  trustBiomeSelectValue: boolean,
 ): void {
   const L = meta.forgeByHeroSlot[hi]!;
-  const cur = L[kind];
   const bioSel = body.querySelector(
     `select.forge-biome-sel[data-forge-kind="${kind}"]`,
   ) as HTMLSelectElement;
@@ -1179,18 +1186,19 @@ function syncForgeKindRow(
   ) as HTMLButtonElement;
   if (!bioSel || !statsEl || !curEl || !btn) return;
 
-  const rawEssence = bioSel.value.trim();
+  const rawEssence = trustBiomeSelectValue ? bioSel.value.trim() : "";
   const fromUser =
+    trustBiomeSelectValue &&
     rawEssence &&
     COMBAT_BIOMES.some((id) => id === rawEssence)
       ? (rawEssence as ForgeEssenceId)
       : null;
   const preservedPick = forgeUiBiomePicksByHero[hi][kind];
-  /** Select novo após paint vem vazio: usa escolha memorizada, depois peça salva. */
+  /** Select novo após paint vem vazio: usa escolha memorizada, depois linha equipada neste slot. */
   const selectedEssence: ForgeEssenceId =
     fromUser ??
     preservedPick ??
-    cur?.biome ??
+    resolveEquippedBiome(L, kind) ??
     ("floresta" as ForgeEssenceId);
 
   bioSel.disabled = false;
@@ -1204,13 +1212,18 @@ function syncForgeKindRow(
   }
 
   const biomeNow = (bioSel.value ?? selectedEssence) as ForgeEssenceId;
-  const isSwapBiome = Boolean(cur && cur.biome !== biomeNow);
-  const fullyMaxedSameBiome = Boolean(
-    cur && cur.level >= 3 && !isSwapBiome,
-  );
-  // Slot vazio ou troca de bioma: preview e custo como forjar nv1 no bioma escolhido.
-  const displayBiome = !cur || isSwapBiome ? biomeNow : cur.biome;
-  const displayLevel = !cur || isSwapBiome ? 1 : cur.level;
+  if (getForgeLevel(L, kind, biomeNow) != null) {
+    setEquippedBiome(L, kind, biomeNow);
+  }
+
+  const selLv = getForgeLevel(L, kind, biomeNow);
+  const curPiece =
+    selLv != null
+      ? { biome: biomeNow, level: selLv }
+      : undefined;
+  const fullyMaxedThisLine = Boolean(curPiece && curPiece.level >= 3);
+  const displayBiome = biomeNow;
+  const displayLevel = curPiece?.level ?? 1;
 
   if (pieceLabelEl) {
     pieceLabelEl.textContent = `${forgePieceLabelPt(kind)} - nv ${displayLevel}`;
@@ -1221,38 +1234,32 @@ function syncForgeKindRow(
   const preview = forgePiecePreviews3d[previewIndex];
   if (preview) preview.setKindAndPiece(kind, displayBiome, displayLevel);
 
-  const effectLevel =
-    !cur || isSwapBiome ? (1 as const) : cur.level;
-  if (!cur) {
-    statsEl.innerHTML = `<div class="forge-piece-stats__line">${escapeHtml("— Slot vazio —")}</div><div class="forge-piece-stats__line">${escapeHtml("Escolha bioma e forje.")}</div>`;
+  const effectLevel = (curPiece?.level ?? 1) as 1 | 2 | 3;
+  if (!curPiece) {
+    statsEl.innerHTML = `<div class="forge-piece-stats__line">${escapeHtml("— Sem forja nesta essência —")}</div><div class="forge-piece-stats__line">${escapeHtml("Escolhe o bioma e forja nv1; outras essências deste slot mantêm-se.")}</div>`;
   } else {
-    let inner = forgePieceEffectHtml(kind, effectLevel, previewIndex * 24);
-    const syn = forgePieceSynergySummaryLine(cur, synergyLoadout);
-    if (syn) {
-      inner += `<div class="forge-piece-stats__line forge-piece-stats__syn">${escapeHtml(syn)}</div>`;
-    }
+    const inner = forgePieceEffectHtml(kind, effectLevel, previewIndex * 24);
     statsEl.innerHTML = inner;
     statsEl.querySelectorAll<HTMLElement>(".lol-stat-ico[data-ico]").forEach((ico) => {
       const id = ico.dataset.ico as StatIconId;
       if (!ico.title) ico.title = HERO_STAT_TIP[id] ?? id;
     });
   }
-  const cost = !cur || isSwapBiome
+  const cost = !curPiece
     ? FORGE_COST_CREATE
-    : cur.level === 1
+    : curPiece.level === 1
       ? FORGE_COST_UPGRADE_TO_2
       : FORGE_COST_UPGRADE_TO_3;
-  btn.textContent = fullyMaxedSameBiome
+  btn.textContent = fullyMaxedThisLine
     ? "Máximo"
-    : !cur || isSwapBiome
+    : !curPiece
       ? `Forjar (${cost})`
       : `Aprimorar (${cost})`;
   const forgeBlockedUnique =
-    (!cur || isSwapBiome) &&
-    forgeKindBiomeHeldByOtherHero(meta, hi, kind, biomeNow);
-  if (fullyMaxedSameBiome || forgeBlockedUnique) {
+    !curPiece && forgeKindBiomeHeldByOtherHero(meta, hi, kind, biomeNow);
+  if (fullyMaxedThisLine || forgeBlockedUnique) {
     btn.setAttribute("aria-disabled", "true");
-    btn.classList.toggle("forge-do-btn--max", fullyMaxedSameBiome);
+    btn.classList.toggle("forge-do-btn--max", fullyMaxedThisLine);
     btn.classList.toggle("forge-do-btn--blocked", forgeBlockedUnique);
   } else {
     btn.removeAttribute("aria-disabled");
@@ -1271,23 +1278,20 @@ function bindForgeStatInlineTooltips(root: HTMLElement): void {
 
 function syncForgeHeroPanel(body: HTMLElement, meta: (typeof model)["meta"]): void {
   const heroSel = body.querySelector("#forge-hero-sel") as HTMLSelectElement;
-  const hi = Number(heroSel?.value) as 0 | 1 | 2;
-  if (Number.isNaN(hi) || hi < 0 || hi > 2) return;
+  const hi =
+    parseForgePartySlot(heroSel?.value ?? "") ?? forgeUiHeroIndex;
   const Lsaved = meta.forgeByHeroSlot[hi]!;
-  /** Primeira passagem povoa os &lt;select&gt; (após paint ainda estão vazios). */
+  const trustBiomeSelectValue =
+    forgeLastSyncedHeroForBiomeUi !== null &&
+    forgeLastSyncedHeroForBiomeUi === hi;
+  /** Povoa &lt;select&gt; e linhas (após paint ainda estão vazios). */
   FORGE_KIND_ORDER.forEach((kind, idx) => {
-    syncForgeKindRow(body, meta, hi, kind, idx, Lsaved);
+    syncForgeKindRow(body, meta, hi, kind, idx, trustBiomeSelectValue);
   });
-  const synergyLoadout = forgeLoadoutProjectedForSynergy(
-    Lsaved,
-    readForgeBiomeSelects(body),
-  );
-  FORGE_KIND_ORDER.forEach((kind, idx) => {
-    syncForgeKindRow(body, meta, hi, kind, idx, synergyLoadout);
-  });
+  forgeLastSyncedHeroForBiomeUi = hi;
   const synEl = body.querySelector("#forge-synergy-panel");
   if (synEl) {
-    synEl.innerHTML = forgeSynergyPanelHtml(synergyLoadout);
+    synEl.innerHTML = forgeSynergyPanelHtml(Lsaved);
     synEl.querySelectorAll(".forge-syn-card").forEach((node) => {
       const card = node as HTMLElement;
       const biome = card.dataset.biome as ForgeEssenceId | undefined;
@@ -1297,14 +1301,12 @@ function syncForgeHeroPanel(body: HTMLElement, meta: (typeof model)["meta"]): vo
       ) as HTMLElement | null;
       if (!crest) return;
       bindGameTooltip(crest, () => {
-        const hiNow = Number(heroSel.value) as 0 | 1 | 2;
-        const Lproj = forgeLoadoutProjectedForSynergy(
-          meta.forgeByHeroSlot[hiNow]!,
-          readForgeBiomeSelects(body),
-        );
+        const hiNow =
+          parseForgePartySlot(heroSel.value) ?? forgeUiHeroIndex;
+        const Lnow = meta.forgeByHeroSlot[hiNow]!;
         return forgeSynergyCrestTooltipHtml(
           biome,
-          forgeSynergyTier(Lproj, biome),
+          forgeSynergyTier(Lnow, biome),
         );
       });
     });
@@ -1318,11 +1320,12 @@ function showForge(): void {
   forgeUiBiomePicksByHero[0] = {};
   forgeUiBiomePicksByHero[1] = {};
   forgeUiBiomePicksByHero[2] = {};
+  forgeLastSyncedHeroForBiomeUi = null;
   uiRoot.innerHTML = "";
   const shell = el(`
-    <div class="screen screen-forge">
-      <h1>Forja</h1>
-      <p class="screen-forge__hint">Forje itens permanentes para suas partidas. <span class="screen-forge__hint-gold">Apenas equipamentos nv 3 contam para as sinergias.</span> Cada combinação tipo de peça + bioma (ex.: elmo vulcânico) existe só uma vez em toda a party — não podes repetir noutro slot.</p>
+    <div class="screen screen-forge screen--crystal-veil">
+      <h1 class="hero-setup-main-title">Forja</h1>
+      <p class="screen-forge__hint">Forje itens permanentes para suas partidas. <span class="screen-forge__hint-gold">Apenas equipamentos nv 3 contam para as sinergias.</span> Por slot podes ter várias essências (ex.: elmo pântano e elmo vulcânico); o menu escolhe qual linha vês e qual fica equipada no combate. Cada combinação tipo de peça + bioma existe só uma vez na party.</p>
       <div id="forge-body" class="forge-body"></div>
       <button type="button" class="btn" id="forge-back">Voltar ao menu</button>
     </div>
@@ -1334,12 +1337,10 @@ function showForge(): void {
     const prevHeroRaw = (
       body.querySelector("#forge-hero-sel") as HTMLSelectElement | null
     )?.value;
-    const prevHero =
-      prevHeroRaw === "0" || prevHeroRaw === "1" || prevHeroRaw === "2"
-        ? (Number(prevHeroRaw) as 0 | 1 | 2)
-        : forgeUiHeroIndex;
+    const prevHero = parseForgePartySlot(prevHeroRaw ?? "") ?? forgeUiHeroIndex;
 
     snapshotForgeBiomePicksFromDom(body);
+    forgeLastSyncedHeroForBiomeUi = null;
 
     disposeForgePiecePreviews();
 
@@ -1350,7 +1351,7 @@ function showForge(): void {
 
     const pieceRows = FORGE_KIND_ORDER.map((kind) => {
       const label = forgePieceLabelPt(kind);
-      return `<div class="forge-piece-block" data-forge-kind="${kind}">
+      return `<div class="forge-piece-card-cq"><div class="forge-piece-block" data-forge-kind="${kind}">
         <div class="forge-piece-head">
           <span class="forge-piece-label">${label}</span>
           <span class="forge-piece-cur forge-piece-cur--oneliner" data-forge-kind="${kind}">—</span>
@@ -1363,7 +1364,7 @@ function showForge(): void {
           <select class="forge-biome-sel" data-forge-kind="${kind}" aria-label="Bioma (${label})"></select>
           <button type="button" class="btn forge-do-btn" data-forge-kind="${kind}">Forjar</button>
         </div>
-      </div>`;
+      </div></div>`;
     }).join("");
 
     body.innerHTML = [
@@ -1378,7 +1379,7 @@ function showForge(): void {
 
     const heroSel = body.querySelector("#forge-hero-sel") as HTMLSelectElement;
     heroSel.value = String(prevHero);
-    forgeUiHeroIndex = Number(heroSel.value) as 0 | 1 | 2;
+    forgeUiHeroIndex = parseForgePartySlot(heroSel.value) ?? prevHero;
 
     FORGE_KIND_ORDER.forEach((kind) => {
       const host = body.querySelector(
@@ -1392,13 +1393,14 @@ function showForge(): void {
     syncForgeHeroPanel(body, m);
 
     heroSel.addEventListener("change", () => {
-      forgeUiHeroIndex = Number(heroSel.value) as 0 | 1 | 2;
+      const p = parseForgePartySlot(heroSel.value);
+      if (p !== null) forgeUiHeroIndex = p;
       syncForgeHeroPanel(body, model.meta);
     });
 
     body.querySelectorAll("select.forge-biome-sel").forEach((node) => {
       node.addEventListener("change", () => {
-        const hi = Number(heroSel.value) as 0 | 1 | 2;
+        const hi = parseForgePartySlot(heroSel.value) ?? forgeUiHeroIndex;
         const se = node as HTMLSelectElement;
         const k = se.dataset.forgeKind as ForgeSlotKind;
         const v = se.value.trim();
@@ -1413,7 +1415,7 @@ function showForge(): void {
       const btn = node as HTMLButtonElement;
       const kind = btn.dataset.forgeKind as ForgeSlotKind;
       bindGameTooltip(btn, () => {
-        const hi = Number(heroSel.value) as 0 | 1 | 2;
+        const hi = parseForgePartySlot(heroSel.value) ?? forgeUiHeroIndex;
         const bioSel = body.querySelector(
           `select.forge-biome-sel[data-forge-kind="${kind}"]`,
         ) as HTMLSelectElement;
@@ -1422,7 +1424,7 @@ function showForge(): void {
       });
       btn.addEventListener("click", () => {
         if (btn.getAttribute("aria-disabled") === "true") return;
-        const hi = Number(heroSel.value) as 0 | 1 | 2;
+        const hi = parseForgePartySlot(heroSel.value) ?? forgeUiHeroIndex;
         const bioSel = body.querySelector(
           `select.forge-biome-sel[data-forge-kind="${kind}"]`,
         ) as HTMLSelectElement;
@@ -1445,6 +1447,7 @@ function showForge(): void {
   };
   paint();
   shell.querySelector("#forge-back")!.addEventListener("click", () => {
+    model.saveMeta();
     showMainMenu();
   });
 }
@@ -1455,6 +1458,10 @@ function showMainMenu(): void {
   mainMenuSword3d?.dispose();
   mainMenuSword3d = null;
   uiRoot.innerHTML = "";
+  const devResetRow =
+    import.meta.env.DEV
+      ? `<button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-reset-fresh">[Dev] Estado inicial (apagar save)</button>`
+      : "";
   const s = el(`
     <div class="main-menu-screen">
       <div class="main-menu-bg" id="main-menu-bg" aria-hidden="true"></div>
@@ -1470,6 +1477,7 @@ function showMainMenu(): void {
           <button type="button" class="main-menu-link" data-action="artifacts">Artefatos</button>
           <button type="button" class="main-menu-link" data-action="enemies">Compendium</button>
           <button type="button" class="main-menu-link" data-action="exit">Sair</button>
+          ${devResetRow}
         </nav>
       </div>
     </div>
@@ -1505,6 +1513,18 @@ function showMainMenu(): void {
           break;
         case "exit":
           window.close();
+          break;
+        case "dev-reset-fresh":
+          if (!import.meta.env.DEV) break;
+          if (
+            !confirm(
+              "[Dev] Apagar todo o progresso guardado (cristais, forja, essências, preferências locais) e recarregar como na primeira abertura?",
+            )
+          ) {
+            break;
+          }
+          clearAllLocalProgressForFreshStart();
+          window.location.reload();
           break;
         default:
           break;
@@ -1952,7 +1972,7 @@ function showGoldShop(isInitial: boolean): void {
   const shell = el(`<div class="shop-screen"></div>`);
   uiRoot.appendChild(shell);
   if (party.length === 0) {
-    shell.innerHTML = `<div class="screen shop-screen__panel shop-screen__panel--plain"><h1>Erro</h1><p>Nenhum herói no grupo. Volte ao menu e inicie de novo.</p><button class="btn" id="fix-menu">Menu</button></div>`;
+    shell.innerHTML = `<div class="screen shop-screen__panel shop-screen__panel--gold"><h1 class="hero-setup-main-title">Erro</h1><p>Nenhum herói no grupo. Volte ao menu e inicie de novo.</p><button class="btn" id="fix-menu">Menu</button></div>`;
     shell.querySelector("#fix-menu")!.addEventListener("click", () => {
       model.phase = "main_menu";
       render();
@@ -3081,7 +3101,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     {
       const hpPair = valWithDelta(`${h.hp}/${h.maxHp}`, h.maxHp - b.maxHp, "int");
       cells.push({
-        icon: "regen_hp",
+        icon: "max_hp",
         label: "Vida",
         value: `${h.hp}/${h.maxHp}`,
         valueHtml: hpPair.html,
@@ -3095,7 +3115,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         "int",
       );
       cells.push({
-        icon: "regen_mp",
+        icon: "max_mana",
         label: "Mana",
         value: `${h.mana}/${h.maxMana}`,
         valueHtml: mpPair.html,
@@ -3254,12 +3274,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   } else {
     const we = h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
     cells.push({
-      icon: "regen_hp",
+      icon: "max_hp",
       label: "Vida",
       value: `${h.hp}/${h.maxHp}`,
     });
     cells.push({
-      icon: "regen_mp",
+      icon: "max_mana",
       label: "Mana",
       value: `${h.mana}/${h.maxMana}`,
     });
@@ -3731,7 +3751,19 @@ function showCombatHUD(): void {
     );
     const stipEl = document.getElementById("wave-stipend-overlay");
     if (stipEl) {
-      stipEl.innerHTML = `<span class="wave-stipend-line"><span class="wave-stipend-gold">${sumWaveGold}</span> <span class="wave-stipend-drain">(−${drainNext})</span></span>`;
+      const coin = combatGoldCoinSvgHtml("wave-stipend-coin-svg");
+      stipEl.innerHTML = `<div class="wave-stipend-stack">
+        <span class="wave-stipend-line"><span class="wave-stipend-gold">${sumWaveGold}</span> <span class="wave-stipend-drain">(−${drainNext})</span></span>
+        <div class="wave-stipend-wave" aria-hidden="true">
+          <span class="wave-stipend-bar" style="--wave-tick:0.32"></span>
+          <span class="wave-stipend-bar" style="--wave-tick:0.5"></span>
+          <span class="wave-stipend-bar" style="--wave-tick:0.72"></span>
+          <span class="wave-stipend-wave-center" title="Ouro da wave">${coin}</span>
+          <span class="wave-stipend-bar" style="--wave-tick:0.72"></span>
+          <span class="wave-stipend-bar" style="--wave-tick:0.5"></span>
+          <span class="wave-stipend-bar" style="--wave-tick:0.32"></span>
+        </div>
+      </div>`;
     }
     const oddsEl = combatAboveBar.querySelector("#combat-rarity-hint");
     if (oddsEl) {
@@ -4782,8 +4814,8 @@ function showLevelPick(): void {
   const heroLine = hero
     ? escapeHtml(hero.name)
     : "Herói";
-  const s = el(`<div class="modal"><div class="modal-inner modal-inner--artifact-pick">
-    <h2>Escolha um artefato — ${heroLine}</h2>
+  const s = el(`<div class="modal modal--crystal"><div class="modal-inner modal-inner--artifact-pick">
+    <h2 class="crystal-modal-title">Escolha um artefato — ${heroLine}</h2>
     <p class="artifact-pick-hint">Passe o rato sobre a carta para ver o próximo nível.</p>
     <div class="artifact-pick-actions">
       <button type="button" class="btn" id="btn-artifact-reroll">Rerol (1)</button>
@@ -4837,9 +4869,9 @@ function showUltimatePick(): void {
   const p = model.pendingUltimate!;
   const u = model.units.find((x) => x.id === p.unitId);
   uiRoot.innerHTML = "";
-  const s = el(`<div class="modal"><div class="modal-inner">
-    <h2>Forma final (nível 60) — Ultimate</h2>
-    <div id="opts"></div>
+  const s = el(`<div class="modal modal--crystal"><div class="modal-inner modal-inner--ultimate-pick">
+    <h2 class="crystal-modal-title">Forma final (nível 60) — Ultimate</h2>
+    <div id="opts" class="ultimate-pick-list"></div>
   </div></div>`);
   uiRoot.appendChild(s);
   const opts = s.querySelector("#opts")!;
@@ -4851,7 +4883,7 @@ function showUltimatePick(): void {
         : HEROES.sacerdotisa.ultimates;
   for (const ult of list) {
     const b = el(
-      `<button class="btn" style="width:100%;margin:.35rem 0">${ult.name}<br/><small>${ult.description}</small></button>`,
+      `<button type="button" class="btn ultimate-pick-option">${escapeHtml(ult.name)}<br/><small>${escapeHtml(ult.description)}</small></button>`,
     );
     b.addEventListener("click", () => {
       model.pickUltimate(ult.id);
@@ -4865,9 +4897,9 @@ function showVictory(): void {
   hideGameTooltip();
   uiRoot.innerHTML = "";
   const s = el(`
-    <div class="screen">
-      <h1>Vitória!</h1>
-      <p>Você zerou a arena — wave ${FINAL_VICTORY_WAVE}.</p>
+    <div class="screen screen--crystal-veil screen--victory-end">
+      <h1 class="hero-setup-main-title">Vitória!</h1>
+      <p class="crystal-endgame-copy">Zeraste a arena — wave ${FINAL_VICTORY_WAVE}.</p>
       <button class="btn btn-primary" id="ok">Menu</button>
     </div>`);
   uiRoot.appendChild(s);
@@ -4881,10 +4913,10 @@ function showDefeat(): void {
   hideGameTooltip();
   uiRoot.innerHTML = "";
   const s = el(`
-    <div class="screen">
-      <h1>Derrota</h1>
-      <p>Cristais salvos na conta.</p>
-      <button class="btn" id="ok">Menu</button>
+    <div class="screen screen--crystal-veil screen--defeat-end">
+      <h1 class="hero-setup-main-title">Derrota</h1>
+      <p class="crystal-endgame-copy">Cristais salvos na conta.</p>
+      <button class="btn btn-primary" id="ok">Menu</button>
     </div>`);
   uiRoot.appendChild(s);
   s.querySelector("#ok")!.addEventListener("click", () => {
@@ -5196,7 +5228,7 @@ function equipmentModalPieceCellHtml(
   uniqBase: number,
 ): string {
   const title = forgePieceLabelPt(kind);
-  const piece = L[kind];
+  const piece = resolveEquippedForgeLoadout(L)[kind];
   if (!piece) {
     return `<div class="eq-piece-cell eq-piece-cell--empty" data-eq-hero="${forgeHi}" data-eq-kind="${kind}">
       <div class="eq-piece-3d-host eq-piece-3d-host--empty" aria-hidden="true"><span class="eq-piece-3d-placeholder">—</span></div>
@@ -5245,7 +5277,7 @@ function openEquipmentModal(): void {
     <div id="equipment-modal-root" class="equipment-modal-backdrop" role="dialog" aria-modal="true" aria-label="Equipamentos">
       <div class="equipment-modal equipment-modal--pieces">
         <h2>Equipamentos forjados</h2>
-        <p class="equipment-modal__hint">Sinergias por bioma em cima (só peças nv 3 contam). Abaixo de cada modelo: efeito da peça. Passe o rato no brasão para detalhes.</p>
+        <p class="equipment-modal__hint">Sinergias em cima: só biomas da combinação equipada (só nv 3 contam para o tier). Abaixo: efeito de cada peça equipada. Passe o rato no brasão para detalhes.</p>
         <div class="equipment-modal__cols">${cols.join("")}</div>
         <button type="button" class="btn" id="equipment-modal-close">Fechar (I)</button>
       </div>
@@ -5265,7 +5297,7 @@ function openEquipmentModal(): void {
     if (!cell) return;
     const hi = Number(cell.dataset.eqHero) as 0 | 1 | 2;
     const kind = cell.dataset.eqKind as ForgeSlotKind;
-    const piece = (slots[hi] ?? {})[kind];
+    const piece = resolveEquippedForgeLoadout(slots[hi] ?? {})[kind];
     if (!piece) return;
     const prev = new ForgePiecePreview3D(host);
     prev.setKindAndPiece(kind, piece.biome, piece.level);

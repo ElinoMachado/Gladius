@@ -2,6 +2,8 @@ import type {
   BiomeId,
   ForgeEssenceId,
   ForgeHeroLoadout,
+  ForgePerEssenceLevels,
+  ForgePiece,
   ForgeSlotKind,
   MetaProgress,
   Unit,
@@ -72,9 +74,8 @@ export function countForgeBiomePieces(
 ): number {
   if (!loadout) return 0;
   let n = 0;
-  for (const k of ["helmo", "capa", "manoplas"] as const) {
-    const p = loadout[k];
-    if (p?.biome === biome && p.level === 3) n++;
+  for (const k of FORGE_SLOT_ORDER) {
+    if (getForgeLevel(loadout, k, biome) === 3) n++;
   }
   return n;
 }
@@ -83,7 +84,9 @@ export function forgeSynergyTier(
   loadout: ForgeHeroLoadout | undefined,
   biome: ForgeEssenceId,
 ): 0 | 1 | 2 | 3 {
-  const n = countForgeBiomePieces(loadout, biome);
+  /** Só conta o que está equipado (combate + painel alinhados). */
+  const eq = resolveEquippedForgeLoadout(loadout);
+  const n = countForgeBiomePieces(eq, biome);
   if (n >= 3) return 3;
   if (n === 2) return 2;
   if (n === 1) return 1;
@@ -94,18 +97,230 @@ export function emptyForgeLoadout(): ForgeHeroLoadout {
   return {};
 }
 
+export const FORGE_SLOT_ORDER: readonly ForgeSlotKind[] = [
+  "helmo",
+  "capa",
+  "manoplas",
+];
+
+const PROGRESS_KEY: Record<ForgeSlotKind, keyof ForgeHeroLoadout> = {
+  helmo: "helmoByEssence",
+  capa: "capaByEssence",
+  manoplas: "manoplasByEssence",
+};
+
+const EQUIPPED_KEY: Record<ForgeSlotKind, keyof ForgeHeroLoadout> = {
+  helmo: "helmoEquipped",
+  capa: "capaEquipped",
+  manoplas: "manoplasEquipped",
+};
+
+function sanitizePerEssenceLevels(x: unknown): ForgePerEssenceLevels | undefined {
+  if (!x || typeof x !== "object") return undefined;
+  const o = x as Record<string, unknown>;
+  const out: ForgePerEssenceLevels = {};
+  for (const id of COMBAT_BIOMES) {
+    const k = id as ForgeEssenceId;
+    const raw = o[k];
+    const n =
+      typeof raw === "number"
+        ? raw
+        : typeof raw === "string"
+          ? Number(raw)
+          : NaN;
+    if (n === 1 || n === 2 || n === 3) out[k] = n;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Nível forjado para (slot, essência), incluindo saves legados (uma peça por slot). */
+export function getForgeLevel(
+  L: ForgeHeroLoadout | undefined,
+  kind: ForgeSlotKind,
+  biome: ForgeEssenceId,
+): 1 | 2 | 3 | undefined {
+  if (!L) return undefined;
+  const pk = PROGRESS_KEY[kind];
+  const map = L[pk] as ForgePerEssenceLevels | undefined;
+  const fromMap = map?.[biome];
+  if (fromMap === 1 || fromMap === 2 || fromMap === 3) return fromMap;
+  const leg = L[kind] as ForgePiece | undefined;
+  if (leg?.biome === biome && (leg.level === 1 || leg.level === 2 || leg.level === 3))
+    return leg.level;
+  return undefined;
+}
+
+function ensureProgressMap(
+  loadout: ForgeHeroLoadout,
+  kind: ForgeSlotKind,
+): ForgePerEssenceLevels {
+  const pk = PROGRESS_KEY[kind];
+  let m = loadout[pk] as ForgePerEssenceLevels | undefined;
+  if (!m) {
+    m = {};
+    (loadout as Record<string, unknown>)[pk as string] = m;
+  }
+  return m;
+}
+
+export function setForgeLevel(
+  loadout: ForgeHeroLoadout,
+  kind: ForgeSlotKind,
+  biome: ForgeEssenceId,
+  level: 1 | 2 | 3,
+): void {
+  const m = ensureProgressMap(loadout, kind);
+  m[biome] = level;
+  const lo = loadout as Record<string, unknown>;
+  delete lo[kind];
+}
+
+export function setEquippedBiome(
+  loadout: ForgeHeroLoadout,
+  kind: ForgeSlotKind,
+  biome: ForgeEssenceId,
+): void {
+  const ek = EQUIPPED_KEY[kind];
+  (loadout as Record<string, unknown>)[ek as string] = biome;
+}
+
+/** Qual essência está equipada neste slot (combate / modelo). */
+export function resolveEquippedBiome(
+  L: ForgeHeroLoadout | undefined,
+  kind: ForgeSlotKind,
+): ForgeEssenceId | undefined {
+  if (!L) return undefined;
+  const ek = EQUIPPED_KEY[kind];
+  const pref = L[ek as keyof ForgeHeroLoadout] as ForgeEssenceId | undefined;
+  if (pref && getForgeLevel(L, kind, pref) != null) return pref;
+  const leg = L[kind] as ForgePiece | undefined;
+  if (leg && getForgeLevel(L, kind, leg.biome) != null) return leg.biome;
+  const pk = PROGRESS_KEY[kind];
+  const map = L[pk] as ForgePerEssenceLevels | undefined;
+  if (!map) return undefined;
+  let bestBiome: ForgeEssenceId | undefined;
+  let bestLv = 0;
+  for (const [b, lv] of Object.entries(map) as [ForgeEssenceId, 1 | 2 | 3][]) {
+    if (lv > bestLv) {
+      bestLv = lv;
+      bestBiome = b;
+    }
+  }
+  return bestBiome;
+}
+
+/** Loadout só com as três peças equipadas (stats e visual). */
+export function resolveEquippedForgeLoadout(
+  L: ForgeHeroLoadout | undefined,
+): ForgeHeroLoadout {
+  const flat: ForgeHeroLoadout = {};
+  if (!L) return flat;
+  for (const kind of FORGE_SLOT_ORDER) {
+    const b = resolveEquippedBiome(L, kind);
+    if (!b) continue;
+    const lv = getForgeLevel(L, kind, b);
+    if (!lv) continue;
+    flat[kind] = { biome: b, level: lv };
+  }
+  return flat;
+}
+
+function stripInvalidEquipped(loadout: ForgeHeroLoadout): void {
+  for (const kind of FORGE_SLOT_ORDER) {
+    const ek = EQUIPPED_KEY[kind];
+    const pref = loadout[ek as keyof ForgeHeroLoadout] as ForgeEssenceId | undefined;
+    if (pref != null && getForgeLevel(loadout, kind, pref) == null) {
+      delete (loadout as Record<string, unknown>)[ek as string];
+    }
+  }
+}
+
+/** Só persiste biome + level válidos (evita perdas com spread/`JSON` e níveis como string). */
+export function sanitizeForgePiece(
+  x: unknown,
+): { biome: ForgeEssenceId; level: 1 | 2 | 3 } | undefined {
+  if (!x || typeof x !== "object") return undefined;
+  const o = x as { biome?: unknown; level?: unknown };
+  if (typeof o.biome !== "string") return undefined;
+  const lv =
+    typeof o.level === "number"
+      ? o.level
+      : typeof o.level === "string"
+        ? Number(o.level)
+        : NaN;
+  if (lv !== 1 && lv !== 2 && lv !== 3) return undefined;
+  return { biome: o.biome as ForgeEssenceId, level: lv };
+}
+
+export function sanitizeForgeLoadout(L: unknown): ForgeHeroLoadout {
+  const out: ForgeHeroLoadout = {};
+  if (!L || typeof L !== "object") return out;
+  const o = L as Record<string, unknown>;
+  const he = sanitizePerEssenceLevels(o.helmoByEssence);
+  const ce = sanitizePerEssenceLevels(o.capaByEssence);
+  const me = sanitizePerEssenceLevels(o.manoplasByEssence);
+  if (he) out.helmoByEssence = { ...he };
+  if (ce) out.capaByEssence = { ...ce };
+  if (me) out.manoplasByEssence = { ...me };
+  for (const ek of [
+    "helmoEquipped",
+    "capaEquipped",
+    "manoplasEquipped",
+  ] as const) {
+    const v = o[ek];
+    if (typeof v === "string" && COMBAT_BIOMES.includes(v as BiomeId)) {
+      (out as Record<string, unknown>)[ek] = v;
+    }
+  }
+  for (const kind of FORGE_SLOT_ORDER) {
+    const p = sanitizeForgePiece(o[kind]);
+    if (!p) continue;
+    const m = ensureProgressMap(out, kind);
+    if (m[p.biome] == null) m[p.biome] = p.level;
+    const eqK = EQUIPPED_KEY[kind];
+    if (out[eqK as keyof ForgeHeroLoadout] == null) {
+      (out as Record<string, unknown>)[eqK as string] = p.biome;
+    }
+  }
+  stripInvalidEquipped(out);
+  return out;
+}
+
+/**
+ * Tupla de 3 loadouts para memória/localStorage: cópia explícita por peça
+ * (não usar object spread nas peças — garante que nada “some” ao gravar).
+ */
+export function snapshotForgeByHeroSlotForPersistence(
+  slots: unknown,
+): [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout] {
+  const arr = Array.isArray(slots) ? slots : [];
+  const out: [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout] = [
+    {},
+    {},
+    {},
+  ];
+  for (let i = 0; i < 3; i++) {
+    out[i] = sanitizeForgeLoadout(arr[i]);
+  }
+  return out;
+}
+
 export function cloneForgeLoadout(l: ForgeHeroLoadout): ForgeHeroLoadout {
-  const o: ForgeHeroLoadout = {};
-  if (l.helmo) o.helmo = { ...l.helmo };
-  if (l.capa) o.capa = { ...l.capa };
-  if (l.manoplas) o.manoplas = { ...l.manoplas };
-  return o;
+  return sanitizeForgeLoadout(l);
+}
+
+/** Cópia profunda dos 3 loadouts (referências partilhadas → tupla isolada). */
+export function cloneForgeByHeroSlot(
+  slots: [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout],
+): [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout] {
+  return snapshotForgeByHeroSlotForPersistence(slots);
 }
 
 /** Aplica bônus de forja ao herói (stats já com meta + party). */
 export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
   u.forgeLoadout = cloneForgeLoadout(loadout);
-  const h = loadout.helmo;
+  const resolved = resolveEquippedForgeLoadout(loadout);
+  const h = resolved.helmo;
   if (h) {
     const hel =
       h.level === 1
@@ -116,7 +331,7 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
     u.movimento += hel.mov;
     u.alcance += hel.alc;
   }
-  const c = loadout.capa;
+  const c = resolved.capa;
   if (c) {
     /** Só o pacote do nível atual (como elmo/manoplas), sem somar nv1+nv2+nv3. */
     if (c.level === 1) {
@@ -133,7 +348,7 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
       u.defesa += 25;
     }
   }
-  const m = loadout.manoplas;
+  const m = resolved.manoplas;
   if (m) {
     const mn =
       m.level === 1
@@ -151,10 +366,10 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
 }
 
 export function forgeVisualKey(loadout: ForgeHeroLoadout | undefined): string {
-  if (!loadout) return "";
+  const R = resolveEquippedForgeLoadout(loadout);
   const bits: string[] = [];
-  for (const k of ["helmo", "capa", "manoplas"] as const) {
-    const p = loadout[k];
+  for (const k of FORGE_SLOT_ORDER) {
+    const p = R[k];
     if (p) bits.push(`${k}:${p.biome}:${p.level}`);
   }
   return bits.join("|");
@@ -184,12 +399,9 @@ function forgeFxSeg(icon: StatIconId, uniq: { n: number }, text: string): string
   return `<span class="forge-fx-seg">${statIconWrap(icon, uniq.n++)}<span class="forge-fx-txt">${escapeForgeHtml(text)}</span></span>`;
 }
 
-function forgeFxSep(text: string): string {
-  return `<span class="forge-fx-sep">${escapeForgeHtml(text)}</span>`;
-}
-
 /**
  * Uma linha de efeito com ícones iguais ao grid do herói no combate (`lol-stat-ico`).
+ * Vírgulas ficam dentro do texto do segmento anterior para não aparecerem sozinhas ao fazer wrap no flex.
  */
 export function forgePieceEffectHtml(
   kind: ForgeSlotKind,
@@ -201,57 +413,38 @@ export function forgePieceEffectHtml(
   if (kind === "helmo") {
     if (level === 1) p.push(forgeFxSeg("mov", u, "+1 movimento"));
     else if (level === 2) {
-      p.push(forgeFxSeg("range", u, "+1 alcance"));
-      p.push(forgeFxSep(", "));
+      p.push(forgeFxSeg("range", u, "+1 alcance, "));
       p.push(forgeFxSeg("mov", u, "+1 movimento"));
     } else {
-      p.push(forgeFxSeg("range", u, "+2 alcance"));
-      p.push(forgeFxSep(", "));
+      p.push(forgeFxSeg("range", u, "+2 alcance, "));
       p.push(forgeFxSeg("mov", u, "+2 movimento"));
     }
   } else if (kind === "capa") {
     if (level === 1) {
-      p.push(forgeFxSeg("regen_hp", u, "+100 vida máx."));
-      p.push(forgeFxSep(", "));
+      p.push(forgeFxSeg("max_hp", u, "+100 vida máx., "));
       p.push(forgeFxSeg("def", u, "+5 armadura"));
     } else if (level === 2) {
-      p.push(forgeFxSeg("regen_hp", u, "+200 vida máx."));
-      p.push(forgeFxSep(", "));
+      p.push(forgeFxSeg("max_hp", u, "+200 vida máx., "));
       p.push(forgeFxSeg("def", u, "+10 armadura"));
     } else {
-      p.push(forgeFxSeg("regen_hp", u, "+500 vida máx."));
-      p.push(forgeFxSep(", "));
+      p.push(forgeFxSeg("max_hp", u, "+500 vida máx., "));
       p.push(forgeFxSeg("def", u, "+25 armadura"));
     }
   } else {
     if (level === 1) {
-      p.push(forgeFxSeg("dmg", u, "+10 dano"));
-      p.push(forgeFxSep(", "));
+      p.push(forgeFxSeg("dmg", u, "+10 dano, "));
       p.push(forgeFxSeg("crit_hit", u, "+25% chance crítica"));
     } else if (level === 2) {
-      p.push(forgeFxSeg("dmg", u, "+25 dano"));
-      p.push(forgeFxSep(", "));
-      p.push(forgeFxSeg("crit_hit", u, "+50% crítico"));
-      p.push(forgeFxSep(", "));
+      p.push(forgeFxSeg("dmg", u, "+25 dano, "));
+      p.push(forgeFxSeg("crit_hit", u, "+50% crítico, "));
       p.push(forgeFxSeg("crit_dmg", u, "+25% dano crítico"));
     } else {
-      p.push(forgeFxSeg("dmg", u, "+50 dano"));
-      p.push(forgeFxSep(", "));
-      p.push(forgeFxSeg("crit_hit", u, "+100% crítico"));
-      p.push(forgeFxSep(", "));
+      p.push(forgeFxSeg("dmg", u, "+50 dano, "));
+      p.push(forgeFxSeg("crit_hit", u, "+100% crítico, "));
       p.push(forgeFxSeg("crit_dmg", u, "+50% dano crítico"));
     }
   }
   return `<div class="forge-piece-effect-line">${p.join("")}</div>`;
-}
-
-export function forgePieceSynergySummaryLine(
-  piece: { biome: ForgeEssenceId },
-  heroLoadout: ForgeHeroLoadout,
-): string | null {
-  const t = forgeSynergyTier(heroLoadout, piece.biome);
-  if (t <= 0) return null;
-  return `Sinergia ${piece.biome}: ${t}/3 peças nv 3 deste bioma no herói.`;
 }
 
 export function forgeSynergyDescriptionLines(
@@ -303,21 +496,14 @@ export function forgeSynergyCrestTooltipHtml(
 }
 
 /**
- * Loadout usado só para exibir sinergia na forja: nos slots já ocupados,
- * o bioma do &lt;select&gt; substitui o salvo (troca pendente conta como nv1).
+ * @deprecated Cada essência tem progresso próprio; a sinergia usa o loadout real (`forgeSynergyPanelHtml`).
+ * Mantido como identidade para não quebrar imports antigos.
  */
 export function forgeLoadoutProjectedForSynergy(
   base: ForgeHeroLoadout,
-  selectedPerSlot: Readonly<Record<ForgeSlotKind, ForgeEssenceId>>,
+  _selectedPerSlot: Readonly<Record<ForgeSlotKind, ForgeEssenceId>>,
 ): ForgeHeroLoadout {
-  const L = cloneForgeLoadout(base);
-  for (const k of ["helmo", "capa", "manoplas"] as const) {
-    const cur = L[k];
-    const pick = selectedPerSlot[k];
-    if (!cur) continue;
-    if (cur.biome !== pick) L[k] = { biome: pick, level: 1 };
-  }
-  return L;
+  return cloneForgeLoadout(base);
 }
 
 /** Tooltip HTML (equipamento modal / cartão inteiro). */
@@ -354,18 +540,19 @@ function escapeForgeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Painel de sinergias por bioma presente no loadout (brasão + linhas ativas/inativas). */
+/** Painel de sinergias: só biomas da combinação **equipada** (elmo + capa + manoplas atuais). */
 export function forgeSynergyPanelHtml(L: ForgeHeroLoadout): string {
-  const present = new Set(
-    (["helmo", "capa", "manoplas"] as const)
-      .map((k) => L[k]?.biome)
-      .filter((b): b is ForgeEssenceId => b != null),
-  );
+  const equipped = resolveEquippedForgeLoadout(L);
+  const present = new Set<ForgeEssenceId>();
+  for (const kind of FORGE_SLOT_ORDER) {
+    const p = equipped[kind];
+    if (p) present.add(p.biome);
+  }
   const biomes = COMBAT_BIOMES.map((id) => id as ForgeEssenceId).filter((b) =>
     present.has(b),
   );
   if (biomes.length === 0) {
-    return `<div class="forge-synergy-panel forge-synergy-panel--empty"><p class="forge-synergy-empty__hint">Sem peças forjadas — o painel de sinergia aparece quando tiveres pelo menos uma peça; só equipamentos nv 3 contam para os tiers.</p></div>`;
+    return `<div class="forge-synergy-panel forge-synergy-panel--empty"><p class="forge-synergy-empty__hint">Ainda sem equipamento neste slot. Forja e escolhe a essência em cada tipo de peça; aqui só entram sinergias da <strong>combinação equipada</strong> (ex.: 1 vulcânico + 1 pântano + 1 deserto → três cartões). Só nv 3 contam para o tier.</p></div>`;
   }
   const cards = biomes
     .map((biome) => {
@@ -411,38 +598,32 @@ export function forgeUpgradeButtonTooltipHtml(
   if (!loadout) {
     return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Forja</div><p class="game-ui-tooltip-passive">Dados de herói inválidos; reinicia o jogo ou o meta.</p></div>`;
   }
-  const cur = loadout[kind];
+  const curLv = getForgeLevel(loadout, kind, selectedBiome);
   const heldElsewhere = forgeKindBiomeHeldByOtherHero(
     meta,
     heroSlotIndex,
     kind,
     selectedBiome,
   );
-  if (heldElsewhere && (!cur || cur.biome !== selectedBiome)) {
+  if (heldElsewhere && curLv == null) {
     const kt = forgeSlotKindLabelPt(kind);
     return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Indisponível</div><p class="game-ui-tooltip-passive">Já existe um <strong>${escapeForgeHtml(kt)}</strong> de ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} noutro slot de party. Cada tipo de peça + bioma é de <strong>uso único</strong> (não podes duplicar entre heróis).</p></div>`;
   }
-  if (cur && cur.biome !== selectedBiome) {
-    const cost = FORGE_COST_CREATE;
-    const have = meta.essences[selectedBiome] ?? 0;
-    const fx = forgePieceEffectHtml(kind, 1, 510);
-    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Trocar bioma</div><p class="game-ui-tooltip-passive">Substitui a peça atual de ${escapeForgeHtml(FORGE_ESSENCE_LABELS[cur.biome])} por uma nova de ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (nv1).</p><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p><p class="game-ui-tooltip-passive"><strong>Novo efeito</strong></p>${fx}</div>`;
+  if (curLv != null && curLv >= 3) {
+    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Nível máximo</div><p class="game-ui-tooltip-passive">Esta linha (${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])}) já está no nv3. Escolhe outra essência no menu para forjar ou aprimorar outra linha.</p></div>`;
   }
-  if (cur && cur.level >= 3) {
-    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Nível máximo</div><p class="game-ui-tooltip-passive">Esta peça já está no nv3. Escolhe outro bioma no menu para reforjar nesse bioma (nv1).</p></div>`;
-  }
-  if (!cur) {
+  if (curLv == null) {
     const cost = FORGE_COST_CREATE;
     const have = meta.essences[selectedBiome] ?? 0;
     const fx = forgePieceEffectHtml(kind, 1, 520);
-    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Forjar nv1</div><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p><p class="game-ui-tooltip-passive"><strong>Após forjar</strong></p>${fx}</div>`;
+    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Forjar nv1</div><p class="game-ui-tooltip-passive">Nova linha de ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])}; não apaga outras essências já forjadas neste slot.</p><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p><p class="game-ui-tooltip-passive"><strong>Após forjar</strong></p>${fx}</div>`;
   }
   const cost =
-    cur.level === 1 ? FORGE_COST_UPGRADE_TO_2 : FORGE_COST_UPGRADE_TO_3;
-  const have = meta.essences[cur.biome] ?? 0;
-  const nextLev = (cur.level + 1) as 2 | 3;
+    curLv === 1 ? FORGE_COST_UPGRADE_TO_2 : FORGE_COST_UPGRADE_TO_3;
+  const have = meta.essences[selectedBiome] ?? 0;
+  const nextLev = (curLv + 1) as 2 | 3;
   const fx = forgePieceEffectHtml(kind, nextLev, 530);
-  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Aprimorar → nv${nextLev}</div><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[cur.biome])} (tens ${have}).</p><p class="game-ui-tooltip-passive"><strong>Estado após aprimorar (nível completo)</strong></p>${fx}</div>`;
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Aprimorar → nv${nextLev}</div><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p><p class="game-ui-tooltip-passive"><strong>Estado após aprimorar (nível completo)</strong></p>${fx}</div>`;
 }
 
 /** Outro herói (slot de party) já tem esta peça: mesmo tipo + bioma (uso único global). */
@@ -454,8 +635,8 @@ export function forgeKindBiomeHeldByOtherHero(
 ): boolean {
   for (let hi = 0; hi < 3; hi++) {
     if (hi === heroSlotIndex) continue;
-    const p = meta.forgeByHeroSlot[hi as 0 | 1 | 2]![kind];
-    if (p && p.biome === biome) return true;
+    const L = meta.forgeByHeroSlot[hi as 0 | 1 | 2];
+    if (getForgeLevel(L, kind, biome) != null) return true;
   }
   return false;
 }
@@ -466,31 +647,28 @@ export function forgeTryCraftOrUpgrade(
   kind: ForgeSlotKind,
   biome: ForgeEssenceId,
 ): boolean {
+  const s = meta.forgeByHeroSlot;
+  if (s[0] === s[1] || s[1] === s[2] || s[0] === s[2]) {
+    meta.forgeByHeroSlot = snapshotForgeByHeroSlotForPersistence(s);
+  }
   const loadout = meta.forgeByHeroSlot[heroSlotIndex];
-  if (!loadout) return false;
-  const cur = loadout[kind];
-  if (!cur) {
+  if (!loadout || typeof loadout !== "object") return false;
+  const curLv = getForgeLevel(loadout, kind, biome);
+  if (curLv == null) {
     if (forgeKindBiomeHeldByOtherHero(meta, heroSlotIndex, kind, biome))
       return false;
     if ((meta.essences[biome] ?? 0) < FORGE_COST_CREATE) return false;
     meta.essences[biome] = (meta.essences[biome] ?? 0) - FORGE_COST_CREATE;
-    loadout[kind] = { biome, level: 1 };
+    setForgeLevel(loadout, kind, biome, 1);
+    setEquippedBiome(loadout, kind, biome);
     return true;
   }
-  // Trocar bioma: permite substituir a peça existente por uma nv1 do novo bioma.
-  if (cur.biome !== biome) {
-    if (forgeKindBiomeHeldByOtherHero(meta, heroSlotIndex, kind, biome))
-      return false;
-    if ((meta.essences[biome] ?? 0) < FORGE_COST_CREATE) return false;
-    meta.essences[biome] = (meta.essences[biome] ?? 0) - FORGE_COST_CREATE;
-    loadout[kind] = { biome, level: 1 };
-    return true;
-  }
-  if (cur.level >= 3) return false;
+  if (curLv >= 3) return false;
   const cost =
-    cur.level === 1 ? FORGE_COST_UPGRADE_TO_2 : FORGE_COST_UPGRADE_TO_3;
+    curLv === 1 ? FORGE_COST_UPGRADE_TO_2 : FORGE_COST_UPGRADE_TO_3;
   if ((meta.essences[biome] ?? 0) < cost) return false;
   meta.essences[biome] = (meta.essences[biome] ?? 0) - cost;
-  cur.level = (cur.level + 1) as 2 | 3;
+  setForgeLevel(loadout, kind, biome, (curLv + 1) as 2 | 3);
+  setEquippedBiome(loadout, kind, biome);
   return true;
 }

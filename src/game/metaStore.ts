@@ -7,11 +7,57 @@ import type {
 import { normalizeWeaponLevel } from "./weaponData";
 import { INITIAL_CARD_COSTS, META_COSTS } from "./types";
 import { COMBAT_BIOMES } from "./data/biomes";
+import { snapshotForgeByHeroSlotForPersistence } from "./forge";
 
 const KEY = "gladiadores-arena-meta-v2";
 
-/** Essências iniciais por bioma de combate; 0 = novos jogadores sem stock. Subir p/ testes na forja. */
+/** Referência dedicada ao estado da forja (3 loadouts); tem prioridade sobre o blob do meta principal ao carregar. */
+const FORGE_STATE_KEY = "gladiadores-arena-forge-state-v1";
+
+const FORGE_STATE_VERSION = 2 as const;
+
+type ForgeStateFile = {
+  v: typeof FORGE_STATE_VERSION;
+  forgeByHeroSlot: [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout];
+};
+
+function readForgeStateFile(): [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout] | null {
+  try {
+    const raw = localStorage.getItem(FORGE_STATE_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw) as unknown;
+    if (!o || typeof o !== "object") return null;
+    const rec = o as { v?: unknown; forgeByHeroSlot?: unknown };
+    if (rec.v !== 1 && rec.v !== 2) return null;
+    return snapshotForgeByHeroSlotForPersistence(rec.forgeByHeroSlot);
+  } catch {
+    return null;
+  }
+}
+
+function writeForgeStateFile(
+  slots: [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout],
+): void {
+  const sanitized = snapshotForgeByHeroSlotForPersistence(slots);
+  const payload: ForgeStateFile = {
+    v: FORGE_STATE_VERSION,
+    forgeByHeroSlot: sanitized,
+  };
+  try {
+    localStorage.setItem(FORGE_STATE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    console.error("writeForgeStateFile: falha ao gravar estado da forja", e);
+  }
+}
+
+/** Essências iniciais por bioma de combate; 0 = novos jogadores sem stock. */
 const STARTER_ESSENCES_PER_BIOME = 0;
+
+/**
+ * 0 = desligado. Se > 0, ao carregar o meta cada bioma de combate fica com exatamente este valor
+ * (sobrepõe o save — útil para testar a forja). Voltar a 0 para progressão normal.
+ */
+const TEST_FORGE_ESSENCES_EACH = 100;
 
 function starterEssencesMap(): Partial<Record<ForgeEssenceId, number>> {
   if (STARTER_ESSENCES_PER_BIOME <= 0) return {};
@@ -24,51 +70,11 @@ function starterEssencesMap(): Partial<Record<ForgeEssenceId, number>> {
 
 const emptyForgeSlot = (): ForgeHeroLoadout => ({});
 
-function safeForgePiece(
-  x: unknown,
-): { biome: ForgeEssenceId; level: 1 | 2 | 3 } | undefined {
-  if (!x || typeof x !== "object") return undefined;
-  const o = x as { biome?: unknown; level?: unknown };
-  const biome = o.biome;
-  const level = o.level;
-  if (
-    typeof biome !== "string" ||
-    (level !== 1 && level !== 2 && level !== 3)
-  ) {
-    return undefined;
-  }
-  return { biome: biome as ForgeEssenceId, level };
-}
-
-function safeForgeLoadout(raw: unknown): ForgeHeroLoadout {
-  if (!raw || typeof raw !== "object") return {};
-  const o = raw as Record<string, unknown>;
-  const out: ForgeHeroLoadout = {};
-  const h = safeForgePiece(o.helmo);
-  const c = safeForgePiece(o.capa);
-  const m = safeForgePiece(o.manoplas);
-  if (h) out.helmo = h;
-  if (c) out.capa = c;
-  if (m) out.manoplas = m;
-  return out;
-}
-
 /** Garante sempre 3 slots (corrige saves antigos / arrays partidos). */
 function normalizeForgeByHeroSlot(
   raw: unknown,
 ): [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout] {
-  if (!Array.isArray(raw)) {
-    return [
-      emptyForgeSlot(),
-      emptyForgeSlot(),
-      emptyForgeSlot(),
-    ];
-  }
-  return [
-    safeForgeLoadout(raw[0]),
-    safeForgeLoadout(raw[1]),
-    safeForgeLoadout(raw[2]),
-  ];
+  return snapshotForgeByHeroSlotForPersistence(Array.isArray(raw) ? raw : []);
 }
 
 function normalizeWeaponSlotArray(
@@ -99,30 +105,95 @@ export const defaultMeta = (): MetaProgress => ({
   weaponLevelByHeroSlot: [1, 1, 1],
 });
 
+function applyTestForgeEssences(
+  essences: Partial<Record<ForgeEssenceId, number>>,
+): Partial<Record<ForgeEssenceId, number>> {
+  if (TEST_FORGE_ESSENCES_EACH <= 0) return essences;
+  const out = { ...essences };
+  for (const id of COMBAT_BIOMES) {
+    out[id as ForgeEssenceId] = TEST_FORGE_ESSENCES_EACH;
+  }
+  return out;
+}
+
+function buildMetaFromMainBlob(raw: string): MetaProgress {
+  const o = JSON.parse(raw) as MetaProgress;
+  const d = defaultMeta();
+  return {
+    ...d,
+    ...o,
+    essences: {
+      ...d.essences,
+      ...(o.essences ?? {}),
+    },
+    forgeByHeroSlot: normalizeForgeByHeroSlot(
+      o.forgeByHeroSlot ?? d.forgeByHeroSlot,
+    ),
+    weaponLevelByHeroSlot: normalizeWeaponSlotArray(
+      o.weaponLevelByHeroSlot ?? d.weaponLevelByHeroSlot,
+    ),
+  };
+}
+
 export function loadMeta(): MetaProgress {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return defaultMeta();
-    const o = JSON.parse(raw) as MetaProgress;
-    const d = defaultMeta();
-    return {
-      ...d,
-      ...o,
-      essences: { ...d.essences, ...(o.essences ?? {}) },
-      forgeByHeroSlot: normalizeForgeByHeroSlot(
-        o.forgeByHeroSlot ?? d.forgeByHeroSlot,
-      ),
-      weaponLevelByHeroSlot: normalizeWeaponSlotArray(
-        o.weaponLevelByHeroSlot ?? d.weaponLevelByHeroSlot,
-      ),
-    };
+    if (!raw) {
+      const m = defaultMeta();
+      const base = {
+        ...m,
+        essences: applyTestForgeEssences(m.essences),
+      };
+      const forgeRef = readForgeStateFile();
+      if (forgeRef) base.forgeByHeroSlot = forgeRef;
+      return base;
+    }
+    const merged = buildMetaFromMainBlob(raw);
+    const forgeRef = readForgeStateFile();
+    if (forgeRef) merged.forgeByHeroSlot = forgeRef;
+    merged.essences = applyTestForgeEssences(merged.essences);
+    return merged;
   } catch {
-    return defaultMeta();
+    const m = defaultMeta();
+    const base = {
+      ...m,
+      essences: applyTestForgeEssences(m.essences),
+    };
+    const forgeRef = readForgeStateFile();
+    if (forgeRef) base.forgeByHeroSlot = forgeRef;
+    return base;
   }
 }
 
 export function saveMeta(m: MetaProgress): void {
-  localStorage.setItem(KEY, JSON.stringify(m));
+  m.forgeByHeroSlot = snapshotForgeByHeroSlotForPersistence(m.forgeByHeroSlot);
+  writeForgeStateFile(m.forgeByHeroSlot);
+  try {
+    localStorage.setItem(KEY, JSON.stringify(m));
+  } catch (e) {
+    console.error("saveMeta: falha ao gravar localStorage (meta principal)", e);
+    throw e;
+  }
+}
+
+/**
+ * Só para desenvolvimento: apaga meta, forja e preferências locais do jogo.
+ * Após chamar, convém `location.reload()` para o `GameModel` voltar a carregar `defaultMeta()`.
+ */
+export function clearAllLocalProgressForFreshStart(): void {
+  const keys = [
+    KEY,
+    FORGE_STATE_KEY,
+    "gladiadores-music-volume-percent",
+    "gladiadores-skip-enemy-move",
+    "gladiadores-combat-log-visible",
+    "gladiadores-enemy-inspect-pos",
+  ];
+  try {
+    for (const k of keys) localStorage.removeItem(k);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function permPercent(level: number): number {

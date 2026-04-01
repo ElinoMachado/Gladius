@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { buildEnemyBody3D } from "./enemyModels3d";
-import { forgeVisualKey } from "../game/forge";
+import { forgeVisualKey, resolveEquippedForgeLoadout } from "../game/forge";
 import type { ForgeEssenceId, ForgeHeroLoadout, HeroClassId } from "../game/types";
 import type { Unit } from "../game/types";
 import {
@@ -71,26 +71,27 @@ function addForgeMeshes(
   _mat: (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => THREE.MeshStandardMaterial,
 ): void {
   if (!loadout) return;
+  const R = resolveEquippedForgeLoadout(loadout);
   const b = (id: string) => id as ForgeEssenceId;
-  if (loadout.helmo) {
-    const h = buildHelmetForgeDetail(b(loadout.helmo.biome), loadout.helmo.level);
+  if (R.helmo) {
+    const h = buildHelmetForgeDetail(b(R.helmo.biome), R.helmo.level);
     h.scale.setScalar(0.36);
     h.position.set(0, 1.38, 0);
     h.userData.role = "forge";
     root.add(h);
   }
-  if (loadout.capa) {
-    const c = buildCapeForgeDetail(b(loadout.capa.biome), loadout.capa.level);
+  if (R.capa) {
+    const c = buildCapeForgeDetail(b(R.capa.biome), R.capa.level);
     c.scale.setScalar(0.42);
     c.position.set(0, 0.88, -0.2);
     c.rotation.x = -0.32;
     c.userData.role = "forge";
     root.add(c);
   }
-  if (loadout.manoplas) {
+  if (R.manoplas) {
     const m = buildManoplasForgeDetail(
-      b(loadout.manoplas.biome),
-      loadout.manoplas.level,
+      b(R.manoplas.biome),
+      R.manoplas.level,
     );
     m.scale.setScalar(0.34);
     m.position.set(0, 0.96, 0.06);
