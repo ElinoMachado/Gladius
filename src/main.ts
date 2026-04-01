@@ -2227,20 +2227,20 @@ function showGoldShop(isInitial: boolean): void {
           <span class="shop-hero-gold__hero-idx">Herói ${idx + 1}/${party.length}</span>
         </div>
         ${goldMultiHint}
+        <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
+          <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
+          <div class="shop-hero-stats-col">
+            <p class="shop-hero-stats-head">Atributos atuais (como no combate)</p>
+            <div id="gold-shop-hero-stats" class="lol-stats-list gold-shop-hero-stats-grid"></div>
+          </div>
+        </div>
         <div class="shop-mid-row">
           ${bunkerMidCell}
           ${sandboxMidCell}
-          <div class="shop-mid-cell shop-mid-cell--hero">
-            <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
-              <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
-              <div class="shop-hero-stats-col">
-                <p class="shop-hero-stats-head">Atributos atuais (como no combate)</p>
-                <div id="gold-shop-hero-stats" class="lol-stats-list gold-shop-hero-stats-grid"></div>
-              </div>
-            </div>
+          <div class="shop-mid-cell shop-mid-cell--gold">
+            <div class="shop-grid">${list}</div>
           </div>
         </div>
-        <div class="shop-grid">${list}</div>
         <div class="shop-nav">
           <button type="button" class="btn" id="shop-prev" ${idx < 1 ? "disabled" : ""}>Herói anterior</button>
           <button type="button" class="btn btn-primary" id="shop-next">${idx < party.length - 1 ? "Próximo herói" : isInitial ? "Começar wave 1" : "Próxima wave"}</button>
