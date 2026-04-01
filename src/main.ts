@@ -1499,10 +1499,10 @@ function showMainMenu(): void {
   mainMenuSword3d?.dispose();
   mainMenuSword3d = null;
   uiRoot.innerHTML = "";
-  const devResetRow =
-    import.meta.env.DEV
-      ? `<button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-reset-fresh">[Dev] Estado inicial (apagar save)</button>`
-      : "";
+  const devMenuExtras = import.meta.env.DEV
+    ? `<button type="button" class="main-menu-link main-menu-link--sandbox" data-action="dev-sandbox">Modo sandbox (testes)</button>
+          <button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-reset-fresh">[Dev] Estado inicial (apagar save)</button>`
+    : "";
   const s = el(`
     <div class="main-menu-screen">
       <div class="main-menu-bg" id="main-menu-bg" aria-hidden="true"></div>
@@ -1513,13 +1513,12 @@ function showMainMenu(): void {
         </header>
         <nav class="main-menu-nav" aria-label="Menu principal">
           <button type="button" class="main-menu-link main-menu-link--primary" data-action="new">Novo jogo</button>
-          <button type="button" class="main-menu-link main-menu-link--sandbox" data-action="dev-sandbox">Modo sandbox (testes)</button>
+          ${devMenuExtras}
           <button type="button" class="main-menu-link" data-action="crystal">Loja de cristais</button>
           <button type="button" class="main-menu-link" data-action="forge">Forja</button>
           <button type="button" class="main-menu-link" data-action="artifacts">Artefatos</button>
           <button type="button" class="main-menu-link" data-action="enemies">Compendium</button>
           <button type="button" class="main-menu-link" data-action="exit">Sair</button>
-          ${devResetRow}
         </nav>
       </div>
     </div>
@@ -1551,6 +1550,7 @@ function showMainMenu(): void {
           render();
           break;
         case "dev-sandbox":
+          if (!import.meta.env.DEV) break;
           model.devSandboxMode = true;
           model.phase = "setup_heroes";
           setup.slots = [null, null, null];
@@ -3578,9 +3578,10 @@ function showCombatHUD(): void {
   enemyInspectUiAbort?.abort();
   enemyInspectUiAbort = null;
   uiRoot.innerHTML = "";
-  const sandboxHudHtml = model.devSandboxMode
-    ? `<div class="hud-block hud-sandbox-pill" role="status">Modo sandbox — ouro/cristais/essências amplos · sem CDR · ultimate da arma sempre pronta</div>`
-    : "";
+  const sandboxHudHtml =
+    import.meta.env.DEV && model.devSandboxMode
+      ? `<div class="hud-block hud-sandbox-pill" role="status">Modo sandbox — ouro/cristais/essências amplos · sem CDR · ultimate da arma sempre pronta</div>`
+      : "";
   const hud = el(`
     <div class="hud">
       ${sandboxHudHtml}
@@ -5156,7 +5157,14 @@ function shouldShowBunkerMeshes(phase: GamePhase): boolean {
 }
 
 function render(): void {
-  if (model.devSandboxMode && model.phase !== "main_menu") {
+  if (!import.meta.env.DEV) {
+    model.devSandboxMode = false;
+  }
+  if (
+    import.meta.env.DEV &&
+    model.devSandboxMode &&
+    model.phase !== "main_menu"
+  ) {
     model.applyDevSandboxBuffs();
   }
   if (model.phase !== "shop_wave" && model.phase !== "shop_initial") {
