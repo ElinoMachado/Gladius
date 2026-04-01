@@ -510,20 +510,6 @@ export class GameModel {
     this.emit();
   }
 
-  /** Sai da run na loja: guarda cristais da run na meta e volta ao menu. */
-  abandonRunFromShop(): void {
-    this.meta.crystals += this.crystalsRun;
-    this.crystalsRun = 0;
-    this.metaEssencesAtRunStart = null;
-    this.saveMeta();
-    this.units = [];
-    this.bunkers = {};
-    this.partyOrder = [];
-    this.phase = "main_menu";
-    this.wave = 0;
-    this.emit();
-  }
-
   /**
    * Abandona a run sem gravar cristais da run; reverte essências ao estado de antes da run.
    */

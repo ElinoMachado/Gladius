@@ -2233,7 +2233,6 @@ function showGoldShop(isInitial: boolean): void {
         <div class="shop-nav">
           <button type="button" class="btn" id="shop-prev" ${idx < 1 ? "disabled" : ""}>Herói anterior</button>
           <button type="button" class="btn btn-primary" id="shop-next">${idx < party.length - 1 ? "Próximo herói" : isInitial ? "Começar wave 1" : "Próxima wave"}</button>
-          <button type="button" class="btn" id="shop-abandon-menu">Voltar ao menu</button>
         </div>
       </div>`;
     panel.querySelectorAll("[data-item]").forEach((b) => {
@@ -2356,16 +2355,6 @@ function showGoldShop(isInitial: boolean): void {
         else model.finishWaveShop();
         render();
       }
-    });
-    panel.querySelector("#shop-abandon-menu")!.addEventListener("click", () => {
-      goldShopStall3d?.dispose();
-      goldShopStall3d = null;
-      goldShopBunker3d?.dispose();
-      goldShopBunker3d = null;
-      goldShopHeroPreview3d?.dispose();
-      goldShopHeroPreview3d = null;
-      model.abandonRunFromShop();
-      render();
     });
   };
   refreshGoldShop = renderShop;
