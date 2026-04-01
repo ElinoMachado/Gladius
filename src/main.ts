@@ -3182,9 +3182,18 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   const critMultCur = h.danoCritico + (roch ? 1 : 0);
   const fd = forgeSynergyTier(h.forgeLoadout, "deserto");
   const desertoBlock = bio === "deserto" && !ign && fd < 1;
-  const regMult = h.isPlayer && fd >= 2 ? 2 : 1;
-  const effRegV = desertoBlock ? 0 : Math.floor(h.regenVida * regMult);
-  const effRegM = desertoBlock ? 0 : Math.floor(h.regenMana * regMult);
+  const regMult =
+    h.isPlayer && fd >= 2 && bio === "deserto" ? 2 : 1;
+  const rulerDesertRegenFlat =
+    h.isPlayer && fd >= 1 && (h.artifacts["ruler"] ?? 0) > 0 ? 2 : 0;
+  const effRegV =
+    Math.floor((desertoBlock ? 0 : h.regenVida) * regMult) +
+    (h.isPlayer ? m.desertoAllyRegenExtraHp(h) : 0) +
+    rulerDesertRegenFlat;
+  const effRegM =
+    Math.floor((desertoBlock ? 0 : h.regenMana) * regMult) +
+    (h.isPlayer ? m.desertoAllyRegenExtraMana(h) : 0) +
+    rulerDesertRegenFlat;
 
   const b = h.statBaseline;
   const cells: HeroStatCell[] = [];
@@ -3200,9 +3209,22 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     const baseDeserto =
       bio === "deserto" && !ign && forgeSynergyTier(h.forgeLoadout, "deserto") < 1;
     const baseRegMult =
-      forgeSynergyTier(h.forgeLoadout, "deserto") >= 2 ? 2 : 1;
-    const baseRegV = baseDeserto ? 0 : Math.floor(b.regenVida * baseRegMult);
-    const baseRegM = baseDeserto ? 0 : Math.floor(b.regenMana * baseRegMult);
+      forgeSynergyTier(h.forgeLoadout, "deserto") >= 2 && bio === "deserto"
+        ? 2
+        : 1;
+    const baseRulerDesertRegen =
+      forgeSynergyTier(h.forgeLoadout, "deserto") >= 1 &&
+      (b.artifacts["ruler"] ?? 0) > 0
+        ? 2
+        : 0;
+    const baseRegV =
+      Math.floor((baseDeserto ? 0 : b.regenVida) * baseRegMult) +
+      m.desertoAllyRegenExtraHp(h, (u) => u.statBaseline?.regenVida ?? u.regenVida) +
+      baseRulerDesertRegen;
+    const baseRegM =
+      Math.floor((baseDeserto ? 0 : b.regenMana) * baseRegMult) +
+      m.desertoAllyRegenExtraMana(h, (u) => u.statBaseline?.regenMana ?? u.regenMana) +
+      baseRulerDesertRegen;
     const critMultBase = b.danoCritico + (roch ? 1 : 0);
 
     const waveExtra = h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;

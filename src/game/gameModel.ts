@@ -553,6 +553,35 @@ export class GameModel {
     return add;
   }
 
+  /** Regen extra de aliados com sinergia deserto nv2+ (50% dos stats deles). */
+  desertoAllyRegenExtraHp(
+    hero: Unit,
+    regVOf: (u: Unit) => number = (u) => u.regenVida,
+  ): number {
+    if (!hero.isPlayer) return 0;
+    let add = 0;
+    for (const h of this.getParty()) {
+      if (h.id === hero.id || h.hp <= 0) continue;
+      if (forgeSynergyTier(h.forgeLoadout, "deserto") < 2) continue;
+      add += Math.floor(regVOf(h) * 0.5);
+    }
+    return add;
+  }
+
+  desertoAllyRegenExtraMana(
+    hero: Unit,
+    regMOf: (u: Unit) => number = (u) => u.regenMana,
+  ): number {
+    if (!hero.isPlayer) return 0;
+    let add = 0;
+    for (const h of this.getParty()) {
+      if (h.id === hero.id || h.hp <= 0) continue;
+      if (forgeSynergyTier(h.forgeLoadout, "deserto") < 2) continue;
+      add += Math.floor(regMOf(h) * 0.5);
+    }
+    return add;
+  }
+
   /** Sorte efetiva (ex.: sinergia floresta nv3 dobra). */
   effectiveSorte(u: Unit): number {
     let s = u.sorte;
@@ -3232,7 +3261,12 @@ export class GameModel {
       bio !== "deserto" ||
       unitIgnoresTerrain(u) ||
       (u.isPlayer && fd >= 1);
-    const regenMult = u.isPlayer && fd >= 2 ? 2 : 1;
+    const regenMult =
+      u.isPlayer && fd >= 2 && bio === "deserto" ? 2 : 1;
+    const rulerDesertRegenFlat =
+      u.isPlayer && fd >= 1 && (u.artifacts["ruler"] ?? 0) > 0 ? 2 : 0;
+    const allyDesertHp = this.desertoAllyRegenExtraHp(u);
+    const allyDesertMana = this.desertoAllyRegenExtraMana(u);
     let paraisoMana = 0;
     let paraisoHp = 0;
     if (u.paraisoRegenBonus && u.paraisoRegenBonus.turns > 0) {
@@ -3246,14 +3280,24 @@ export class GameModel {
         u.maxMana,
         u.mana +
           Math.floor(u.regenMana * regenMult) +
-          paraisoMana,
+          paraisoMana +
+          allyDesertMana +
+          rulerDesertRegenFlat,
       );
-    } else if (paraisoMana > 0) {
-      u.mana = Math.min(u.maxMana, u.mana + paraisoMana);
+    } else {
+      const extraMana =
+        paraisoMana + allyDesertMana + rulerDesertRegenFlat;
+      if (extraMana > 0) {
+        u.mana = Math.min(u.maxMana, u.mana + extraMana);
+      }
     }
     let rv =
       bio === "deserto" && !noDesertDrain ? 0 : u.regenVida;
-    rv = Math.floor(rv * regenMult) + paraisoHp;
+    rv =
+      Math.floor(rv * regenMult) +
+      paraisoHp +
+      allyDesertHp +
+      rulerDesertRegenFlat;
     const ton = u.artifacts["tonico"] ?? 0;
     if (ton > 0) {
       u.mana = Math.min(u.maxMana, u.mana + Math.floor(rv * 0.5 * ton));
@@ -3706,10 +3750,7 @@ export class GameModel {
     this.syncWeaponPassivesOnLevelUp(u);
     u.hp = Math.min(u.hp, u.maxHp);
     u.mana = Math.min(u.mana, u.maxMana);
-    if (
-      forgeSynergyTier(u.forgeLoadout, "deserto") >= 3 &&
-      biomeAt(this.grid, u.q, u.r) === "deserto"
-    ) {
+    if (forgeSynergyTier(u.forgeLoadout, "deserto") >= 3) {
       for (const ally of this.getParty()) {
         if (ally.hp <= 0) continue;
         let pool = ally.maxHp;

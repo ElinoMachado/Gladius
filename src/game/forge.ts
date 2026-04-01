@@ -347,6 +347,23 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
         u.defesa += 80;
         u.regenVida += 6;
       }
+    } else if (h.biome === "deserto") {
+      if (h.level === 1) {
+        u.maxMana += 5;
+        u.mana += 5;
+        u.regenVida += 1;
+        u.regenMana += 1;
+      } else if (h.level === 2) {
+        u.maxMana += 15;
+        u.mana += 15;
+        u.regenVida += 2;
+        u.regenMana += 2;
+      } else {
+        u.maxMana += 25;
+        u.mana += 25;
+        u.regenVida += 3;
+        u.regenMana += 3;
+      }
     } else {
       const hel =
         h.level === 1
@@ -389,6 +406,20 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
         u.hp += 300;
         u.defesa += 200;
       }
+    } else if (c.biome === "deserto") {
+      if (c.level === 1) {
+        u.maxHp += 50;
+        u.hp += 50;
+        u.regenVida += 5;
+      } else if (c.level === 2) {
+        u.maxHp += 100;
+        u.hp += 100;
+        u.regenVida += 10;
+      } else {
+        u.maxHp += 200;
+        u.hp += 200;
+        u.regenVida += 20;
+      }
     } else if (c.level === 1) {
       u.maxHp += 100;
       u.hp += 100;
@@ -426,6 +457,20 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
       } else {
         u.dano += 90;
         u.regenVida += 3;
+      }
+    } else if (m.biome === "deserto") {
+      if (m.level === 1) {
+        u.dano += 20;
+        u.acertoCritico += 20;
+        u.lifesteal += 10;
+      } else if (m.level === 2) {
+        u.dano += 40;
+        u.acertoCritico += 40;
+        u.lifesteal += 20;
+      } else {
+        u.dano += 60;
+        u.acertoCritico += 75;
+        u.lifesteal += 25;
       }
     } else {
       const mn =
@@ -474,6 +519,11 @@ export function forgePieceDescription(
       if (level === 2) return "+50 defesa, +4 regen. vida";
       return "+80 defesa, +6 regen. vida";
     }
+    if (biome === "deserto") {
+      if (level === 1) return "+5 mana máx., +1 regen. vida, +1 regen. mana";
+      if (level === 2) return "+15 mana máx., +2 regen. vida, +2 regen. mana";
+      return "+25 mana máx., +3 regen. vida, +3 regen. mana";
+    }
     if (level === 1) return "+1 movimento";
     if (level === 2) return "+1 alcance, +1 movimento";
     return "+2 alcance, +2 movimento";
@@ -489,6 +539,11 @@ export function forgePieceDescription(
       if (level === 2) return "+200 vida máx., +150 armadura";
       return "+300 vida máx., +200 armadura";
     }
+    if (biome === "deserto") {
+      if (level === 1) return "+50 vida máx., +5 regen. vida";
+      if (level === 2) return "+100 vida máx., +10 regen. vida";
+      return "+200 vida máx., +20 regen. vida";
+    }
     if (level === 1) return "+100 vida máx., +25 armadura";
     if (level === 2) return "+200 vida máx., +50 armadura";
     return "+500 vida máx., +100 armadura";
@@ -502,6 +557,11 @@ export function forgePieceDescription(
     if (level === 1) return "+20 dano, +1 regen. vida";
     if (level === 2) return "+45 dano, +2 regen. vida";
     return "+90 dano, +3 regen. vida";
+  }
+  if (biome === "deserto") {
+    if (level === 1) return "+20 dano, +20% crítico, +10% roubo de vida";
+    if (level === 2) return "+40 dano, +40% crítico, +20% roubo de vida";
+    return "+60 dano, +75% crítico, +25% roubo de vida";
   }
   if (level === 1) return "+10 dano, +25% chance crítica";
   if (level === 2) return "+25 dano, +50% crítico, +25% dano crítico";
@@ -545,6 +605,20 @@ export function forgePieceEffectHtml(
         p.push(forgeFxSeg("def", u, "+80 defesa, "));
         p.push(forgeFxSeg("regen_hp", u, "+6 regen. vida"));
       }
+    } else if (biome === "deserto") {
+      if (level === 1) {
+        p.push(forgeFxSeg("max_mana", u, "+5 mana máx., "));
+        p.push(forgeFxSeg("regen_hp", u, "+1 regen. vida, "));
+        p.push(forgeFxSeg("regen_mp", u, "+1 regen. mana"));
+      } else if (level === 2) {
+        p.push(forgeFxSeg("max_mana", u, "+15 mana máx., "));
+        p.push(forgeFxSeg("regen_hp", u, "+2 regen. vida, "));
+        p.push(forgeFxSeg("regen_mp", u, "+2 regen. mana"));
+      } else {
+        p.push(forgeFxSeg("max_mana", u, "+25 mana máx., "));
+        p.push(forgeFxSeg("regen_hp", u, "+3 regen. vida, "));
+        p.push(forgeFxSeg("regen_mp", u, "+3 regen. mana"));
+      }
     } else if (level === 1) p.push(forgeFxSeg("mov", u, "+1 movimento"));
     else if (level === 2) {
       p.push(forgeFxSeg("range", u, "+1 alcance, "));
@@ -575,6 +649,17 @@ export function forgePieceEffectHtml(
       } else {
         p.push(forgeFxSeg("max_hp", u, "+300 vida máx., "));
         p.push(forgeFxSeg("def", u, "+200 armadura"));
+      }
+    } else if (biome === "deserto") {
+      if (level === 1) {
+        p.push(forgeFxSeg("max_hp", u, "+50 vida máx., "));
+        p.push(forgeFxSeg("regen_hp", u, "+5 regen. vida"));
+      } else if (level === 2) {
+        p.push(forgeFxSeg("max_hp", u, "+100 vida máx., "));
+        p.push(forgeFxSeg("regen_hp", u, "+10 regen. vida"));
+      } else {
+        p.push(forgeFxSeg("max_hp", u, "+200 vida máx., "));
+        p.push(forgeFxSeg("regen_hp", u, "+20 regen. vida"));
       }
     } else if (level === 1) {
       p.push(forgeFxSeg("max_hp", u, "+100 vida máx., "));
@@ -608,6 +693,20 @@ export function forgePieceEffectHtml(
       p.push(forgeFxSeg("dmg", u, "+90 dano, "));
       p.push(forgeFxSeg("regen_hp", u, "+3 regen. vida"));
     }
+  } else if (biome === "deserto") {
+    if (level === 1) {
+      p.push(forgeFxSeg("dmg", u, "+20 dano, "));
+      p.push(forgeFxSeg("crit_hit", u, "+20% crítico, "));
+      p.push(forgeFxSeg("lifesteal", u, "+10% roubo de vida"));
+    } else if (level === 2) {
+      p.push(forgeFxSeg("dmg", u, "+40 dano, "));
+      p.push(forgeFxSeg("crit_hit", u, "+40% crítico, "));
+      p.push(forgeFxSeg("lifesteal", u, "+20% roubo de vida"));
+    } else {
+      p.push(forgeFxSeg("dmg", u, "+60 dano, "));
+      p.push(forgeFxSeg("crit_hit", u, "+75% crítico, "));
+      p.push(forgeFxSeg("lifesteal", u, "+25% roubo de vida"));
+    }
   } else if (level === 1) {
     p.push(forgeFxSeg("dmg", u, "+10 dano, "));
     p.push(forgeFxSeg("crit_hit", u, "+25% chance crítica"));
@@ -635,9 +734,9 @@ export function forgeSynergyDescriptionLines(
   }
   if (biome === "deserto") {
     return [
-      "1 peça: ignora anulação de regen no deserto. Com Ruler: regen normal no deserto.",
-      "2 peças: dobra regeneração de vida e mana (fora do bloqueio do deserto).",
-      "3 peças: ao subir de nível no deserto: cura 100% vida/mana da party; excesso vira escudo (100%).",
+      "1 peça: ignora anulação de regen no deserto. Com Ruler: +2 regen de vida e mana.",
+      "2 peças: no deserto, dobra regen de vida e mana; aliados recebem 50% da tua regen de vida e mana.",
+      "3 peças: ao subir de nível: cura 100% vida/mana da party; excesso vira escudo (100%).",
     ];
   }
   if (biome === "floresta") {
