@@ -1372,7 +1372,7 @@ function showForge(): void {
   const shell = el(`
     <div class="screen screen-forge screen--crystal-veil">
       <h1 class="hero-setup-main-title">Forja</h1>
-      <p class="screen-forge__hint">Forje itens permanentes para suas partidas. <span class="screen-forge__hint-gold">Apenas equipamentos nv 3 contam para as sinergias.</span> Por slot podes ter várias essências (ex.: elmo pântano e elmo vulcânico); o menu escolhe qual linha vês e qual fica equipada no combate. Cada combinação tipo de peça + bioma existe só uma vez na party.</p>
+      <p class="screen-forge__hint">Forje itens permanentes para suas partidas. <span class="screen-forge__hint-gold">Apenas equipamentos nv 3 contam para as sinergias.</span> Cada <strong>slot de party</strong> (1–3) guarda o seu próprio equipamento; o que forjas num slot não muda nos outros. No mesmo slot podes ter várias essências (ex.: elmo pântano e elmo vulcânico); o menu escolhe qual linha vês e qual fica equipada no combate. A mesma combinação <strong>tipo de peça + bioma</strong> não pode existir em dois slots ao mesmo tempo.</p>
       <div id="forge-body" class="forge-body"></div>
       <button type="button" class="btn" id="forge-back">Voltar ao menu</button>
     </div>

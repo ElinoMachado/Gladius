@@ -245,6 +245,61 @@ function stripInvalidEquipped(loadout: ForgeHeroLoadout): void {
   }
 }
 
+/** Remove uma linha (tipo de peça + bioma) do progresso e do legado. */
+function removeForgeLine(
+  loadout: ForgeHeroLoadout,
+  kind: ForgeSlotKind,
+  biome: ForgeEssenceId,
+): void {
+  const pk = PROGRESS_KEY[kind];
+  const m = loadout[pk] as ForgePerEssenceLevels | undefined;
+  if (m && biome in m) {
+    delete m[biome];
+    if (Object.keys(m).length === 0) {
+      delete (loadout as Record<string, unknown>)[pk as string];
+    }
+  }
+  const leg = loadout[kind] as ForgePiece | undefined;
+  if (leg?.biome === biome) {
+    delete (loadout as Record<string, unknown>)[kind];
+  }
+  stripInvalidEquipped(loadout);
+}
+
+/**
+ * Cada (tipo de peça + bioma) existe no máximo num slot de party.
+ * Mantém o slot de menor índice (0 > 1 > 2 em prioridade); remove dos outros.
+ */
+function enforceGlobalForgeUniquenessAcrossParty(
+  slots: [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout],
+): void {
+  for (const kind of FORGE_SLOT_ORDER) {
+    const biomeSeen = new Set<ForgeEssenceId>();
+    for (let hi = 0; hi < 3; hi++) {
+      const pk = PROGRESS_KEY[kind];
+      const map = slots[hi]![pk] as ForgePerEssenceLevels | undefined;
+      if (map) {
+        for (const b of Object.keys(map) as ForgeEssenceId[]) {
+          biomeSeen.add(b);
+        }
+      }
+      const leg = slots[hi]![kind] as ForgePiece | undefined;
+      if (leg?.biome) biomeSeen.add(leg.biome);
+    }
+    for (const biome of biomeSeen) {
+      const holders: number[] = [];
+      for (let hi = 0; hi < 3; hi++) {
+        if (getForgeLevel(slots[hi], kind, biome) != null) holders.push(hi);
+      }
+      if (holders.length <= 1) continue;
+      holders.sort((a, b) => a - b);
+      for (let j = 1; j < holders.length; j++) {
+        removeForgeLine(slots[holders[j]!]!, kind, biome);
+      }
+    }
+  }
+}
+
 /** Só persiste biome + level válidos (evita perdas com spread/`JSON` e níveis como string). */
 export function sanitizeForgePiece(
   x: unknown,
@@ -312,6 +367,7 @@ export function snapshotForgeByHeroSlotForPersistence(
   for (let i = 0; i < 3; i++) {
     out[i] = sanitizeForgeLoadout(arr[i]);
   }
+  enforceGlobalForgeUniquenessAcrossParty(out);
   return out;
 }
 
