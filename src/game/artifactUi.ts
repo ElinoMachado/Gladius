@@ -202,10 +202,10 @@ export function artifactStackCounterLabel(id: string, stacks: number): string {
   return `${Math.min(stacks, max)}/${max}`;
 }
 
-/** Tooltip do codex: todos os tiers. */
-export function artifactCodexAllTiersHtml(id: string): string {
+/** Tooltip do codex: todos os tiers. `u` opcional (ex.: loja sandbox) para textos que dependem do herói. */
+export function artifactCodexAllTiersHtml(id: string, u?: Unit): string {
   if (id === "_pick_gold" || id === "_pick_restore") {
-    return `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(pickChoiceDisplayName(id))}</div><div class="artifact-tt-cur">${escapeHtml(describeArtifactAtStack(id, 1))}</div></div>`;
+    return `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(pickChoiceDisplayName(id))}</div><div class="artifact-tt-cur">${escapeHtml(describeArtifactAtStack(id, 1, u))}</div></div>`;
   }
   const d = defOr(id);
   const name = d?.name ?? id;
@@ -215,7 +215,7 @@ export function artifactCodexAllTiersHtml(id: string): string {
   ];
   for (let s = 1; s <= max; s++) {
     parts.push(
-      `<div class="artifact-tt-next"><strong>${s}/${max}:</strong> ${escapeHtml(describeArtifactAtStack(id, s))}</div>`,
+      `<div class="artifact-tt-next"><strong>${s}/${max}:</strong> ${escapeHtml(describeArtifactAtStack(id, s, u))}</div>`,
     );
   }
   parts.push(`</div>`);

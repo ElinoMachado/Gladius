@@ -161,6 +161,30 @@ body {
   max-width: min(22rem, 92vw);
 }
 
+/* Tooltip largo: grelha de artefatos na loja (sandbox) com todos os tiers */
+.game-ui-tooltip:has(.game-ui-tooltip-inner--wide-artifact) {
+  max-width: min(380px, calc(100vw - 20px));
+}
+
+.game-ui-tooltip-inner--wide-artifact .artifact-tt-sandbox-state {
+  margin: 0 0 0.35rem;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: #e8e0d8;
+}
+
+.game-ui-tooltip-inner--wide-artifact .artifact-tt-sandbox-flavor {
+  margin: 0 0 0.5rem;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: #b8b0a0;
+  font-style: italic;
+}
+
+.game-ui-tooltip-inner--wide-artifact .artifact-tt {
+  max-width: none;
+}
+
 .hero-setup-weapon-tip-sec + .hero-setup-weapon-tip-sec {
   margin-top: 0.65rem;
   padding-top: 0.5rem;

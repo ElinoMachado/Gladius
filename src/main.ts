@@ -25,7 +25,7 @@ import type { SkillDef } from "./game/data/heroes";
 import { HEROES } from "./game/data/heroes";
 import { BIOME_DESCRIPTIONS, BIOME_LABELS } from "./game/data/biomes";
 import { GOLD_SHOP, goldDrainPerTurn, type GoldShopId } from "./game/data/shops";
-import { ARTIFACT_POOL } from "./game/data/artifacts";
+import { ARTIFACT_POOL, artifactDefById } from "./game/data/artifacts";
 import {
   ARTIFACT_RARITY_LABELS,
   ARTIFACT_RARITY_ORDER,
@@ -2114,8 +2114,7 @@ function goldShopSandboxArtifactsSectionHtml(h: Unit): string {
       const n = h.artifacts[a.id] ?? 0;
       const cap = getArtifactMaxStacks(a.id);
       const on = n > 0 ? " shop-sandbox-artifact--on" : "";
-      const tip = `${a.name} — ${n}/${cap}. Esquerdo: +1 · direito: −1`;
-      return `<button type="button" class="shop-sandbox-artifact ${artifactRarityClass(a.rarity)}${on}" data-sandbox-artifact="${escapeHtml(a.id)}" title="${escapeHtml(tip)}">
+      return `<button type="button" class="shop-sandbox-artifact ${artifactRarityClass(a.rarity)}${on}" data-sandbox-artifact="${escapeHtml(a.id)}" aria-label="${escapeHtml(`${a.name}, ${n} de ${cap} acúmulos. Esquerdo +1, direito −1. Paira para efeitos.`)}">
       <span class="shop-sandbox-artifact__name">${escapeHtml(a.name)}</span>
       <span class="shop-sandbox-artifact__stack" aria-hidden="true">${n}/${cap}</span>
     </button>`;
@@ -2123,7 +2122,7 @@ function goldShopSandboxArtifactsSectionHtml(h: Unit): string {
     .join("");
   return `<section class="shop-sandbox-artifacts" aria-label="Artefatos sandbox">
     <h3 class="shop-sandbox-artifacts__title">Sandbox — artefatos deste herói</h3>
-    <p class="shop-sandbox-artifacts__hint">Botão esquerdo: +1 acúmulo (do 0 liga o artefato). Botão direito: −1 (em 0 fica desligado).</p>
+    <p class="shop-sandbox-artifacts__hint">Botão esquerdo: +1 acúmulo (do 0 liga o artefato). Botão direito: −1 (em 0 fica desligado). Passe o rato para ver todos os níveis e efeitos.</p>
     <div class="shop-sandbox-artifacts__grid" role="group">${tiles}</div>
   </section>`;
 }
@@ -2249,6 +2248,16 @@ function showGoldShop(isInitial: boolean): void {
           const delta = e.button === 0 ? (1 as const) : (-1 as const);
           model.sandboxShopAdjustArtifact(h.id, artId, delta);
           renderShop();
+        });
+        bindGameTooltip(btn, () => {
+          const def = artifactDefById(artId);
+          const cur = h.artifacts[artId] ?? 0;
+          const cap = getArtifactMaxStacks(artId);
+          const state = `<p class="artifact-tt-sandbox-state"><strong>Acúmulos:</strong> ${cur}/${cap}</p>`;
+          const flavor = def?.description
+            ? `<p class="artifact-tt-sandbox-flavor">${escapeHtml(def.description)}</p>`
+            : "";
+          return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--wide-artifact">${state}${flavor}${artifactCodexAllTiersHtml(artId, h)}</div>`;
         });
       });
     }
