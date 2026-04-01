@@ -83,10 +83,11 @@ import {
   FORGE_COST_UPGRADE_TO_2,
   FORGE_COST_UPGRADE_TO_3,
   FORGE_ESSENCE_LABELS,
+  forgeBiomeEquippedOnOtherSlot,
   forgeEssenceBarHtml,
-  forgeKindBiomeHeldByOtherHero,
   forgePieceEffectHtml,
-  getForgeLevel,
+  getForgeProgressLevel,
+  normalizeForgeMeta,
   pantanoHelmoXpBonusPercent,
   forgeSynergyCrestTooltipHtml,
   forgeSynergyPanelHtml,
@@ -94,12 +95,13 @@ import {
   forgeTryCraftOrUpgrade,
   forgeUpgradeButtonTooltipHtml,
   resolveEquippedBiome,
-  resolveEquippedForgeLoadout,
+  resolveEquippedForgeLoadoutForMeta,
   setEquippedBiome,
 } from "./game/forge";
 import type {
   ForgeEssenceId,
   ForgeHeroLoadout,
+  ForgePiece,
   ForgeSlotKind,
 } from "./game/types";
 import { biomeAt } from "./game/unitFactory";
@@ -1185,8 +1187,11 @@ function forgePieceLabelPt(kind: ForgeSlotKind): string {
 }
 
 /** Resumo HTML do loadout forjado salvo por slot de party (menu de escolha de herói). */
-function heroSlotForgeEquipSummaryHtml(L: ForgeHeroLoadout): string {
-  const eq = resolveEquippedForgeLoadout(L);
+function heroSlotForgeEquipSummaryHtml(
+  meta: (typeof model)["meta"],
+  slotIdx: 0 | 1 | 2,
+): string {
+  const eq = resolveEquippedForgeLoadoutForMeta(meta, slotIdx);
   const rows = FORGE_KIND_ORDER.map((kind) => {
     const cur = eq[kind];
     const label = forgePieceLabelPt(kind);
@@ -1208,6 +1213,7 @@ function syncForgeKindRow(
   trustBiomeSelectValue: boolean,
 ): void {
   const L = meta.forgeByHeroSlot[hi]!;
+  const g = meta.forgeGlobalProgress ?? {};
   const bioSel = body.querySelector(
     `select.forge-biome-sel[data-forge-kind="${kind}"]`,
   ) as HTMLSelectElement;
@@ -1240,7 +1246,7 @@ function syncForgeKindRow(
   const selectedEssence: ForgeEssenceId =
     fromUser ??
     preservedPick ??
-    resolveEquippedBiome(L, kind) ??
+    resolveEquippedBiome(L, kind, g) ??
     ("floresta" as ForgeEssenceId);
 
   bioSel.disabled = false;
@@ -1254,11 +1260,13 @@ function syncForgeKindRow(
   }
 
   const biomeNow = (bioSel.value ?? selectedEssence) as ForgeEssenceId;
-  if (getForgeLevel(L, kind, biomeNow) != null) {
+  const progressLv = getForgeProgressLevel(g, kind, biomeNow);
+  const equippedOnOther = forgeBiomeEquippedOnOtherSlot(meta, hi, kind, biomeNow);
+  if (progressLv != null && !equippedOnOther) {
     setEquippedBiome(L, kind, biomeNow);
   }
 
-  const selLv = getForgeLevel(L, kind, biomeNow);
+  const selLv = progressLv;
   const curPiece =
     selLv != null
       ? { biome: biomeNow, level: selLv }
@@ -1302,12 +1310,10 @@ function syncForgeKindRow(
     : !curPiece
       ? `Forjar (${cost})`
       : `Aprimorar (${cost})`;
-  const forgeBlockedUnique =
-    !curPiece && forgeKindBiomeHeldByOtherHero(meta, hi, kind, biomeNow);
-  if (fullyMaxedThisLine || forgeBlockedUnique) {
+  if (fullyMaxedThisLine) {
     btn.setAttribute("aria-disabled", "true");
-    btn.classList.toggle("forge-do-btn--max", fullyMaxedThisLine);
-    btn.classList.toggle("forge-do-btn--blocked", forgeBlockedUnique);
+    btn.classList.toggle("forge-do-btn--max", true);
+    btn.classList.remove("forge-do-btn--blocked");
   } else {
     btn.removeAttribute("aria-disabled");
     btn.classList.remove("forge-do-btn--max");
@@ -1324,10 +1330,11 @@ function bindForgeStatInlineTooltips(root: HTMLElement): void {
 }
 
 function syncForgeHeroPanel(body: HTMLElement, meta: (typeof model)["meta"]): void {
+  normalizeForgeMeta(meta);
   const heroSel = body.querySelector("#forge-hero-sel") as HTMLSelectElement;
   const hi =
     parseForgePartySlot(heroSel?.value ?? "") ?? forgeUiHeroIndex;
-  const Lsaved = meta.forgeByHeroSlot[hi]!;
+  const Lsyn = resolveEquippedForgeLoadoutForMeta(meta, hi);
   const trustBiomeSelectValue =
     forgeLastSyncedHeroForBiomeUi !== null &&
     forgeLastSyncedHeroForBiomeUi === hi;
@@ -1338,7 +1345,7 @@ function syncForgeHeroPanel(body: HTMLElement, meta: (typeof model)["meta"]): vo
   forgeLastSyncedHeroForBiomeUi = hi;
   const synEl = body.querySelector("#forge-synergy-panel");
   if (synEl) {
-    synEl.innerHTML = forgeSynergyPanelHtml(Lsaved);
+    synEl.innerHTML = forgeSynergyPanelHtml(Lsyn);
     synEl.querySelectorAll(".forge-syn-card").forEach((node) => {
       const card = node as HTMLElement;
       const biome = card.dataset.biome as ForgeEssenceId | undefined;
@@ -1350,7 +1357,7 @@ function syncForgeHeroPanel(body: HTMLElement, meta: (typeof model)["meta"]): vo
       bindGameTooltip(crest, () => {
         const hiNow =
           parseForgePartySlot(heroSel.value) ?? forgeUiHeroIndex;
-        const Lnow = meta.forgeByHeroSlot[hiNow]!;
+        const Lnow = resolveEquippedForgeLoadoutForMeta(meta, hiNow);
         return forgeSynergyCrestTooltipHtml(
           biome,
           forgeSynergyTier(Lnow, biome),
@@ -1372,7 +1379,7 @@ function showForge(): void {
   const shell = el(`
     <div class="screen screen-forge screen--crystal-veil">
       <h1 class="hero-setup-main-title">Forja</h1>
-      <p class="screen-forge__hint">Forje itens permanentes para suas partidas. <span class="screen-forge__hint-gold">Apenas equipamentos nv 3 contam para as sinergias.</span> Cada <strong>slot de party</strong> (1–3) guarda o seu próprio equipamento; o que forjas num slot não muda nos outros. No mesmo slot podes ter várias essências (ex.: elmo pântano e elmo vulcânico); o menu escolhe qual linha vês e qual fica equipada no combate. A mesma combinação <strong>tipo de peça + bioma</strong> não pode existir em dois slots ao mesmo tempo.</p>
+      <p class="screen-forge__hint">Forje itens permanentes para suas partidas. <span class="screen-forge__hint-gold">Apenas equipamentos nv 3 contam para as sinergias.</span> Os <strong>níveis de forja e aprimoramentos são globais</strong>: ao subires uma peça em qualquer slot, o nível fica igual em todos. Cada <strong>slot de party</strong> escolhe que linha (tipo + bioma) <strong>equipa</strong>; a mesma linha não pode estar equipada em dois slots ao mesmo tempo, mas podes aprimorá-la a partir de qualquer slot.</p>
       <div id="forge-body" class="forge-body"></div>
       <button type="button" class="btn" id="forge-back">Voltar ao menu</button>
     </div>
@@ -1381,6 +1388,7 @@ function showForge(): void {
   const body = shell.querySelector("#forge-body") as HTMLElement;
   const paint = (): void => {
     const m = model.meta;
+    normalizeForgeMeta(m);
     const prevHeroRaw = (
       body.querySelector("#forge-hero-sel") as HTMLSelectElement | null
     )?.value;
@@ -1780,11 +1788,14 @@ function showHeroSetup(): void {
     wrap.appendChild(label);
     wrap.appendChild(sel);
     mountCrystalSelect(sel);
-    const forgeL = model.meta.forgeByHeroSlot[i as 0 | 1 | 2]!;
+    const forgeL = resolveEquippedForgeLoadoutForMeta(
+      model.meta,
+      i as 0 | 1 | 2,
+    );
     const forgePanel = el(
       `<div class="hero-slot-forge" role="region" aria-label="Equipamentos forjados no slot ${i + 1} da party"></div>`,
     );
-    forgePanel.innerHTML = `<div class="hero-slot-forge__title">Equipamentos forjados neste slot</div>${heroSlotForgeEquipSummaryHtml(forgeL)}`;
+    forgePanel.innerHTML = `<div class="hero-slot-forge__title">Equipamentos forjados neste slot</div>${heroSlotForgeEquipSummaryHtml(model.meta, i as 0 | 1 | 2)}`;
     wrap.appendChild(forgePanel);
     wrap.appendChild(card);
     slotsRoot.appendChild(wrap);
@@ -1890,7 +1901,10 @@ function showBiomeSetup(): void {
   const host = s.querySelector("#bio-hero-model-host") as HTMLElement;
   bioHeroPreview = new HeroPreview3D(host, 220, 240);
   const slotOrder = partySlotByHeroFromSlots();
-  const forgeBio = model.meta.forgeByHeroSlot[slotOrder[step]!]!;
+  const forgeBio = resolveEquippedForgeLoadoutForMeta(
+    model.meta,
+    slotOrder[step]!,
+  );
   bioHeroPreview.setHero(
     curHero,
     colorHintToDisplayColor(tmpl.colorHint),
@@ -5530,7 +5544,7 @@ function equipmentModalPieceCellHtml(
   uniqBase: number,
 ): string {
   const title = forgePieceLabelPt(kind);
-  const piece = resolveEquippedForgeLoadout(L)[kind];
+  const piece = L[kind] as ForgePiece | undefined;
   if (!piece) {
     return `<div class="eq-piece-cell eq-piece-cell--empty" data-eq-hero="${forgeHi}" data-eq-kind="${kind}">
       <div class="eq-piece-3d-host eq-piece-3d-host--empty" aria-hidden="true"><span class="eq-piece-3d-placeholder">—</span></div>
@@ -5556,8 +5570,8 @@ function equipmentModalPieceCellHtml(
 function openEquipmentModal(): void {
   removeEquipmentModal();
   equipmentModalOpen = true;
+  normalizeForgeMeta(model.meta);
   const party = model.getParty();
-  const slots = model.meta.forgeByHeroSlot;
   const cols =
     party.length === 0
       ? [
@@ -5565,7 +5579,7 @@ function openEquipmentModal(): void {
         ]
       : party.map((u, i) => {
           const forgeHi = (u.partySlotIndex ?? i) as 0 | 1 | 2;
-          const L = slots[forgeHi] ?? {};
+          const L = resolveEquippedForgeLoadoutForMeta(model.meta, forgeHi);
           const piecesRow = FORGE_KIND_ORDER.map((kind, ki) =>
             equipmentModalPieceCellHtml(forgeHi, kind, L, forgeHi * 36 + ki * 12),
           ).join("");
@@ -5599,7 +5613,7 @@ function openEquipmentModal(): void {
     if (!cell) return;
     const hi = Number(cell.dataset.eqHero) as 0 | 1 | 2;
     const kind = cell.dataset.eqKind as ForgeSlotKind;
-    const piece = resolveEquippedForgeLoadout(slots[hi] ?? {})[kind];
+    const piece = resolveEquippedForgeLoadoutForMeta(model.meta, hi)[kind];
     if (!piece) return;
     const prev = new ForgePiecePreview3D(host);
     prev.setKindAndPiece(kind, piece.biome, piece.level);
@@ -5612,7 +5626,7 @@ function openEquipmentModal(): void {
   backdrop.querySelectorAll(".eq-hero-synergy").forEach((wrap) => {
     const w = wrap as HTMLElement;
     const hi = Number(w.dataset.eqHero) as 0 | 1 | 2;
-    const Lsyn = slots[hi] ?? {};
+    const Lsyn = resolveEquippedForgeLoadoutForMeta(model.meta, hi);
     w.querySelectorAll(".forge-syn-card").forEach((node) => {
       const card = node as HTMLElement;
       const biome = card.dataset.biome as ForgeEssenceId | undefined;

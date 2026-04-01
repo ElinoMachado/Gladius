@@ -32,6 +32,16 @@ export interface ForgeHeroLoadout {
   manoplasEquipped?: ForgeEssenceId;
 }
 
+/**
+ * Níveis forjados globais (partilhados por todos os slots de party).
+ * Um aprimoramento em qualquer slot atualiza o nível para todos.
+ */
+export interface ForgeGlobalProgress {
+  helmoByEssence?: ForgePerEssenceLevels;
+  capaByEssence?: ForgePerEssenceLevels;
+  manoplasByEssence?: ForgePerEssenceLevels;
+}
+
 export type ForgeSlotKind = "helmo" | "capa" | "manoplas";
 
 /** Nível da arma principal (meta + combate); ver `weaponData.ts`. */
@@ -223,7 +233,9 @@ export interface MetaProgress {
   initialCards: number;
   /** Essências por bioma (permanente, drop em combate). */
   essences: Partial<Record<ForgeEssenceId, number>>;
-  /** Equipamentos forjados por slot de herói na party (0–2). */
+  /** Níveis forjados por tipo + bioma (globais; não duplicar por slot). */
+  forgeGlobalProgress?: ForgeGlobalProgress;
+  /** Por slot: só qual essência está equipada em cada tipo de peça. */
   forgeByHeroSlot: [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout];
   /** Nível da arma principal por slot de party (1–5). */
   weaponLevelByHeroSlot: [WeaponLevel, WeaponLevel, WeaponLevel];

@@ -1,6 +1,7 @@
 import type {
   BiomeId,
   ForgeEssenceId,
+  ForgeGlobalProgress,
   ForgeHeroLoadout,
   ForgePerEssenceLevels,
   ForgePiece,
@@ -133,13 +134,23 @@ function sanitizePerEssenceLevels(x: unknown): ForgePerEssenceLevels | undefined
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-/** Nível forjado para (slot, essência), incluindo saves legados (uma peça por slot). */
+/**
+ * Nível no loadout (combate: só peças planas `{ biome, level }` por tipo; ou save legado com mapas).
+ */
 export function getForgeLevel(
   L: ForgeHeroLoadout | undefined,
   kind: ForgeSlotKind,
   biome: ForgeEssenceId,
 ): 1 | 2 | 3 | undefined {
   if (!L) return undefined;
+  const piece = L[kind] as ForgePiece | undefined;
+  if (
+    piece &&
+    piece.biome === biome &&
+    (piece.level === 1 || piece.level === 2 || piece.level === 3)
+  ) {
+    return piece.level;
+  }
   const pk = PROGRESS_KEY[kind];
   const map = L[pk] as ForgePerEssenceLevels | undefined;
   const fromMap = map?.[biome];
@@ -148,6 +159,157 @@ export function getForgeLevel(
   if (leg?.biome === biome && (leg.level === 1 || leg.level === 2 || leg.level === 3))
     return leg.level;
   return undefined;
+}
+
+/** Nível global da linha (tipo + bioma), partilhado por todos os slots. */
+export function getForgeProgressLevel(
+  global: ForgeGlobalProgress | undefined,
+  kind: ForgeSlotKind,
+  biome: ForgeEssenceId,
+): 1 | 2 | 3 | undefined {
+  if (!global) return undefined;
+  const pk = PROGRESS_KEY[kind] as keyof ForgeGlobalProgress;
+  const map = global[pk] as ForgePerEssenceLevels | undefined;
+  const n = map?.[biome];
+  if (n === 1 || n === 2 || n === 3) return n;
+  return undefined;
+}
+
+export function ensureForgeGlobalProgress(m: MetaProgress): ForgeGlobalProgress {
+  if (!m.forgeGlobalProgress) m.forgeGlobalProgress = {};
+  return m.forgeGlobalProgress;
+}
+
+function ensureGlobalProgressMap(
+  g: ForgeGlobalProgress,
+  kind: ForgeSlotKind,
+): ForgePerEssenceLevels {
+  const pk = PROGRESS_KEY[kind] as keyof ForgeGlobalProgress;
+  let m = g[pk] as ForgePerEssenceLevels | undefined;
+  if (!m) {
+    m = {};
+    (g as Record<string, unknown>)[pk as string] = m;
+  }
+  return m;
+}
+
+export function setGlobalForgeLevel(
+  m: MetaProgress,
+  kind: ForgeSlotKind,
+  biome: ForgeEssenceId,
+  level: 1 | 2 | 3,
+): void {
+  const g = ensureForgeGlobalProgress(m);
+  const map = ensureGlobalProgressMap(g, kind);
+  map[biome] = level;
+}
+
+function mergeSlotLoadoutIntoGlobal(
+  g: ForgeGlobalProgress,
+  L: ForgeHeroLoadout,
+): void {
+  for (const kind of FORGE_SLOT_ORDER) {
+    const pk = PROGRESS_KEY[kind];
+    const map = L[pk as keyof ForgeHeroLoadout] as ForgePerEssenceLevels | undefined;
+    if (map) {
+      const tgt = ensureGlobalProgressMap(g, kind);
+      for (const [bio, lv] of Object.entries(map) as [ForgeEssenceId, 1 | 2 | 3][]) {
+        const prev = tgt[bio] ?? 0;
+        if (lv > prev) tgt[bio] = lv;
+      }
+    }
+    const leg = L[kind] as ForgePiece | undefined;
+    if (leg && (leg.level === 1 || leg.level === 2 || leg.level === 3)) {
+      const tgt = ensureGlobalProgressMap(g, kind);
+      const prev = tgt[leg.biome] ?? 0;
+      if (leg.level > prev) tgt[leg.biome] = leg.level;
+    }
+  }
+}
+
+function stripForgeProgressMapsFromSlot(L: ForgeHeroLoadout): void {
+  const o = L as Record<string, unknown>;
+  for (const kind of FORGE_SLOT_ORDER) {
+    const pk = PROGRESS_KEY[kind];
+    delete o[pk as string];
+    delete o[kind];
+  }
+}
+
+function stripInvalidEquippedOnSlot(
+  m: MetaProgress,
+  hi: 0 | 1 | 2,
+): void {
+  const L = m.forgeByHeroSlot[hi];
+  if (!L) return;
+  const g = m.forgeGlobalProgress ?? {};
+  for (const kind of FORGE_SLOT_ORDER) {
+    const ek = EQUIPPED_KEY[kind];
+    const pref = L[ek as keyof ForgeHeroLoadout] as ForgeEssenceId | undefined;
+    if (pref != null && getForgeProgressLevel(g, kind, pref) == null) {
+      delete (L as Record<string, unknown>)[ek as string];
+    }
+  }
+}
+
+/** Dois slots não podem equipar a mesma linha (tipo + bioma). Mantém o de menor índice. */
+function enforceEquippedBiomeUniquenessAcrossParty(m: MetaProgress): void {
+  for (const kind of FORGE_SLOT_ORDER) {
+    const ek = EQUIPPED_KEY[kind];
+    for (const id of COMBAT_BIOMES) {
+      const biome = id as ForgeEssenceId;
+      const holders: number[] = [];
+      for (let hi = 0; hi < 3; hi++) {
+        const L = m.forgeByHeroSlot[hi as 0 | 1 | 2];
+        const pref = L?.[ek as keyof ForgeHeroLoadout] as ForgeEssenceId | undefined;
+        if (pref === biome) holders.push(hi);
+      }
+      if (holders.length <= 1) continue;
+      holders.sort((a, b) => a - b);
+      for (let j = 1; j < holders.length; j++) {
+        const L = m.forgeByHeroSlot[holders[j]! as 0 | 1 | 2]!;
+        delete (L as Record<string, unknown>)[ek as string];
+      }
+    }
+  }
+}
+
+/**
+ * Migra saves legados, funde níveis por slot no global e limpa mapas por slot.
+ * Idempotente; chamar ao carregar/gravar meta e antes da UI da forja.
+ */
+export function normalizeForgeMeta(m: MetaProgress): void {
+  const g = ensureForgeGlobalProgress(m);
+  for (let hi = 0; hi < 3; hi++) {
+    const L = m.forgeByHeroSlot[hi as 0 | 1 | 2] ?? {};
+    mergeSlotLoadoutIntoGlobal(g, L);
+  }
+  for (let hi = 0; hi < 3; hi++) {
+    const L = m.forgeByHeroSlot[hi as 0 | 1 | 2];
+    if (L) stripForgeProgressMapsFromSlot(L);
+  }
+  enforceEquippedBiomeUniquenessAcrossParty(m);
+  for (let hi = 0; hi < 3; hi++) {
+    stripInvalidEquippedOnSlot(m, hi as 0 | 1 | 2);
+  }
+}
+
+/** Outro slot de party já tem esta linha equipada (tipo + bioma). */
+export function forgeBiomeEquippedOnOtherSlot(
+  m: MetaProgress,
+  heroSlotIndex: 0 | 1 | 2,
+  kind: ForgeSlotKind,
+  biome: ForgeEssenceId,
+): boolean {
+  const ek = EQUIPPED_KEY[kind];
+  for (let hi = 0; hi < 3; hi++) {
+    if (hi === heroSlotIndex) continue;
+    const pref = m.forgeByHeroSlot[hi as 0 | 1 | 2]?.[
+      ek as keyof ForgeHeroLoadout
+    ] as ForgeEssenceId | undefined;
+    if (pref === biome) return true;
+  }
+  return false;
 }
 
 /** Bônus % de XP do elmo de essência pântano (nv2 +50%, nv3 +100%). */
@@ -194,17 +356,31 @@ export function setEquippedBiome(
   (loadout as Record<string, unknown>)[ek as string] = biome;
 }
 
-/** Qual essência está equipada neste slot (combate / modelo). */
+/** Qual essência está equipada neste slot. Com `global`, valida níveis no progresso global. */
 export function resolveEquippedBiome(
   L: ForgeHeroLoadout | undefined,
   kind: ForgeSlotKind,
+  global?: ForgeGlobalProgress,
 ): ForgeEssenceId | undefined {
   if (!L) return undefined;
   const ek = EQUIPPED_KEY[kind];
   const pref = L[ek as keyof ForgeHeroLoadout] as ForgeEssenceId | undefined;
-  if (pref && getForgeLevel(L, kind, pref) != null) return pref;
+  if (pref) {
+    if (global) {
+      if (getForgeProgressLevel(global, kind, pref) != null) return pref;
+    } else if (getForgeLevel(L, kind, pref) != null) {
+      return pref;
+    }
+  }
   const leg = L[kind] as ForgePiece | undefined;
-  if (leg && getForgeLevel(L, kind, leg.biome) != null) return leg.biome;
+  if (leg) {
+    if (global) {
+      if (getForgeProgressLevel(global, kind, leg.biome) != null) return leg.biome;
+    } else if (getForgeLevel(L, kind, leg.biome) != null) {
+      return leg.biome;
+    }
+  }
+  if (global) return undefined;
   const pk = PROGRESS_KEY[kind];
   const map = L[pk] as ForgePerEssenceLevels | undefined;
   if (!map) return undefined;
@@ -219,85 +395,33 @@ export function resolveEquippedBiome(
   return bestBiome;
 }
 
-/** Loadout só com as três peças equipadas (stats e visual). */
+/** Peças equipadas; com `global`, níveis vêm do progresso partilhado. */
 export function resolveEquippedForgeLoadout(
   L: ForgeHeroLoadout | undefined,
+  global?: ForgeGlobalProgress,
 ): ForgeHeroLoadout {
   const flat: ForgeHeroLoadout = {};
   if (!L) return flat;
   for (const kind of FORGE_SLOT_ORDER) {
-    const b = resolveEquippedBiome(L, kind);
+    const b = resolveEquippedBiome(L, kind, global);
     if (!b) continue;
-    const lv = getForgeLevel(L, kind, b);
+    const lv = global
+      ? getForgeProgressLevel(global, kind, b)
+      : getForgeLevel(L, kind, b);
     if (!lv) continue;
     flat[kind] = { biome: b, level: lv };
   }
   return flat;
 }
 
-function stripInvalidEquipped(loadout: ForgeHeroLoadout): void {
-  for (const kind of FORGE_SLOT_ORDER) {
-    const ek = EQUIPPED_KEY[kind];
-    const pref = loadout[ek as keyof ForgeHeroLoadout] as ForgeEssenceId | undefined;
-    if (pref != null && getForgeLevel(loadout, kind, pref) == null) {
-      delete (loadout as Record<string, unknown>)[ek as string];
-    }
-  }
-}
-
-/** Remove uma linha (tipo de peça + bioma) do progresso e do legado. */
-function removeForgeLine(
-  loadout: ForgeHeroLoadout,
-  kind: ForgeSlotKind,
-  biome: ForgeEssenceId,
-): void {
-  const pk = PROGRESS_KEY[kind];
-  const m = loadout[pk] as ForgePerEssenceLevels | undefined;
-  if (m && biome in m) {
-    delete m[biome];
-    if (Object.keys(m).length === 0) {
-      delete (loadout as Record<string, unknown>)[pk as string];
-    }
-  }
-  const leg = loadout[kind] as ForgePiece | undefined;
-  if (leg?.biome === biome) {
-    delete (loadout as Record<string, unknown>)[kind];
-  }
-  stripInvalidEquipped(loadout);
-}
-
-/**
- * Cada (tipo de peça + bioma) existe no máximo num slot de party.
- * Mantém o slot de menor índice (0 > 1 > 2 em prioridade); remove dos outros.
- */
-function enforceGlobalForgeUniquenessAcrossParty(
-  slots: [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout],
-): void {
-  for (const kind of FORGE_SLOT_ORDER) {
-    const biomeSeen = new Set<ForgeEssenceId>();
-    for (let hi = 0; hi < 3; hi++) {
-      const pk = PROGRESS_KEY[kind];
-      const map = slots[hi]![pk] as ForgePerEssenceLevels | undefined;
-      if (map) {
-        for (const b of Object.keys(map) as ForgeEssenceId[]) {
-          biomeSeen.add(b);
-        }
-      }
-      const leg = slots[hi]![kind] as ForgePiece | undefined;
-      if (leg?.biome) biomeSeen.add(leg.biome);
-    }
-    for (const biome of biomeSeen) {
-      const holders: number[] = [];
-      for (let hi = 0; hi < 3; hi++) {
-        if (getForgeLevel(slots[hi], kind, biome) != null) holders.push(hi);
-      }
-      if (holders.length <= 1) continue;
-      holders.sort((a, b) => a - b);
-      for (let j = 1; j < holders.length; j++) {
-        removeForgeLine(slots[holders[j]!]!, kind, biome);
-      }
-    }
-  }
+export function resolveEquippedForgeLoadoutForMeta(
+  m: MetaProgress,
+  partySlot: 0 | 1 | 2,
+): ForgeHeroLoadout {
+  normalizeForgeMeta(m);
+  const L = m.forgeByHeroSlot[partySlot] ?? {};
+  const g = m.forgeGlobalProgress ?? {};
+  return resolveEquippedForgeLoadout(L, g);
 }
 
 /** Só persiste biome + level válidos (evita perdas com spread/`JSON` e níveis como string). */
@@ -347,13 +471,23 @@ export function sanitizeForgeLoadout(L: unknown): ForgeHeroLoadout {
       (out as Record<string, unknown>)[eqK as string] = p.biome;
     }
   }
-  stripInvalidEquipped(out);
   return out;
 }
 
+/** Lê slots do save sem tirar mapas (necessário antes de `normalizeForgeMeta`). */
+export function sanitizeForgeSlotsArray(
+  slots: unknown,
+): [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout] {
+  const arr = Array.isArray(slots) ? slots : [];
+  return [
+    sanitizeForgeLoadout(arr[0]),
+    sanitizeForgeLoadout(arr[1]),
+    sanitizeForgeLoadout(arr[2]),
+  ];
+}
+
 /**
- * Tupla de 3 loadouts para memória/localStorage: cópia explícita por peça
- * (não usar object spread nas peças — garante que nada “some” ao gravar).
+ * Gravação: só *Equipped por slot (mapas já fundidos no global em `normalizeForgeMeta`).
  */
 export function snapshotForgeByHeroSlotForPersistence(
   slots: unknown,
@@ -365,10 +499,32 @@ export function snapshotForgeByHeroSlotForPersistence(
     {},
   ];
   for (let i = 0; i < 3; i++) {
-    out[i] = sanitizeForgeLoadout(arr[i]);
+    const s = sanitizeForgeLoadout(arr[i]);
+    stripForgeProgressMapsFromSlot(s);
+    out[i] = s;
   }
-  enforceGlobalForgeUniquenessAcrossParty(out);
   return out;
+}
+
+export function sanitizeForgeGlobalProgress(
+  x: unknown,
+): ForgeGlobalProgress {
+  if (!x || typeof x !== "object") return {};
+  const o = x as Record<string, unknown>;
+  const out: ForgeGlobalProgress = {};
+  const he = sanitizePerEssenceLevels(o.helmoByEssence);
+  const ce = sanitizePerEssenceLevels(o.capaByEssence);
+  const me = sanitizePerEssenceLevels(o.manoplasByEssence);
+  if (he) out.helmoByEssence = { ...he };
+  if (ce) out.capaByEssence = { ...ce };
+  if (me) out.manoplasByEssence = { ...me };
+  return out;
+}
+
+export function snapshotForgeGlobalForPersistence(
+  g: ForgeGlobalProgress | undefined,
+): ForgeGlobalProgress {
+  return sanitizeForgeGlobalProgress(g ?? {});
 }
 
 export function cloneForgeLoadout(l: ForgeHeroLoadout): ForgeHeroLoadout {
@@ -384,8 +540,12 @@ export function cloneForgeByHeroSlot(
 
 /** Aplica bônus de forja ao herói (stats já com meta + party). */
 export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
-  u.forgeLoadout = cloneForgeLoadout(loadout);
   const resolved = resolveEquippedForgeLoadout(loadout);
+  u.forgeLoadout = {};
+  for (const k of FORGE_SLOT_ORDER) {
+    const p = resolved[k];
+    if (p) u.forgeLoadout[k] = { biome: p.biome, level: p.level };
+  }
   const h = resolved.helmo;
   if (h) {
     if (h.biome === "pantano") {
@@ -1081,61 +1241,45 @@ export function forgeEssenceBarHtml(meta: MetaProgress): string {
 }
 
 /** Tooltip do botão Forjar / Aprimorar (próximo passo). */
-function forgeSlotKindLabelPt(kind: ForgeSlotKind): string {
-  return kind === "helmo" ? "Elmo" : kind === "capa" ? "Capa" : "Manoplas";
-}
-
 export function forgeUpgradeButtonTooltipHtml(
   meta: MetaProgress,
   heroSlotIndex: 0 | 1 | 2,
   kind: ForgeSlotKind,
   selectedBiome: ForgeEssenceId,
 ): string {
+  normalizeForgeMeta(meta);
   const loadout = meta.forgeByHeroSlot[heroSlotIndex];
   if (!loadout) {
     return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Forja</div><p class="game-ui-tooltip-passive">Dados de herói inválidos; reinicia o jogo ou o meta.</p></div>`;
   }
-  const curLv = getForgeLevel(loadout, kind, selectedBiome);
-  const heldElsewhere = forgeKindBiomeHeldByOtherHero(
+  const g = meta.forgeGlobalProgress ?? {};
+  const curLv = getForgeProgressLevel(g, kind, selectedBiome);
+  const onOther = forgeBiomeEquippedOnOtherSlot(
     meta,
     heroSlotIndex,
     kind,
     selectedBiome,
   );
-  if (heldElsewhere && curLv == null) {
-    const kt = forgeSlotKindLabelPt(kind);
-    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Indisponível</div><p class="game-ui-tooltip-passive">Já existe um <strong>${escapeForgeHtml(kt)}</strong> de ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} noutro slot de party. Cada tipo de peça + bioma é de <strong>uso único</strong> (não podes duplicar entre heróis).</p></div>`;
-  }
   if (curLv != null && curLv >= 3) {
-    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Nível máximo</div><p class="game-ui-tooltip-passive">Esta linha (${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])}) já está no nv3. Escolhe outra essência no menu para forjar ou aprimorar outra linha.</p></div>`;
+    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Nível máximo</div><p class="game-ui-tooltip-passive">Esta linha (${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])}) já está no nv3 em todo o grupo. Escolhe outra essência no menu.</p></div>`;
   }
   if (curLv == null) {
     const cost = FORGE_COST_CREATE;
     const have = meta.essences[selectedBiome] ?? 0;
     const fx = forgePieceEffectHtml(kind, 1, 520, selectedBiome);
-    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Forjar nv1</div><p class="game-ui-tooltip-passive">Nova linha de ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])}; não apaga outras essências já forjadas neste slot.</p><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p><p class="game-ui-tooltip-passive"><strong>Após forjar</strong></p>${fx}</div>`;
+    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Forjar nv1</div><p class="game-ui-tooltip-passive">Cria a linha global de ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} e equipa neste slot (outros slots podem equipar outras essências, mas não duplicar esta).</p><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p><p class="game-ui-tooltip-passive"><strong>Após forjar</strong></p>${fx}</div>`;
   }
   const cost =
     curLv === 1 ? FORGE_COST_UPGRADE_TO_2 : FORGE_COST_UPGRADE_TO_3;
   const have = meta.essences[selectedBiome] ?? 0;
   const nextLev = (curLv + 1) as 2 | 3;
   const fx = forgePieceEffectHtml(kind, nextLev, 530, selectedBiome);
-  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Aprimorar → nv${nextLev}</div><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p><p class="game-ui-tooltip-passive"><strong>Estado após aprimorar (nível completo)</strong></p>${fx}</div>`;
-}
-
-/** Outro herói (slot de party) já tem esta peça: mesmo tipo + bioma (uso único global). */
-export function forgeKindBiomeHeldByOtherHero(
-  meta: MetaProgress,
-  heroSlotIndex: 0 | 1 | 2,
-  kind: ForgeSlotKind,
-  biome: ForgeEssenceId,
-): boolean {
-  for (let hi = 0; hi < 3; hi++) {
-    if (hi === heroSlotIndex) continue;
-    const L = meta.forgeByHeroSlot[hi as 0 | 1 | 2];
-    if (getForgeLevel(L, kind, biome) != null) return true;
-  }
-  return false;
+  const shared = `<p class="game-ui-tooltip-passive">O nível é <strong>global</strong>: todos os slots veem nv${nextLev} nesta linha.</p>`;
+  const otherEq =
+    onOther && curLv != null
+      ? `<p class="game-ui-tooltip-passive">Esta linha está equipada noutro slot; podes aprimorar na mesma — o nível sobe para toda a party.</p>`
+      : "";
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Aprimorar → nv${nextLev}</div><p class="game-ui-tooltip-passive">Custo: <strong>${cost}</strong> ${escapeForgeHtml(FORGE_ESSENCE_LABELS[selectedBiome])} (tens ${have}).</p>${shared}${otherEq}<p class="game-ui-tooltip-passive"><strong>Estado após aprimorar</strong></p>${fx}</div>`;
 }
 
 export function forgeTryCraftOrUpgrade(
@@ -1146,17 +1290,16 @@ export function forgeTryCraftOrUpgrade(
 ): boolean {
   const s = meta.forgeByHeroSlot;
   if (s[0] === s[1] || s[1] === s[2] || s[0] === s[2]) {
-    meta.forgeByHeroSlot = snapshotForgeByHeroSlotForPersistence(s);
+    meta.forgeByHeroSlot = sanitizeForgeSlotsArray(s);
   }
+  normalizeForgeMeta(meta);
   const loadout = meta.forgeByHeroSlot[heroSlotIndex];
   if (!loadout || typeof loadout !== "object") return false;
-  const curLv = getForgeLevel(loadout, kind, biome);
+  const curLv = getForgeProgressLevel(meta.forgeGlobalProgress, kind, biome);
   if (curLv == null) {
-    if (forgeKindBiomeHeldByOtherHero(meta, heroSlotIndex, kind, biome))
-      return false;
     if ((meta.essences[biome] ?? 0) < FORGE_COST_CREATE) return false;
     meta.essences[biome] = (meta.essences[biome] ?? 0) - FORGE_COST_CREATE;
-    setForgeLevel(loadout, kind, biome, 1);
+    setGlobalForgeLevel(meta, kind, biome, 1);
     setEquippedBiome(loadout, kind, biome);
     return true;
   }
@@ -1165,7 +1308,6 @@ export function forgeTryCraftOrUpgrade(
     curLv === 1 ? FORGE_COST_UPGRADE_TO_2 : FORGE_COST_UPGRADE_TO_3;
   if ((meta.essences[biome] ?? 0) < cost) return false;
   meta.essences[biome] = (meta.essences[biome] ?? 0) - cost;
-  setForgeLevel(loadout, kind, biome, (curLv + 1) as 2 | 3);
-  setEquippedBiome(loadout, kind, biome);
+  setGlobalForgeLevel(meta, kind, biome, (curLv + 1) as 2 | 3);
   return true;
 }

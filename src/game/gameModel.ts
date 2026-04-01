@@ -31,6 +31,7 @@ import {
   forgeSynergyTier,
   getForgeLevel,
   pantanoHelmoXpBonusPercent,
+  resolveEquippedForgeLoadoutForMeta,
 } from "./forge";
 import { createEnemyUnit, createHeroUnit, xpCurve, biomeAt } from "./unitFactory";
 import {
@@ -742,7 +743,10 @@ export class GameModel {
         this.nextPartyHexInBiome(biome, spawnTaken) ??
         this.randomEmptyInBiome(biome);
       spawnTaken.add(axialKey(spawn.q, spawn.r));
-      const forgeSlot = this.meta.forgeByHeroSlot[partySlot] ?? {};
+      const forgeResolved = resolveEquippedForgeLoadoutForMeta(
+        this.meta,
+        partySlot,
+      );
       const teamColor = colors[partySlot]!;
       const wl = normalizeWeaponLevel(
         this.meta.weaponLevelByHeroSlot[partySlot],
@@ -754,7 +758,7 @@ export class GameModel {
         this.meta,
         spawn.q,
         spawn.r,
-        forgeSlot,
+        forgeResolved,
         wl,
       );
       u.displayColor =
