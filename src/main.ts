@@ -4045,12 +4045,11 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   if (m.currentHero()?.id === h.id) {
     cells.push({
       icon: "basic",
-      label: "Ataques básicos restantes",
+      label: "Ataque extra",
       value: String(m.basicLeft),
       tooltipHtml: combatHeroStatTooltip({
         stat: "basic",
         display: String(m.basicLeft),
-        basicManaNote: true,
       }),
     });
   }

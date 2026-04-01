@@ -101,7 +101,6 @@ export interface CombatStatTooltipInput {
   dano?: number;
   critMultEffective?: number;
   potencialNumeric?: number;
-  basicManaNote?: boolean;
 }
 
 function appendBeforeLastClosingDiv(html: string, insert: string): string {
@@ -120,7 +119,6 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
     dano,
     critMultEffective,
     potencialNumeric,
-    basicManaNote,
   } = i;
 
   const v = esc(display);
@@ -238,19 +236,11 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
         `<strong>${v}</strong>. Capacidade de transitar livremente pelo mapa. Criaturas voadoras não podem ser encurraladas por criaturas não voadoras. Você só pode ser atingido por habilidades com alcance 3 ou mais.`,
       ]);
       break;
-    case "basic": {
-      const paras = [
+    case "basic":
+      core = wrap("Ataque extra", [
         `<strong>${v}</strong>. Representa o número de vezes que você pode realizar um ataque básico neste turno.`,
-      ];
-      if (basicManaNote) {
-        paras.push(
-          `O ataque básico custa 1 de mana para todos os heróis.`,
-          `A habilidade «Atirar para todo lado», do pistoleiro, custa 3 de mana.`,
-        );
-      }
-      core = wrap("Ataques básicos", paras);
+      ]);
       break;
-    }
     default:
       core = wrap(display, [`<strong>${v}</strong>.`]);
   }
