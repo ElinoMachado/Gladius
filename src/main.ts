@@ -1212,7 +1212,8 @@ function heroSlotForgeEquipSummaryHtml(
       return `<div class="hero-slot-forge__row"><span class="hero-slot-forge__k">${escapeHtml(label)}</span><span class="hero-slot-forge__v hero-slot-forge__v--empty">— vazio</span></div>`;
     }
     const bio = BIOME_LABELS[cur.biome as BiomeId];
-    return `<div class="hero-slot-forge__row"><span class="hero-slot-forge__k">${escapeHtml(label)}</span><span class="hero-slot-forge__v">${escapeHtml(bio)} <span class="hero-slot-forge__nv">nv ${cur.level}</span></span></div>`;
+    const t = cur.level;
+    return `<div class="hero-slot-forge__row hero-slot-forge__row--forge-tier-${t}"><span class="hero-slot-forge__k">${escapeHtml(label)}</span><span class="hero-slot-forge__v">${escapeHtml(bio)} <span class="hero-slot-forge__nv hero-slot-forge__nv--tier-${t}">nv ${t}</span></span></div>`;
   }).join("");
   return `<div class="hero-slot-forge__box" role="status">${rows}</div>`;
 }
@@ -1386,6 +1387,19 @@ function syncForgeKindRow(
     btn.removeAttribute("aria-disabled");
     btn.classList.remove("forge-do-btn--max");
     btn.classList.remove("forge-do-btn--blocked");
+  }
+
+  if (pieceBlock) {
+    pieceBlock.classList.remove(
+      "forge-piece-block--tier-0",
+      "forge-piece-block--tier-1",
+      "forge-piece-block--tier-2",
+      "forge-piece-block--tier-3",
+    );
+    const tl = curPiece?.level;
+    pieceBlock.classList.add(
+      `forge-piece-block--tier-${tl === 1 || tl === 2 || tl === 3 ? tl : 0}`,
+    );
   }
 }
 
@@ -5763,7 +5777,7 @@ function equipmentModalPieceCellHtml(
   }
   const bio = FORGE_ESSENCE_LABELS[piece.biome];
   const fx = forgePieceEffectHtml(kind, piece.level, uniqBase, piece.biome);
-  return `<div class="eq-piece-cell" data-eq-hero="${forgeHi}" data-eq-kind="${kind}">
+  return `<div class="eq-piece-cell eq-piece-cell--forge-tier-${piece.level}" data-eq-hero="${forgeHi}" data-eq-kind="${kind}">
     <div class="eq-piece-3d-host" data-eq-3d="1" aria-hidden="true"></div>
     <div class="eq-piece-meta">
       <span class="eq-piece-title">${escapeHtml(title)} · nv ${piece.level}</span>

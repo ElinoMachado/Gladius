@@ -1050,6 +1050,73 @@ h1 {
   font-weight: 650;
 }
 
+.hero-slot-forge__nv--tier-1,
+.hero-slot-forge__nv--tier-2,
+.hero-slot-forge__nv--tier-3 {
+  display: inline-block;
+  margin-left: 0.12rem;
+  padding: 0.06rem 0.38rem;
+  border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.hero-slot-forge__nv--tier-1 {
+  color: #ffe0c8;
+  background: linear-gradient(165deg, rgba(120, 62, 32, 0.75), rgba(45, 28, 18, 0.88));
+  border: 1px solid rgba(205, 127, 50, 0.85);
+  box-shadow:
+    0 0 12px rgba(205, 127, 50, 0.55),
+    inset 0 1px 0 rgba(255, 210, 170, 0.28);
+  text-shadow: 0 0 10px rgba(255, 190, 140, 0.85);
+}
+
+.hero-slot-forge__nv--tier-2 {
+  color: #f4f8ff;
+  background: linear-gradient(165deg, rgba(88, 96, 118, 0.8), rgba(32, 36, 48, 0.9));
+  border: 1px solid rgba(200, 210, 230, 0.75);
+  box-shadow:
+    0 0 12px rgba(200, 215, 240, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  text-shadow: 0 0 10px rgba(230, 240, 255, 0.9);
+}
+
+.hero-slot-forge__nv--tier-3 {
+  color: #fff8e0;
+  background: linear-gradient(165deg, rgba(120, 88, 22, 0.82), rgba(42, 32, 10, 0.92));
+  border: 1px solid rgba(255, 215, 100, 0.9);
+  box-shadow:
+    0 0 14px rgba(255, 205, 80, 0.65),
+    0 0 26px rgba(212, 175, 55, 0.4),
+    inset 0 1px 0 rgba(255, 248, 200, 0.35);
+  text-shadow:
+    0 0 10px rgba(255, 230, 140, 0.95),
+    0 0 18px rgba(255, 200, 60, 0.55);
+}
+
+.hero-slot-forge__row--forge-tier-1 {
+  border-left: 3px solid rgba(205, 127, 50, 0.85);
+  padding-left: 0.35rem;
+  margin-left: -0.15rem;
+  border-radius: 4px 0 0 4px;
+}
+
+.hero-slot-forge__row--forge-tier-2 {
+  border-left: 3px solid rgba(200, 215, 235, 0.88);
+  padding-left: 0.35rem;
+  margin-left: -0.15rem;
+  border-radius: 4px 0 0 4px;
+  box-shadow: -4px 0 12px rgba(180, 195, 220, 0.2);
+}
+
+.hero-slot-forge__row--forge-tier-3 {
+  border-left: 3px solid rgba(255, 210, 90, 0.95);
+  padding-left: 0.35rem;
+  margin-left: -0.15rem;
+  border-radius: 4px 0 0 4px;
+  box-shadow: -4px 0 14px rgba(255, 200, 80, 0.28);
+}
+
 .hero-slot-card {
   flex: 1 1 auto;
   min-height: min(440px, 48vh);
@@ -5497,6 +5564,234 @@ select.forge-biome-sel option:disabled {
   font-size: clamp(0.8rem, 0.25vw + 0.76rem, 0.88rem);
 }
 
+@keyframes forge-tier-pulse-bronze {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(205, 127, 50, 0.4),
+      0 0 12px rgba(184, 115, 51, 0.32),
+      0 0 26px rgba(139, 90, 43, 0.18);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 200, 150, 0.55),
+      0 0 20px rgba(205, 127, 50, 0.52),
+      0 0 38px rgba(184, 115, 51, 0.32);
+  }
+}
+
+@keyframes forge-tier-pulse-silver {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(190, 200, 220, 0.45),
+      0 0 12px rgba(175, 188, 210, 0.35),
+      0 0 24px rgba(130, 145, 175, 0.2);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgba(245, 250, 255, 0.65),
+      0 0 22px rgba(210, 222, 245, 0.52),
+      0 0 40px rgba(175, 190, 220, 0.35);
+  }
+}
+
+@keyframes forge-tier-pulse-gold {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 210, 100, 0.5),
+      0 0 14px rgba(255, 200, 85, 0.42),
+      0 0 30px rgba(212, 175, 55, 0.28);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 248, 210, 0.85),
+      0 0 26px rgba(255, 225, 130, 0.72),
+      0 0 48px rgba(255, 200, 70, 0.42);
+  }
+}
+
+.forge-piece-block--tier-1 {
+  border-width: 2px;
+  border-color: rgba(205, 130, 78, 0.92);
+  background: linear-gradient(
+    168deg,
+    rgba(88, 48, 28, 0.42) 0%,
+    rgba(32, 20, 14, 0.52) 45%,
+    rgba(10, 8, 12, 0.68) 100%
+  );
+  animation: forge-tier-pulse-bronze 2.65s ease-in-out infinite;
+}
+
+.forge-piece-block--tier-1 .forge-piece-label {
+  color: #f0c090;
+  text-shadow:
+    0 0 10px rgba(255, 190, 130, 0.75),
+    0 0 22px rgba(205, 127, 50, 0.45);
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .forge-piece-block--tier-1 .forge-piece-label {
+    background: linear-gradient(185deg, #fff0dc 0%, #cd7f32 42%, #6b3a18 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: none;
+    filter: drop-shadow(0 0 5px rgba(255, 180, 120, 0.85))
+      drop-shadow(0 0 14px rgba(205, 127, 50, 0.55));
+  }
+}
+
+.forge-piece-block--tier-1 .forge-piece-cur {
+  color: #e8c4a0;
+  text-shadow: 0 0 8px rgba(205, 127, 50, 0.45);
+}
+
+.forge-piece-block--tier-1 .forge-piece-preview-host {
+  border-color: rgba(210, 135, 80, 0.78);
+  box-shadow:
+    inset 0 0 24px rgba(205, 127, 50, 0.22),
+    0 0 14px rgba(184, 115, 51, 0.28);
+}
+
+.forge-piece-block--tier-2 {
+  border-width: 2px;
+  border-color: rgba(200, 210, 228, 0.88);
+  background: linear-gradient(
+    168deg,
+    rgba(52, 58, 72, 0.48) 0%,
+    rgba(22, 24, 32, 0.58) 50%,
+    rgba(8, 10, 14, 0.72) 100%
+  );
+  animation: forge-tier-pulse-silver 2.65s ease-in-out infinite;
+}
+
+.forge-piece-block--tier-2 .forge-piece-label {
+  color: #eef4ff;
+  text-shadow:
+    0 0 10px rgba(230, 238, 255, 0.95),
+    0 0 22px rgba(180, 195, 225, 0.55),
+    0 1px 0 rgba(30, 35, 48, 0.9);
+}
+
+.forge-piece-block--tier-2 .forge-piece-cur {
+  color: #d8e4f8;
+  text-shadow: 0 0 8px rgba(200, 215, 240, 0.55);
+}
+
+.forge-piece-block--tier-2 .forge-piece-preview-host {
+  border-color: rgba(190, 205, 230, 0.72);
+  box-shadow:
+    inset 0 0 24px rgba(180, 195, 220, 0.18),
+    0 0 14px rgba(175, 190, 215, 0.3);
+}
+
+.forge-piece-block--tier-3 {
+  border-width: 2px;
+  border-color: rgba(255, 210, 95, 0.95);
+  background: linear-gradient(
+    168deg,
+    rgba(95, 72, 28, 0.5) 0%,
+    rgba(38, 30, 12, 0.58) 45%,
+    rgba(12, 10, 8, 0.75) 100%
+  );
+  animation: forge-tier-pulse-gold 2.5s ease-in-out infinite;
+}
+
+.forge-piece-block--tier-3 .forge-piece-label {
+  color: #ffe8a8;
+  text-shadow:
+    0 0 12px rgba(255, 235, 160, 0.95),
+    0 0 26px rgba(255, 200, 80, 0.65),
+    0 0 40px rgba(212, 175, 55, 0.35);
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .forge-piece-block--tier-3 .forge-piece-label {
+    background: linear-gradient(
+      185deg,
+      #fffcef 0%,
+      #ffd54a 32%,
+      #d4a017 68%,
+      #6a4810 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: none;
+    filter: drop-shadow(0 0 6px rgba(255, 220, 120, 0.95))
+      drop-shadow(0 0 16px rgba(255, 200, 70, 0.7));
+  }
+}
+
+.forge-piece-block--tier-3 .forge-piece-cur {
+  color: #f8e8b8;
+  text-shadow:
+    0 0 10px rgba(255, 215, 100, 0.65),
+    0 0 18px rgba(212, 175, 55, 0.35);
+}
+
+.forge-piece-block--tier-3 .forge-piece-preview-host {
+  border-color: rgba(255, 215, 120, 0.82);
+  box-shadow:
+    inset 0 0 28px rgba(255, 200, 90, 0.22),
+    0 0 16px rgba(255, 200, 80, 0.35),
+    0 0 28px rgba(212, 175, 55, 0.22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .forge-piece-block--tier-1,
+  .forge-piece-block--tier-2,
+  .forge-piece-block--tier-3 {
+    animation: none;
+  }
+
+  .forge-piece-block--tier-1 {
+    box-shadow:
+      inset 0 0 0 1px rgba(205, 127, 50, 0.45),
+      0 0 16px rgba(184, 115, 51, 0.4);
+  }
+
+  .forge-piece-block--tier-2 {
+    box-shadow:
+      inset 0 0 0 1px rgba(200, 215, 235, 0.5),
+      0 0 16px rgba(180, 195, 220, 0.4);
+  }
+
+  .forge-piece-block--tier-3 {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 215, 100, 0.6),
+      0 0 18px rgba(255, 200, 80, 0.45),
+      0 0 32px rgba(212, 175, 55, 0.3);
+  }
+
+  .eq-piece-cell--forge-tier-1,
+  .eq-piece-cell--forge-tier-2,
+  .eq-piece-cell--forge-tier-3 {
+    animation: none;
+  }
+
+  .eq-piece-cell--forge-tier-1 {
+    box-shadow:
+      inset 0 0 0 1px rgba(205, 127, 50, 0.4),
+      0 0 14px rgba(184, 115, 51, 0.35);
+  }
+
+  .eq-piece-cell--forge-tier-2 {
+    box-shadow:
+      inset 0 0 0 1px rgba(200, 215, 235, 0.45),
+      0 0 14px rgba(180, 195, 220, 0.35);
+  }
+
+  .eq-piece-cell--forge-tier-3 {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 215, 100, 0.55),
+      0 0 16px rgba(255, 200, 80, 0.4),
+      0 0 26px rgba(212, 175, 55, 0.25);
+  }
+}
+
 .forge-piece-head {
   display: flex;
   flex-direction: column;
@@ -5893,6 +6188,97 @@ select.forge-biome-sel option:disabled {
 
 .eq-piece-cell--empty {
   opacity: 0.92;
+}
+
+.eq-piece-cell--forge-tier-1 {
+  border-width: 2px;
+  border-color: rgba(205, 130, 78, 0.88);
+  background: linear-gradient(
+    168deg,
+    rgba(70, 40, 26, 0.55) 0%,
+    rgba(28, 20, 18, 0.82) 100%
+  );
+  animation: forge-tier-pulse-bronze 2.65s ease-in-out infinite;
+}
+
+.eq-piece-cell--forge-tier-1 .eq-piece-title {
+  color: #ffd8b8;
+  text-shadow:
+    0 0 8px rgba(255, 190, 140, 0.75),
+    0 0 16px rgba(205, 127, 50, 0.4);
+}
+
+.eq-piece-cell--forge-tier-1 .eq-piece-biome {
+  color: #e8c4a8;
+  text-shadow: 0 0 6px rgba(205, 127, 50, 0.35);
+}
+
+.eq-piece-cell--forge-tier-1 .eq-piece-3d-host {
+  border-color: rgba(205, 140, 85, 0.72);
+  box-shadow:
+    inset 0 0 18px rgba(205, 127, 50, 0.18),
+    0 0 10px rgba(184, 115, 51, 0.25);
+}
+
+.eq-piece-cell--forge-tier-2 {
+  border-width: 2px;
+  border-color: rgba(195, 208, 228, 0.85);
+  background: linear-gradient(
+    168deg,
+    rgba(48, 52, 64, 0.58) 0%,
+    rgba(22, 24, 32, 0.85) 100%
+  );
+  animation: forge-tier-pulse-silver 2.65s ease-in-out infinite;
+}
+
+.eq-piece-cell--forge-tier-2 .eq-piece-title {
+  color: #f0f6ff;
+  text-shadow:
+    0 0 8px rgba(230, 240, 255, 0.85),
+    0 0 16px rgba(180, 198, 230, 0.45);
+}
+
+.eq-piece-cell--forge-tier-2 .eq-piece-biome {
+  color: #c8d8f0;
+  text-shadow: 0 0 6px rgba(190, 210, 240, 0.35);
+}
+
+.eq-piece-cell--forge-tier-2 .eq-piece-3d-host {
+  border-color: rgba(185, 200, 225, 0.68);
+  box-shadow:
+    inset 0 0 18px rgba(180, 195, 220, 0.15),
+    0 0 10px rgba(170, 188, 220, 0.28);
+}
+
+.eq-piece-cell--forge-tier-3 {
+  border-width: 2px;
+  border-color: rgba(255, 205, 90, 0.92);
+  background: linear-gradient(
+    168deg,
+    rgba(88, 64, 22, 0.58) 0%,
+    rgba(32, 26, 12, 0.88) 100%
+  );
+  animation: forge-tier-pulse-gold 2.5s ease-in-out infinite;
+}
+
+.eq-piece-cell--forge-tier-3 .eq-piece-title {
+  color: #fff0c0;
+  text-shadow:
+    0 0 10px rgba(255, 230, 150, 0.9),
+    0 0 20px rgba(255, 200, 80, 0.55);
+}
+
+.eq-piece-cell--forge-tier-3 .eq-piece-biome {
+  color: #f0dcb8;
+  text-shadow: 0 0 8px rgba(255, 210, 120, 0.45);
+}
+
+.eq-piece-cell--forge-tier-3 .eq-piece-3d-host {
+  border-color: rgba(255, 210, 110, 0.78);
+  box-shadow:
+    inset 0 0 22px rgba(255, 200, 90, 0.2),
+    0 0 12px rgba(255, 200, 80, 0.32),
+    0 0 22px rgba(212, 175, 55, 0.2);
 }
 
 .eq-piece-3d-host {
