@@ -36,12 +36,11 @@ export interface SetupStatTooltipInput {
   stat: StatIconId;
   heroClass: HeroClassId;
   display: string;
-  /** Dano base do template (HEROES) */
   baseDano: number;
   critMultStr: string;
 }
 
-/** Tooltips da grelha de atributos no setup de herói (valores do template). Texto = pedido do autor; só {valores} substituídos. */
+/** Setup: corpo sem repetir o nome do atributo antes dos dois pontos; título identifica o stat. */
 export function setupHeroStatTooltip(t: SetupStatTooltipInput): string {
   const { stat, display, baseDano, critMultStr } = t;
   const mult = critMultFromDisplayPercent(critMultStr);
@@ -51,42 +50,42 @@ export function setupHeroStatTooltip(t: SetupStatTooltipInput): string {
   switch (stat) {
     case "max_hp":
       return wrap("Vida", [
-        `Vida: <strong>${v}</strong>. Representa sua vida máxima, morre ao chegar a 0.`,
+        `<strong>${v}</strong>. Representa sua vida máxima. Você morre ao chegar a 0.`,
       ]);
     case "max_mana":
       return wrap("Mana", [
-        `Mana: <strong>${v}</strong>.Representa sua mana máxima.`,
+        `<strong>${v}</strong>. Representa sua mana máxima.`,
       ]);
     case "regen_hp":
       return wrap("Regen. vida", [
-        `Regen. vida: Aumenta sua vida em <strong>${v}</strong> no final do turno do seu herói.`,
+        `Aumenta sua vida em <strong>${v}</strong> no final do turno do seu herói.`,
       ]);
     case "regen_mp":
       return wrap("Regen. mana", [
-        `Regen. mana: Aumenta sua mana em <strong>${v}</strong> no final do turno do seu herói.`,
+        `Aumenta sua mana em <strong>${v}</strong> no final do turno do seu herói.`,
       ]);
     case "dmg":
       return wrap("Dano", [
-        `Dano: <strong>${v}</strong>. Valor usado para calcular o dano de suas skills.`,
+        `<strong>${v}</strong>. Valor usado para calcular o dano das suas habilidades.`,
       ]);
     case "crit_hit":
-      return wrap("Acerto critico", [
-        `Acerto critico: <strong>${v}</strong>. Representa a chance de acertar um golpe crítico.`,
+      return wrap("Acerto crítico", [
+        `<strong>${v}</strong>. Representa a chance de acertar um golpe crítico.`,
       ]);
     case "crit_dmg":
-      return wrap("Dano critico", [
-        `Dano critico: <strong>${v}</strong>. Representa seu dano critico caso acerte um golpe critico. Você pode causar <strong>${approxCrit}</strong> (<strong>${esc(String(baseDano))}</strong> × <strong>${v}</strong>)!`,
+      return wrap("Dano crítico", [
+        `<strong>${v}</strong>. Representa o seu dano crítico caso acerte um golpe crítico. Você pode causar <strong>${approxCrit}</strong> (<strong>${esc(String(baseDano))}</strong> × <strong>${v}</strong>)!`,
       ]);
     case "def": {
       const n = parseInt(String(display).trim(), 10);
       const pct = Number.isFinite(n) ? formatReductionPctFromDefense(n) : "—";
-      return wrap("defesa", [
-        `defesa: <strong>${v}</strong>. ${pct}% de redução de dano.`,
+      return wrap("Defesa", [
+        `<strong>${v}</strong>. ${pct}% de redução de dano.`,
       ]);
     }
     case "mov":
       return wrap("Movimento", [
-        `Movimento:<strong>${v}</strong>. Representa quantos hex você pode se mover no seu turno.`,
+        `<strong>${v}</strong>. Representa quantos hexágonos você pode percorrer no seu turno.`,
       ]);
     default:
       return wrap(display, [`<strong>${v}</strong>.`]);
@@ -95,9 +94,7 @@ export function setupHeroStatTooltip(t: SetupStatTooltipInput): string {
 
 export interface CombatStatTooltipInput {
   stat: StatIconId;
-  /** Valor principal mostrado na célula */
   display: string;
-  /** Texto extra (deltas, notas Ronin, etc.) */
   detailPlain?: string;
   defenseNumeric?: string;
   defenseReductionPct?: string;
@@ -113,7 +110,6 @@ function appendBeforeLastClosingDiv(html: string, insert: string): string {
   return html.slice(0, idx) + insert + html.slice(idx);
 }
 
-/** Combate / loja: mesmas frases do autor; só {valores} substituídos. */
 export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
   const {
     stat,
@@ -133,32 +129,32 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
   switch (stat) {
     case "max_hp":
       core = wrap("Vida", [
-        `Vida: <strong>${v}</strong>. Representa sua vida máxima, morre ao chegar a 0.`,
+        `<strong>${v}</strong>. Representa sua vida máxima. Você morre ao chegar a 0.`,
       ]);
       break;
     case "max_mana":
       core = wrap("Mana", [
-        `Mana: <strong>${v}</strong>.Representa sua mana máxima.`,
+        `<strong>${v}</strong>. Representa sua mana máxima.`,
       ]);
       break;
     case "regen_hp":
       core = wrap("Regen. vida", [
-        `Regen. vida: Aumenta sua vida em <strong>${v}</strong> no final do turno do seu herói.`,
+        `Aumenta sua vida em <strong>${v}</strong> no final do turno do seu herói.`,
       ]);
       break;
     case "regen_mp":
       core = wrap("Regen. mana", [
-        `Regen. mana: Aumenta sua mana em <strong>${v}</strong> no final do turno do seu herói.`,
+        `Aumenta sua mana em <strong>${v}</strong> no final do turno do seu herói.`,
       ]);
       break;
     case "dmg":
       core = wrap("Dano", [
-        `Dano: <strong>${v}</strong>. Valor usado para calcular o dano de suas skills.`,
+        `<strong>${v}</strong>. Valor usado para calcular o dano das suas habilidades.`,
       ]);
       break;
     case "crit_hit":
-      core = wrap("Acerto critico", [
-        `Acerto critico: <strong>${v}</strong>. Representa a chance de acertar um golpe crítico.`,
+      core = wrap("Acerto crítico", [
+        `<strong>${v}</strong>. Representa a chance de acertar um golpe crítico.`,
       ]);
       break;
     case "crit_dmg": {
@@ -174,8 +170,8 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
         approx != null && dStr
           ? ` Você pode causar <strong>${approx}</strong> (<strong>${dStr}</strong> × <strong>${v}</strong>)!`
           : "";
-      core = wrap("Dano critico", [
-        `Dano critico: <strong>${v}</strong>. Representa seu dano critico caso acerte um golpe critico.${critPart}`,
+      core = wrap("Dano crítico", [
+        `<strong>${v}</strong>. Representa o seu dano crítico caso acerte um golpe crítico.${critPart}`,
       ]);
       break;
     }
@@ -185,21 +181,21 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
       const pct =
         defenseReductionPct ??
         (Number.isFinite(n) ? formatReductionPctFromDefense(n) : null);
-      core = wrap("defesa", [
+      core = wrap("Defesa", [
         pct != null
-          ? `defesa: <strong>${esc(numShown)}</strong>. ${esc(pct)}% de redução de dano.`
-          : `defesa: <strong>${esc(numShown)}</strong>.`,
+          ? `<strong>${esc(numShown)}</strong>. ${esc(pct)}% de redução de dano.`
+          : `<strong>${esc(numShown)}</strong>.`,
       ]);
       break;
     }
     case "mov":
       core = wrap("Movimento", [
-        `Movimento:<strong>${v}</strong>. Representa quantos hex você pode se mover no seu turno.`,
+        `<strong>${v}</strong>. Representa quantos hexágonos você pode percorrer no seu turno.`,
       ]);
       break;
     case "range":
       core = wrap(display, [
-        `Alcance: Representa quantos hex de alcance serão aplicados em suas skills que escalem com esse atributo.`,
+        `Representa quantos hexágonos de alcance serão aplicados às suas habilidades que escalam com esse atributo.`,
       ]);
       break;
     case "pot": {
@@ -208,51 +204,51 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
           ? `${esc(String(Math.round(potencialNumeric * 10) / 10).replace(".", ","))}%`
           : `${v}%`;
       core = wrap("Potencial de cura e escudo", [
-        `Potencial de cura e escudo:<strong>${pctStr}</strong>. Valor aplicado em artefatos e habilidades que curem ou concedam escudo a você e seus aliados.`,
+        `<strong>${pctStr}</strong>. Valor aplicado em artefatos e habilidades que curem ou concedam escudo a você e aos seus aliados.`,
       ]);
       break;
     }
     case "xp_bonus":
-      core = wrap("Bonus de XP", [
-        `Bonus de XP: <strong>${v}</strong>. Representa o valor adicional de XP ganha ao derrotar um inimigo.`,
+      core = wrap("Bônus de XP", [
+        `<strong>${v}</strong>. Representa o valor adicional de experiência ao derrotar um inimigo.`,
       ]);
       break;
     case "pen":
       core = wrap("Penetração", [
-        `Penetração: <strong>${v}</strong>. Representa a redução de defesa de um alvo ao receber dano de qualquer fonte.`,
+        `<strong>${v}</strong>. Representa a redução da defesa de um alvo ao receber dano de qualquer fonte.`,
       ]);
       break;
     case "pen_escudo":
       core = wrap("Penetração de escudo", [
-        `Penetração de escudo: <strong>${v}</strong>. Representa o dano adicional de qualquer fonte de dano contra um escudo.`,
+        `<strong>${v}</strong>. Representa o dano adicional de qualquer fonte contra um escudo.`,
       ]);
       break;
     case "lifesteal":
       core = wrap("Roubo de vida", [
-        `Roubo de vida: <strong>${v}</strong>. Representa o percentual de qualquer dano que você causou a um inimigo convertido em vida para seu herói.`,
+        `<strong>${v}</strong>. Representa a percentagem de qualquer dano que você causar a um inimigo, convertida em vida para o seu herói.`,
       ]);
       break;
     case "luck":
       core = wrap("Sorte", [
-        `Sorte:<strong>${v}</strong>. Representa a chance de adquirir artefatos mais poderosos mais cedo.`,
+        `<strong>${v}</strong>. Representa a chance de adquirir artefatos mais poderosos mais cedo.`,
       ]);
       break;
     case "fly":
       core = wrap(display, [
-        `Capacidade de transitar livremente no mapa. Criaturas voadoras não podem ser encurraladas por criaturas não voadoras. Você só pode ser atingido por habilidade com alcance 3 ou mais.`,
+        `Capacidade de transitar livremente pelo mapa. Criaturas voadoras não podem ser encurraladas por criaturas não voadoras. Você só pode ser atingido por habilidades com alcance 3 ou mais.`,
       ]);
       break;
     case "basic": {
       const paras = [
-        `Ataque básicos: <strong>${v}</strong>. Representa o numero de vezes que você pode realizar um ataque básico nesse turno.`,
+        `<strong>${v}</strong>. Representa o número de vezes que você pode realizar um ataque básico neste turno.`,
       ];
       if (basicManaNote) {
         paras.push(
-          `O ataque básico vai custar 1 de mana. para todos os heróis.`,
-          `O "Atirar para todo lado" do pistoleiro vai custar 3 de mana.`,
+          `O ataque básico custa 1 de mana para todos os heróis.`,
+          `A habilidade «Atirar para todo lado», do pistoleiro, custa 3 de mana.`,
         );
       }
-      core = wrap("Ataque básicos", paras);
+      core = wrap("Ataques básicos", paras);
       break;
     }
     default:
