@@ -80,14 +80,24 @@ export function applyCritMultiplier(
   return Math.max(1, Math.floor(mitigated * m));
 }
 
+export type EffectiveDefenseBiomeOpts = {
+  /** Sinergia forja montanha nv1+: +100% def no montanhoso (×2), +50% fora (×1,5). */
+  montanhosoForgeSynergyTier1?: boolean;
+};
+
 /** Com `ignoreBiomeEffects` (ex.: artefato ruler), defesa não é alterada pelo bioma. */
 export function effectiveDefenseForBiome(
   base: number,
   biome: BiomeId,
   ignoreBiomeEffects = false,
+  opts?: EffectiveDefenseBiomeOpts,
 ): number {
   if (ignoreBiomeEffects) return base;
-  if (biome === "montanhoso") return Math.floor(base * 1.5);
+  if (biome === "montanhoso") {
+    if (opts?.montanhosoForgeSynergyTier1) return Math.floor(base * 2);
+    return Math.floor(base * 1.5);
+  }
+  if (opts?.montanhosoForgeSynergyTier1) return Math.floor(base * 1.5);
   return base;
 }
 

@@ -3167,7 +3167,15 @@ function roninCritChanceBonus(artifacts: Unit["artifacts"]): number {
 function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   const bio = biomeAt(m.grid, h.q, h.r) as BiomeId;
   const ign = unitIgnoresTerrain(h);
-  const effDef = effectiveDefenseForBiome(h.defesa, bio, ign);
+  const monT1 =
+    h.isPlayer &&
+    forgeSynergyTier(h.forgeLoadout, "montanhoso") >= 1 &&
+    !ign;
+  const coreDefHero = effectiveDefenseForBiome(h.defesa, bio, ign, {
+    montanhosoForgeSynergyTier1: monT1,
+  });
+  const effDef =
+    coreDefHero + (h.isPlayer ? m.montanhosoAllyDefBonus(h) : 0);
   const movPool = m.heroMovementPool(h);
   const effAlc = m.effectiveAlcanceForHero(h);
   const roch = bio === "rochoso" && !ign;
@@ -3182,7 +3190,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   const cells: HeroStatCell[] = [];
 
   if (b) {
-    const baseEffDef = effectiveDefenseForBiome(b.defesa, bio, ign);
+    const baseCoreDef = effectiveDefenseForBiome(b.defesa, bio, ign, {
+      montanhosoForgeSynergyTier1: monT1,
+    });
+    const baseEffDef =
+      baseCoreDef +
+      m.montanhosoAllyDefBonus(h, (u) => u.statBaseline?.defesa ?? u.defesa);
     const baseEffAlc = effectiveAlcanceForBiome(b.alcance, bio, ign);
     const baseDeserto =
       bio === "deserto" && !ign && forgeSynergyTier(h.forgeLoadout, "deserto") < 1;

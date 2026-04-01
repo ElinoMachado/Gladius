@@ -336,6 +336,17 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
       if (h.level === 1) u.movimento += 1;
       else if (h.level === 2) u.movimento += 1;
       else u.movimento += 2;
+    } else if (h.biome === "montanhoso") {
+      if (h.level === 1) {
+        u.defesa += 20;
+        u.regenVida += 2;
+      } else if (h.level === 2) {
+        u.defesa += 50;
+        u.regenVida += 4;
+      } else {
+        u.defesa += 80;
+        u.regenVida += 6;
+      }
     } else {
       const hel =
         h.level === 1
@@ -364,6 +375,20 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
         u.hp += 900;
         u.defesa += 50;
       }
+    } else if (c.biome === "montanhoso") {
+      if (c.level === 1) {
+        u.maxHp += 50;
+        u.hp += 50;
+        u.defesa += 100;
+      } else if (c.level === 2) {
+        u.maxHp += 200;
+        u.hp += 200;
+        u.defesa += 150;
+      } else {
+        u.maxHp += 300;
+        u.hp += 300;
+        u.defesa += 200;
+      }
     } else if (c.level === 1) {
       u.maxHp += 100;
       u.hp += 100;
@@ -391,6 +416,17 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
         u.dano += 30;
         u.penetracao += 125;
       }
+    } else if (m.biome === "montanhoso") {
+      if (m.level === 1) {
+        u.dano += 20;
+        u.regenVida += 1;
+      } else if (m.level === 2) {
+        u.dano += 45;
+        u.regenVida += 2;
+      } else {
+        u.dano += 90;
+        u.regenVida += 3;
+      }
     } else {
       const mn =
         m.level === 1
@@ -405,6 +441,9 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
   }
   if (forgeSynergyTier(loadout, "floresta") >= 2) {
     u.flying = true;
+  }
+  if (forgeSynergyTier(loadout, "montanhoso") >= 3) {
+    u.defesa = Math.floor(u.defesa * 2);
   }
 }
 
@@ -430,6 +469,11 @@ export function forgePieceDescription(
       if (level === 2) return "+1 movimento, bônus de XP +50%";
       return "+2 movimento, bônus de XP +100%";
     }
+    if (biome === "montanhoso") {
+      if (level === 1) return "+20 defesa, +2 regen. vida";
+      if (level === 2) return "+50 defesa, +4 regen. vida";
+      return "+80 defesa, +6 regen. vida";
+    }
     if (level === 1) return "+1 movimento";
     if (level === 2) return "+1 alcance, +1 movimento";
     return "+2 alcance, +2 movimento";
@@ -440,6 +484,11 @@ export function forgePieceDescription(
       if (level === 2) return "+400 vida máx., +30 armadura";
       return "+900 vida máx., +50 armadura";
     }
+    if (biome === "montanhoso") {
+      if (level === 1) return "+50 vida máx., +100 armadura";
+      if (level === 2) return "+200 vida máx., +150 armadura";
+      return "+300 vida máx., +200 armadura";
+    }
     if (level === 1) return "+100 vida máx., +25 armadura";
     if (level === 2) return "+200 vida máx., +50 armadura";
     return "+500 vida máx., +100 armadura";
@@ -448,6 +497,11 @@ export function forgePieceDescription(
     if (level === 1) return "+5 dano, +10 penetração";
     if (level === 2) return "+15 dano, +50 penetração";
     return "+30 dano, +125 penetração";
+  }
+  if (biome === "montanhoso") {
+    if (level === 1) return "+20 dano, +1 regen. vida";
+    if (level === 2) return "+45 dano, +2 regen. vida";
+    return "+90 dano, +3 regen. vida";
   }
   if (level === 1) return "+10 dano, +25% chance crítica";
   if (level === 2) return "+25 dano, +50% crítico, +25% dano crítico";
@@ -480,6 +534,17 @@ export function forgePieceEffectHtml(
         p.push(forgeFxSeg("mov", u, "+2 movimento, "));
         p.push(forgeFxSeg("xp_bonus", u, "bônus XP +100%"));
       }
+    } else if (biome === "montanhoso") {
+      if (level === 1) {
+        p.push(forgeFxSeg("def", u, "+20 defesa, "));
+        p.push(forgeFxSeg("regen_hp", u, "+2 regen. vida"));
+      } else if (level === 2) {
+        p.push(forgeFxSeg("def", u, "+50 defesa, "));
+        p.push(forgeFxSeg("regen_hp", u, "+4 regen. vida"));
+      } else {
+        p.push(forgeFxSeg("def", u, "+80 defesa, "));
+        p.push(forgeFxSeg("regen_hp", u, "+6 regen. vida"));
+      }
     } else if (level === 1) p.push(forgeFxSeg("mov", u, "+1 movimento"));
     else if (level === 2) {
       p.push(forgeFxSeg("range", u, "+1 alcance, "));
@@ -499,6 +564,17 @@ export function forgePieceEffectHtml(
       } else {
         p.push(forgeFxSeg("max_hp", u, "+900 vida máx., "));
         p.push(forgeFxSeg("def", u, "+50 armadura"));
+      }
+    } else if (biome === "montanhoso") {
+      if (level === 1) {
+        p.push(forgeFxSeg("max_hp", u, "+50 vida máx., "));
+        p.push(forgeFxSeg("def", u, "+100 armadura"));
+      } else if (level === 2) {
+        p.push(forgeFxSeg("max_hp", u, "+200 vida máx., "));
+        p.push(forgeFxSeg("def", u, "+150 armadura"));
+      } else {
+        p.push(forgeFxSeg("max_hp", u, "+300 vida máx., "));
+        p.push(forgeFxSeg("def", u, "+200 armadura"));
       }
     } else if (level === 1) {
       p.push(forgeFxSeg("max_hp", u, "+100 vida máx., "));
@@ -520,6 +596,17 @@ export function forgePieceEffectHtml(
     } else {
       p.push(forgeFxSeg("dmg", u, "+30 dano, "));
       p.push(forgeFxSeg("pen", u, "+125 penetração"));
+    }
+  } else if (biome === "montanhoso") {
+    if (level === 1) {
+      p.push(forgeFxSeg("dmg", u, "+20 dano, "));
+      p.push(forgeFxSeg("regen_hp", u, "+1 regen. vida"));
+    } else if (level === 2) {
+      p.push(forgeFxSeg("dmg", u, "+45 dano, "));
+      p.push(forgeFxSeg("regen_hp", u, "+2 regen. vida"));
+    } else {
+      p.push(forgeFxSeg("dmg", u, "+90 dano, "));
+      p.push(forgeFxSeg("regen_hp", u, "+3 regen. vida"));
     }
   } else if (level === 1) {
     p.push(forgeFxSeg("dmg", u, "+10 dano, "));
@@ -565,6 +652,13 @@ export function forgeSynergyDescriptionLines(
       "1 peça: ignora penalidade de movimento no pântano; com Ruler: +1 movimento para ti e todos os aliados.",
       "2 peças: inimigos com movimento < 4 causam 50% menos dano.",
       "3 peças: dobra os teus pontos de movimento no turno.",
+    ];
+  }
+  if (biome === "montanhoso") {
+    return [
+      "1 peça: +100% armadura no montanhoso, +50% fora; com Ruler: inimigos no montanhoso perdem 50% defesa.",
+      "2 peças: aliados ganham 25% da tua defesa; +10% da tua defesa como dano extra nos teus golpes.",
+      "3 peças: dobra os teus pontos de defesa.",
     ];
   }
   return [

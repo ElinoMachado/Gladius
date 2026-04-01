@@ -33,6 +33,16 @@ describe("combatMath", () => {
   it("montanhoso adds defense", () => {
     expect(effectiveDefenseForBiome(4, "montanhoso")).toBe(6);
     expect(effectiveDefenseForBiome(4, "montanhoso", true)).toBe(4);
+    expect(
+      effectiveDefenseForBiome(4, "montanhoso", false, {
+        montanhosoForgeSynergyTier1: true,
+      }),
+    ).toBe(8);
+    expect(
+      effectiveDefenseForBiome(4, "floresta", false, {
+        montanhosoForgeSynergyTier1: true,
+      }),
+    ).toBe(6);
   });
 
   it("pontos de movimento não são mais cortados no pântano (custo por hex)", () => {

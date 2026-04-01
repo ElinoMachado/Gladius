@@ -535,6 +535,24 @@ export class GameModel {
     return mov;
   }
 
+  /**
+   * Defesa extra: 25% da defesa (ou valor alternativo via `defOf`) de cada aliado com
+   * sinergia montanha nv2+.
+   */
+  montanhosoAllyDefBonus(
+    hero: Unit,
+    defOf: (u: Unit) => number = (u) => u.defesa,
+  ): number {
+    if (!hero.isPlayer) return 0;
+    let add = 0;
+    for (const h of this.getParty()) {
+      if (h.id === hero.id || h.hp <= 0) continue;
+      if (forgeSynergyTier(h.forgeLoadout, "montanhoso") < 2) continue;
+      add += Math.floor(defOf(h) * 0.25);
+    }
+    return add;
+  }
+
   /** Sorte efetiva (ex.: sinergia floresta nv3 dobra). */
   effectiveSorte(u: Unit): number {
     let s = u.sorte;
@@ -2417,6 +2435,12 @@ export class GameModel {
     ) {
       rawUse = Math.max(1, Math.floor(rawUse * 0.5));
     }
+    if (
+      src.isPlayer &&
+      forgeSynergyTier(src.forgeLoadout, "montanhoso") >= 2
+    ) {
+      rawUse += Math.floor(src.defesa * 0.1);
+    }
     const defBio = biomeAt(this.grid, tgt.q, tgt.r) as BiomeId;
     const atkBio = biomeAt(this.grid, src.q, src.r) as BiomeId;
     const bunkerHere = this.bunkerAtHex(tgt.q, tgt.r);
@@ -2426,11 +2450,29 @@ export class GameModel {
       bunkerHere.occupantId === tgt.id &&
       tgt.isPlayer;
     const useBunkerDefense = !!bkOcc && !src.isPlayer;
+    const ignTgt = unitIgnoresTerrain(tgt);
+    const monT1 =
+      tgt.isPlayer &&
+      forgeSynergyTier(tgt.forgeLoadout, "montanhoso") >= 1 &&
+      !ignTgt;
     let defStat = effectiveDefenseForBiome(
       useBunkerDefense ? bunkerHere!.defesa : tgt.defesa,
       defBio,
-      unitIgnoresTerrain(tgt),
+      ignTgt,
+      { montanhosoForgeSynergyTier1: monT1 },
     );
+    if (tgt.isPlayer && !useBunkerDefense) {
+      defStat += this.montanhosoAllyDefBonus(tgt);
+    }
+    if (
+      src.isPlayer &&
+      !tgt.isPlayer &&
+      defBio === "montanhoso" &&
+      forgeSynergyTier(src.forgeLoadout, "montanhoso") >= 1 &&
+      (src.artifacts["ruler"] ?? 0) > 0
+    ) {
+      defStat = Math.max(0, Math.floor(defStat * 0.5));
+    }
     let mit = computeMitigatedDamage(rawUse, defStat, src.penetracao);
     const rochoso =
       atkBio === "rochoso" && !unitIgnoresTerrain(src);
