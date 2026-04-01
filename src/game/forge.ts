@@ -412,15 +412,15 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
       if (c.level === 1) {
         u.maxHp += 50;
         u.hp += 50;
-        u.regenVida += 5;
+        u.potencialCuraEscudo += 25;
       } else if (c.level === 2) {
         u.maxHp += 100;
         u.hp += 100;
-        u.regenVida += 10;
+        u.potencialCuraEscudo += 60;
       } else {
         u.maxHp += 200;
         u.hp += 200;
-        u.regenVida += 20;
+        u.potencialCuraEscudo += 150;
       }
     } else if (c.biome === "rochoso") {
       if (c.level === 1) {
@@ -569,9 +569,9 @@ export function forgePieceDescription(
       return "+300 vida máx., +200 armadura";
     }
     if (biome === "deserto") {
-      if (level === 1) return "+50 vida máx., +5 regen. vida";
-      if (level === 2) return "+100 vida máx., +10 regen. vida";
-      return "+200 vida máx., +20 regen. vida";
+      if (level === 1) return "+50 vida máx., +25% potencial cura/escudo";
+      if (level === 2) return "+100 vida máx., +60% potencial cura/escudo";
+      return "+200 vida máx., +150% potencial cura/escudo";
     }
     if (biome === "rochoso") {
       if (level === 1) return "+450 vida máx.";
@@ -697,13 +697,13 @@ export function forgePieceEffectHtml(
     } else if (biome === "deserto") {
       if (level === 1) {
         p.push(forgeFxSeg("max_hp", u, "+50 vida máx., "));
-        p.push(forgeFxSeg("regen_hp", u, "+5 regen. vida"));
+        p.push(forgeFxSeg("pot", u, "+25% potencial cura/escudo"));
       } else if (level === 2) {
         p.push(forgeFxSeg("max_hp", u, "+100 vida máx., "));
-        p.push(forgeFxSeg("regen_hp", u, "+10 regen. vida"));
+        p.push(forgeFxSeg("pot", u, "+60% potencial cura/escudo"));
       } else {
         p.push(forgeFxSeg("max_hp", u, "+200 vida máx., "));
-        p.push(forgeFxSeg("regen_hp", u, "+20 regen. vida"));
+        p.push(forgeFxSeg("pot", u, "+150% potencial cura/escudo"));
       }
     } else if (biome === "rochoso") {
       if (level === 1) p.push(forgeFxSeg("max_hp", u, "+450 vida máx."));
