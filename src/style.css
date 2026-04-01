@@ -1,5 +1,17 @@
+/* Scrollbars — identidade coliseu (ouro / bronze sobre fundo escuro) */
+:root {
+  --ui-scrollbar-size: 7px;
+  --ui-scrollbar-track: rgba(14, 12, 22, 0.65);
+  --ui-scrollbar-thumb: rgba(201, 162, 39, 0.42);
+  --ui-scrollbar-thumb-hover: rgba(220, 188, 72, 0.78);
+  --ui-scrollbar-thumb-active: rgba(236, 205, 100, 0.92);
+  --ui-scrollbar-radius: 3px;
+}
+
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-scrollbar-thumb) var(--ui-scrollbar-track);
 }
 
 html {
@@ -18,6 +30,45 @@ body {
   font-family: "Segoe UI", system-ui, sans-serif;
   background: #0d0d12;
   color: #e8e6e3;
+}
+
+/* Chromium / Safari / Edge — sem setas; trilho discreto */
+*::-webkit-scrollbar {
+  width: var(--ui-scrollbar-size);
+  height: var(--ui-scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--ui-scrollbar-track);
+  border-radius: var(--ui-scrollbar-radius);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--ui-scrollbar-thumb);
+  border-radius: var(--ui-scrollbar-radius);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-scrollbar-thumb-hover);
+  box-shadow: 0 0 12px rgba(201, 162, 39, 0.28);
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--ui-scrollbar-thumb-active);
+  box-shadow: 0 0 14px rgba(201, 162, 39, 0.38);
+}
+
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button:single-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--ui-scrollbar-track);
 }
 
 #app {
