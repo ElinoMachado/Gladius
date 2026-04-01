@@ -2100,6 +2100,34 @@ function showColorSetup(): void {
   });
 }
 
+/** Grelha de artefatos na loja de ouro (modo sandbox). */
+function goldShopSandboxArtifactsSectionHtml(h: Unit): string {
+  const sorted = [...ARTIFACT_POOL].sort((a, b) => {
+    const ri =
+      ARTIFACT_RARITY_ORDER.indexOf(a.rarity) -
+      ARTIFACT_RARITY_ORDER.indexOf(b.rarity);
+    if (ri !== 0) return ri;
+    return a.name.localeCompare(b.name, "pt");
+  });
+  const tiles = sorted
+    .map((a) => {
+      const n = h.artifacts[a.id] ?? 0;
+      const cap = getArtifactMaxStacks(a.id);
+      const on = n > 0 ? " shop-sandbox-artifact--on" : "";
+      const tip = `${a.name} — ${n}/${cap}. Esquerdo: +1 · direito: −1`;
+      return `<button type="button" class="shop-sandbox-artifact ${artifactRarityClass(a.rarity)}${on}" data-sandbox-artifact="${escapeHtml(a.id)}" title="${escapeHtml(tip)}">
+      <span class="shop-sandbox-artifact__name">${escapeHtml(a.name)}</span>
+      <span class="shop-sandbox-artifact__stack" aria-hidden="true">${n}/${cap}</span>
+    </button>`;
+    })
+    .join("");
+  return `<section class="shop-sandbox-artifacts" aria-label="Artefatos sandbox">
+    <h3 class="shop-sandbox-artifacts__title">Sandbox — artefatos deste herói</h3>
+    <p class="shop-sandbox-artifacts__hint">Botão esquerdo: +1 acúmulo (do 0 liga o artefato). Botão direito: −1 (em 0 fica desligado).</p>
+    <div class="shop-sandbox-artifacts__grid" role="group">${tiles}</div>
+  </section>`;
+}
+
 function showGoldShop(isInitial: boolean): void {
   const stayInShop =
     (model.phase === "shop_wave" && prevPhase === "shop_wave") ||
@@ -2194,6 +2222,7 @@ function showGoldShop(isInitial: boolean): void {
           </div>
         </div>
         ${model.bunkerForShop() ? goldShopBunkerSectionHtml(model.bunkerForShop()!, h) : ""}
+        ${model.devSandboxMode ? goldShopSandboxArtifactsSectionHtml(h) : ""}
         <div class="shop-grid">${list}</div>
         <div class="shop-nav">
           <button type="button" class="btn" id="shop-prev" ${idx < 1 ? "disabled" : ""}>Herói anterior</button>
@@ -2208,6 +2237,21 @@ function showGoldShop(isInitial: boolean): void {
         /* `emit` → `render` → `refreshGoldShop`; evitar segundo `renderShop` aqui (WebGL). */
       });
     });
+    if (model.devSandboxMode) {
+      panel.querySelectorAll("[data-sandbox-artifact]").forEach((node) => {
+        const btn = node as HTMLElement;
+        const artId = btn.dataset.sandboxArtifact;
+        if (!artId) return;
+        btn.addEventListener("contextmenu", (e) => e.preventDefault());
+        btn.addEventListener("mousedown", (e) => {
+          if (e.button !== 0 && e.button !== 2) return;
+          e.preventDefault();
+          const delta = e.button === 0 ? (1 as const) : (-1 as const);
+          model.sandboxShopAdjustArtifact(h.id, artId, delta);
+          renderShop();
+        });
+      });
+    }
     panel.querySelector("#bunk-repair")?.addEventListener("click", () => {
       model.buyBunkerRepair(h.id);
     });
@@ -3800,7 +3844,7 @@ function showCombatHUD(): void {
   uiRoot.innerHTML = "";
   const sandboxHudHtml =
     import.meta.env.DEV && model.devSandboxMode
-      ? `<div class="hud-block hud-sandbox-pill" role="status">Modo sandbox — ouro/cristais/essências amplos · sem CDR · ultimate da arma sempre pronta</div>`
+      ? `<div class="hud-block hud-sandbox-pill" role="status">Modo sandbox — ouro/cristais/essências amplos · sem CDR · ultimate da arma sempre pronta · na loja: grelha de artefatos (esq./dir.)</div>`
       : "";
   const hud = el(`
     <div class="hud">

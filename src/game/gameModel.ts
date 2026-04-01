@@ -79,7 +79,11 @@ import { COMBAT_BIOMES, BIOME_LABELS } from "./data/biomes";
 import { goldDrainPerTurn } from "./data/shops";
 import { loadMeta, permPercent, saveMeta } from "./metaStore";
 import { getArtifactMaxStacks, randomArtifactChoicesForHero } from "./artifactUi";
-import { ARTIFACT_POOL, artifactDefById } from "./data/artifacts";
+import {
+  ARTIFACT_POOL,
+  artifactDefById,
+  type ArtifactDef,
+} from "./data/artifacts";
 import {
   DEV_TEST_ARTIFACT_COUNT,
   DEV_TEST_CROWD_UI,
@@ -3895,6 +3899,102 @@ export class GameModel {
     this.emit();
   }
 
+  private applyPickBonusPerStack(
+    u: Unit,
+    b: ArtifactDef["pickBonusPerStack"] | undefined,
+  ): void {
+    if (!b) return;
+    if (b.dano) u.dano += b.dano;
+    if (b.defesa) u.defesa += b.defesa;
+    if (b.maxHp) u.maxHp += b.maxHp;
+    if (b.hp) u.hp += b.hp;
+    if (b.acertoCritico) u.acertoCritico += b.acertoCritico;
+    if (b.danoCritico) u.danoCritico += b.danoCritico;
+    if (b.penetracao) u.penetracao += b.penetracao;
+    if (b.regenVida) u.regenVida += b.regenVida;
+    if (b.regenMana) u.regenMana += b.regenMana;
+    if (b.alcance) u.alcance += b.alcance;
+    if (b.movimento) u.movimento += b.movimento;
+    if (b.lifesteal) u.lifesteal += b.lifesteal;
+    if (b.sorte) u.sorte += b.sorte;
+    if (b.potencialCuraEscudo) u.potencialCuraEscudo += b.potencialCuraEscudo;
+  }
+
+  private removePickBonusPerStack(
+    u: Unit,
+    b: ArtifactDef["pickBonusPerStack"] | undefined,
+  ): void {
+    if (!b) return;
+    if (b.dano) u.dano -= b.dano;
+    if (b.defesa) u.defesa -= b.defesa;
+    if (b.maxHp) {
+      u.maxHp -= b.maxHp;
+      u.hp = Math.min(u.hp, u.maxHp);
+    }
+    if (b.hp) u.hp -= b.hp;
+    if (b.acertoCritico) u.acertoCritico -= b.acertoCritico;
+    if (b.danoCritico) u.danoCritico -= b.danoCritico;
+    if (b.penetracao) u.penetracao -= b.penetracao;
+    if (b.regenVida) u.regenVida -= b.regenVida;
+    if (b.regenMana) u.regenMana -= b.regenMana;
+    if (b.alcance) u.alcance -= b.alcance;
+    if (b.movimento) u.movimento -= b.movimento;
+    if (b.lifesteal) u.lifesteal -= b.lifesteal;
+    if (b.sorte) u.sorte -= b.sorte;
+    if (b.potencialCuraEscudo) u.potencialCuraEscudo -= b.potencialCuraEscudo;
+  }
+
+  /** +1 acúmulo e bônus de stats da carta (se existir). */
+  private incrementArtifactStack(u: Unit, artifactId: string): boolean {
+    const cap = getArtifactMaxStacks(artifactId);
+    const prev = u.artifacts[artifactId] ?? 0;
+    if (prev >= cap) return false;
+    u.artifacts[artifactId] = prev + 1;
+    const def = artifactDefById(artifactId);
+    this.applyPickBonusPerStack(u, def?.pickBonusPerStack);
+    return true;
+  }
+
+  /** −1 acúmulo e reverte bônus de stats desse acúmulo. */
+  private decrementArtifactStack(u: Unit, artifactId: string): boolean {
+    const prev = u.artifacts[artifactId] ?? 0;
+    if (prev <= 0) return false;
+    const def = artifactDefById(artifactId);
+    this.removePickBonusPerStack(u, def?.pickBonusPerStack);
+    if (prev <= 1) delete u.artifacts[artifactId];
+    else u.artifacts[artifactId] = prev - 1;
+    return true;
+  }
+
+  /**
+   * Modo sandbox: na loja de ouro, ajustar acúmulos de artefato do herói atual.
+   * Esquerdo +1, direito −1 (UI chama com delta ±1).
+   */
+  sandboxShopAdjustArtifact(
+    heroId: string,
+    artifactId: string,
+    delta: 1 | -1,
+  ): boolean {
+    if (!this.devSandboxMode) return false;
+    if (artifactId.startsWith("_")) return false;
+    if (!artifactDefById(artifactId)) return false;
+    const u = this.units.find((x) => x.id === heroId);
+    if (!u?.isPlayer) return false;
+    const ok =
+      delta === 1
+        ? this.incrementArtifactStack(u, artifactId)
+        : this.decrementArtifactStack(u, artifactId);
+    if (!ok) return false;
+    u.hp = Math.max(0, Math.min(u.hp, u.maxHp));
+    u.mana = Math.max(0, Math.min(u.mana, u.maxMana));
+    if (artifactId === "braco_forte") {
+      const ch = this.currentHero();
+      if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
+    }
+    this.emit();
+    return true;
+  }
+
   pickArtifact(artifactId: string): void {
     if (!this.pendingArtifacts) return;
     const u = this.units.find((x) => x.id === this.pendingArtifacts!.unitId);
@@ -3905,27 +4005,7 @@ export class GameModel {
       u.hp = u.maxHp;
       u.mana = u.maxMana;
     } else {
-      const cap = getArtifactMaxStacks(artifactId);
-      const prev = u.artifacts[artifactId] ?? 0;
-      u.artifacts[artifactId] = Math.min(cap, prev + 1);
-      const def = artifactDefById(artifactId);
-      const b = def?.pickBonusPerStack;
-      if (b) {
-        if (b.dano) u.dano += b.dano;
-        if (b.defesa) u.defesa += b.defesa;
-        if (b.maxHp) u.maxHp += b.maxHp;
-        if (b.hp) u.hp += b.hp;
-        if (b.acertoCritico) u.acertoCritico += b.acertoCritico;
-        if (b.danoCritico) u.danoCritico += b.danoCritico;
-        if (b.penetracao) u.penetracao += b.penetracao;
-        if (b.regenVida) u.regenVida += b.regenVida;
-        if (b.regenMana) u.regenMana += b.regenMana;
-        if (b.alcance) u.alcance += b.alcance;
-        if (b.movimento) u.movimento += b.movimento;
-        if (b.lifesteal) u.lifesteal += b.lifesteal;
-        if (b.sorte) u.sorte += b.sorte;
-        if (b.potencialCuraEscudo) u.potencialCuraEscudo += b.potencialCuraEscudo;
-      }
+      if (!this.incrementArtifactStack(u, artifactId)) return;
     }
     u.hp = Math.min(u.hp, u.maxHp);
     u.mana = Math.min(u.mana, u.maxMana);
