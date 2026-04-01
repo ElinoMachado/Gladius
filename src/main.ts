@@ -111,6 +111,10 @@ import type {
 } from "./game/types";
 import { biomeAt } from "./game/unitFactory";
 import { HERO_STAT_TIP } from "./ui/heroStatRichText";
+import {
+  combatHeroStatTooltip,
+  setupHeroStatTooltip,
+} from "./ui/heroStatTooltips";
 import { statIconWrap, type StatIconId } from "./ui/statIcons";
 import { basicAttackIconHtml, skillButtonIconHtml } from "./ui/skillIcons";
 import {
@@ -512,13 +516,19 @@ function templateStatsStripHtml(cls: HeroClassId): string {
     it: { icon: StatIconId; label: string; value: string },
     si: number,
   ) =>
-    `<div class="setup-stat-cell" data-label="${escapeHtml(it.label)}" data-value="${escapeHtml(it.value)}">${statIconWrap(it.icon, si)}<span class="lol-stat-val">${escapeHtml(it.value)}</span></div>`;
+    `<div class="setup-stat-cell" data-stat="${it.icon}" data-label="${escapeHtml(it.label)}" data-value="${escapeHtml(it.value)}">${statIconWrap(it.icon, si)}<span class="lol-stat-val">${escapeHtml(it.value)}</span></div>`;
   const row1 = items.slice(0, 5).map((it, j) => cellHtml(it, j)).join("");
   const row2 = items.slice(5).map((it, j) => cellHtml(it, j + 5)).join("");
   return `<div class="setup-stats-strip"><div class="setup-stats-row">${row1}</div><div class="setup-stats-row">${row2}</div></div>`;
 }
 
-function bindSetupStatCells(container: HTMLElement): void {
+function bindSetupStatCells(
+  container: HTMLElement,
+  heroClass: HeroClassId,
+): void {
+  const t = HEROES[heroClass];
+  const critMultStr =
+    heroClass === "sacerdotisa" ? "150%" : heroClass === "gladiador" ? "175%" : "200%";
   container.querySelectorAll(".setup-stat-cell .lol-stat-ico[data-ico]").forEach((ico) => {
     const sub = ico as HTMLElement;
     const sid = sub.dataset.ico as StatIconId;
@@ -526,9 +536,19 @@ function bindSetupStatCells(container: HTMLElement): void {
   });
   container.querySelectorAll(".setup-stat-cell").forEach((node) => {
     const el = node as HTMLElement;
-    const label = el.dataset.label ?? "";
+    const stat = el.dataset.stat as StatIconId | undefined;
     const value = el.dataset.value ?? "";
-    bindGameTooltip(el, () => tooltipStatCell(label, value));
+    bindGameTooltip(el, () =>
+      stat
+        ? setupHeroStatTooltip({
+            stat,
+            heroClass,
+            display: value,
+            baseDano: t.dano,
+            critMultStr,
+          })
+        : tooltipStatCell(el.dataset.label ?? "", value),
+    );
   });
 }
 let prevPhase = model.phase;
@@ -1911,7 +1931,7 @@ function showHeroSetup(): void {
           <span class="hero-slot-weapon-row__hint" aria-hidden="true">paira · skill e ultimate</span>
         </div>
         <div class="hero-slot-model-host" data-slot-model="${i}"></div><div class="hero-slot-passive-wrap"><div class="hero-slot-passive__title">Passiva</div><p class="hero-slot-passive">${escapeHtml(HEROES[hid].passiveDescription)}</p></div>`;
-      bindSetupStatCells(card);
+      bindSetupStatCells(card, hid);
       const weaponRow = card.querySelector(".hero-slot-weapon-row") as HTMLElement;
       bindGameTooltip(weaponRow, () =>
         heroSetupWeaponAbilitiesTooltipHtml(hid, wl, baseD),
@@ -2910,6 +2930,8 @@ interface HeroStatCell {
   value: string;
   valueHtml?: string;
   tooltipValue?: string;
+  /** Tooltip rico (pairar); se omitido, usa `tooltipStatCell` com label/valor. */
+  tooltipHtml?: string;
 }
 
 type StatDeltaKind = "int" | "pct" | "mult" | "float";
@@ -2978,14 +3000,18 @@ function pushStat(
   display: string,
   delta: number,
   kind: StatDeltaKind,
+  tooltipHtml?: string | ((plain: string) => string),
 ): void {
   const { html, plain } = valWithDelta(display, delta, kind);
+  const th =
+    typeof tooltipHtml === "function" ? tooltipHtml(plain) : tooltipHtml;
   cells.push({
     icon,
     label,
     value: display,
     valueHtml: html,
     tooltipValue: plain,
+    tooltipHtml: th,
   });
 }
 
@@ -3030,6 +3056,7 @@ function renderHeroStatsGrid(grid: HTMLElement, cells: HeroStatCell[]): void {
     const cell = cells[i];
     if (!cell) return;
     bindGameTooltip(el, () =>
+      cell.tooltipHtml ??
       tooltipStatCell(cell.label, cell.tooltipValue ?? cell.value),
     );
   });
@@ -3455,12 +3482,18 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
 
     {
       const hpPair = valWithDelta(`${h.hp}/${h.maxHp}`, h.maxHp - b.maxHp, "int");
+      const hpDisp = `${h.hp}/${h.maxHp}`;
       cells.push({
         icon: "max_hp",
         label: "Vida",
-        value: `${h.hp}/${h.maxHp}`,
+        value: hpDisp,
         valueHtml: hpPair.html,
         tooltipValue: hpPair.plain,
+        tooltipHtml: combatHeroStatTooltip({
+          stat: "max_hp",
+          display: hpDisp,
+          detailPlain: hpPair.plain.includes("(") ? hpPair.plain : undefined,
+        }),
       });
     }
     {
@@ -3469,12 +3502,18 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         h.maxMana - b.maxMana,
         "int",
       );
+      const mpDisp = `${h.mana}/${h.maxMana}`;
       cells.push({
         icon: "max_mana",
         label: "Mana",
-        value: `${h.mana}/${h.maxMana}`,
+        value: mpDisp,
         valueHtml: mpPair.html,
         tooltipValue: mpPair.plain,
+        tooltipHtml: combatHeroStatTooltip({
+          stat: "max_mana",
+          display: mpDisp,
+          detailPlain: mpPair.plain.includes("(") ? mpPair.plain : undefined,
+        }),
       });
     }
     pushStat(
@@ -3484,6 +3523,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       String(effRegV),
       effRegV - baseRegV,
       "int",
+      (plain) =>
+        combatHeroStatTooltip({
+          stat: "regen_hp",
+          display: String(effRegV),
+          detailPlain: plain.includes("(") ? plain : undefined,
+        }),
     );
     pushStat(
       cells,
@@ -3492,6 +3537,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       String(effRegM),
       effRegM - baseRegM,
       "int",
+      (plain) =>
+        combatHeroStatTooltip({
+          stat: "regen_mp",
+          display: String(effRegM),
+          detailPlain: plain.includes("(") ? plain : undefined,
+        }),
     );
     {
       const effDmg = heroDanoPlusRoninOverflow(h);
@@ -3509,6 +3560,11 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         value: String(effDmg),
         valueHtml: dmgPair.html,
         tooltipValue: dmgPlain,
+        tooltipHtml: combatHeroStatTooltip({
+          stat: "dmg",
+          display: String(effDmg),
+          detailPlain: dmgPlain !== String(effDmg) ? dmgPlain : undefined,
+        }),
       });
     }
     {
@@ -3523,12 +3579,18 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       } else if (tot > 100 && (h.artifacts["ronin"] ?? 0) > 0) {
         critPlain += ` — excesso acima de 100% converte em dano (Ronin).`;
       }
+      const critDispStr = `${critDisp}%`;
       cells.push({
         icon: "crit_hit",
         label: "Acerto crítico",
-        value: `${critDisp}%`,
+        value: critDispStr,
         valueHtml: critPair.html,
         tooltipValue: critPlain,
+        tooltipHtml: combatHeroStatTooltip({
+          stat: "crit_hit",
+          display: critDispStr,
+          detailPlain: critPlain !== critDispStr ? critPlain : undefined,
+        }),
       });
     }
     pushStat(
@@ -3538,6 +3600,14 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       `${Math.round(critMultCur * 100)}%`,
       Math.round((critMultCur - critMultBase) * 100),
       "pct",
+      (plain) =>
+        combatHeroStatTooltip({
+          stat: "crit_dmg",
+          display: `${Math.round(critMultCur * 100)}%`,
+          dano: heroDanoPlusRoninOverflow(h),
+          critMultEffective: critMultCur,
+          detailPlain: plain.includes("(") ? plain : undefined,
+        }),
     );
     {
       const { html } = valWithDelta(
@@ -3551,6 +3621,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         value: String(effDef),
         valueHtml: html,
         tooltipValue: defenseReductionTooltipText(effDef),
+        tooltipHtml: combatHeroStatTooltip({
+          stat: "def",
+          display: String(effDef),
+          defenseNumeric: String(effDef),
+          defenseReductionPct: formatDefenseReductionPct(effDef),
+        }),
       });
     }
     const movDeltaCore = movPool - b.movimento;
@@ -3570,6 +3646,14 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       tooltipValue:
         movPair.plain +
         (pantHexSlow ? " — hexes no pântano custam 2 pontos" : ""),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "mov",
+        display: String(movPool),
+        detailPlain:
+          movPair.plain.includes("(") || pantHexSlow
+            ? `${movPair.plain}${pantHexSlow ? " — hexes no pântano custam 2 pontos" : ""}`
+            : undefined,
+      }),
     });
 
     pushStat(
@@ -3579,6 +3663,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       String(effAlc),
       effAlc - baseEffAlc,
       "int",
+      (plain) =>
+        combatHeroStatTooltip({
+          stat: "range",
+          display: String(effAlc),
+          detailPlain: plain.includes("(") ? plain : undefined,
+        }),
     );
     pushStat(
       cells,
@@ -3587,6 +3677,13 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       String(h.potencialCuraEscudo),
       h.potencialCuraEscudo - b.potencialCuraEscudo,
       "float",
+      (plain) =>
+        combatHeroStatTooltip({
+          stat: "pot",
+          display: String(h.potencialCuraEscudo),
+          potencialNumeric: h.potencialCuraEscudo,
+          detailPlain: plain.includes("(") ? plain : undefined,
+        }),
     );
     {
       const xpCur = m.xpGainBonusPercentForHero(h);
@@ -3599,13 +3696,20 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           m.partyXpBonusPct +
           pantanoHelmoXpBonusPercent(h.forgeLoadout),
       );
+      const xpDisp = `+${xpCur}%`;
       pushStat(
         cells,
         "xp_bonus",
         "Bônus XP",
-        `+${xpCur}%`,
+        xpDisp,
         xpCur - xpBase,
         "pct",
+        (plain) =>
+          combatHeroStatTooltip({
+            stat: "xp_bonus",
+            display: xpDisp,
+            detailPlain: plain.includes("(") ? plain : undefined,
+          }),
       );
     }
     pushStat(
@@ -3615,6 +3719,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       String(h.penetracao),
       h.penetracao - b.penetracao,
       "int",
+      (plain) =>
+        combatHeroStatTooltip({
+          stat: "pen",
+          display: String(h.penetracao),
+          detailPlain: plain.includes("(") ? plain : undefined,
+        }),
     );
     pushStat(
       cells,
@@ -3623,6 +3733,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       String(h.penetracaoEscudo),
       h.penetracaoEscudo - b.penetracaoEscudo,
       "int",
+      (plain) =>
+        combatHeroStatTooltip({
+          stat: "pen_escudo",
+          display: String(h.penetracaoEscudo),
+          detailPlain: plain.includes("(") ? plain : undefined,
+        }),
     );
     pushStat(
       cells,
@@ -3631,6 +3747,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       `${h.lifesteal}%`,
       h.lifesteal - b.lifesteal,
       "pct",
+      (plain) =>
+        combatHeroStatTooltip({
+          stat: "lifesteal",
+          display: `${h.lifesteal}%`,
+          detailPlain: plain.includes("(") ? plain : undefined,
+        }),
     );
     pushStat(
       cells,
@@ -3639,6 +3761,12 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       String(m.effectiveSorte(h)),
       m.effectiveSorte(h) - b.sorte,
       "int",
+      (plain) =>
+        combatHeroStatTooltip({
+          stat: "luck",
+          display: String(m.effectiveSorte(h)),
+          detailPlain: plain.includes("(") ? plain : undefined,
+        }),
     );
 
     const flyStr = h.flying ? "Sim" : "Não";
@@ -3657,28 +3785,45 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       value: flyStr,
       valueHtml: flyHtml,
       tooltipValue: flyPlain,
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "fly",
+        display: flyStr,
+        detailPlain: flyPlain !== flyStr ? flyPlain : undefined,
+      }),
     });
   } else {
     const we = h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+    const hpDE = `${h.hp}/${h.maxHp}`;
     cells.push({
       icon: "max_hp",
       label: "Vida",
-      value: `${h.hp}/${h.maxHp}`,
+      value: hpDE,
+      tooltipHtml: combatHeroStatTooltip({ stat: "max_hp", display: hpDE }),
     });
+    const mpDE = `${h.mana}/${h.maxMana}`;
     cells.push({
       icon: "max_mana",
       label: "Mana",
-      value: `${h.mana}/${h.maxMana}`,
+      value: mpDE,
+      tooltipHtml: combatHeroStatTooltip({ stat: "max_mana", display: mpDE }),
     });
     cells.push({
       icon: "regen_hp",
       label: "Regen. vida",
       value: String(effRegV),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "regen_hp",
+        display: String(effRegV),
+      }),
     });
     cells.push({
       icon: "regen_mp",
       label: "Regen. mana",
       value: String(effRegM),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "regen_mp",
+        display: String(effRegM),
+      }),
     });
     cells.push({
       icon: "dmg",
@@ -3693,28 +3838,62 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
             : String(eff);
         return flat > 0 ? `${base} — +${flat} do Ronin (crítico >100%)` : base;
       })(),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "dmg",
+        display: String(heroDanoPlusRoninOverflow(h)),
+        detailPlain: (() => {
+          const eff = heroDanoPlusRoninOverflow(h);
+          const flat = eff - h.dano;
+          const base =
+            we > 0
+              ? `${eff} (+${we} bônus de wave no combate)`
+              : String(eff);
+          const t = flat > 0 ? `${base} — +${flat} do Ronin (crítico >100%)` : base;
+          return t !== String(eff) ? t : undefined;
+        })(),
+      }),
     });
+    const critDE = `${displayedCritChancePercent(h)}%`;
+    const critTv =
+      totalCritChancePercent(h) > displayedCritChancePercent(h)
+        ? `${displayedCritChancePercent(h)}% (chance no dado; +${totalCritChancePercent(h) - displayedCritChancePercent(h)}% acima de 100% sem efeito em crítico até teres Ronin)`
+        : totalCritChancePercent(h) > 100
+          ? `${displayedCritChancePercent(h)}% (excesso acima de 100% vira +1 dano por cada 5% com Ronin)`
+          : critDE;
     cells.push({
       icon: "crit_hit",
       label: "Acerto crítico",
-      value: `${displayedCritChancePercent(h)}%`,
-      tooltipValue:
-        totalCritChancePercent(h) > displayedCritChancePercent(h)
-          ? `${displayedCritChancePercent(h)}% (chance no dado; +${totalCritChancePercent(h) - displayedCritChancePercent(h)}% acima de 100% sem efeito em crítico até teres Ronin)`
-          : totalCritChancePercent(h) > 100
-            ? `${displayedCritChancePercent(h)}% (excesso acima de 100% vira +1 dano por cada 5% com Ronin)`
-            : `${displayedCritChancePercent(h)}%`,
+      value: critDE,
+      tooltipValue: critTv,
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "crit_hit",
+        display: critDE,
+        detailPlain: critTv !== critDE ? critTv : undefined,
+      }),
     });
+    const critDmgDE = `${Math.round(critMultCur * 100)}%`;
     cells.push({
       icon: "crit_dmg",
       label: "Dano critico",
-      value: `${Math.round(critMultCur * 100)}%`,
+      value: critDmgDE,
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "crit_dmg",
+        display: critDmgDE,
+        dano: heroDanoPlusRoninOverflow(h),
+        critMultEffective: critMultCur,
+      }),
     });
     cells.push({
       icon: "def",
       label: ign ? "Defesa (ruler ignora bioma)" : "Defesa",
       value: String(effDef),
       tooltipValue: defenseReductionTooltipText(effDef),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "def",
+        display: String(effDef),
+        defenseNumeric: String(effDef),
+        defenseReductionPct: formatDefenseReductionPct(effDef),
+      }),
     });
     const pantHexSlowElse =
       bio === "pantano" &&
@@ -3731,43 +3910,86 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       tooltipValue:
         String(movPool) +
         (pantHexSlowElse ? " — hexes no pântano custam 2 pontos" : ""),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "mov",
+        display: String(movPool),
+        detailPlain: pantHexSlowElse
+          ? `${String(movPool)} — hexes no pântano custam 2 pontos`
+          : undefined,
+      }),
     });
     cells.push({
       icon: "range",
       label: ign ? "Alcance (ruler ignora bioma)" : "Alcance",
       value: String(effAlc),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "range",
+        display: String(effAlc),
+      }),
     });
     cells.push({
       icon: "pot",
       label: "Potencial de cura e escudo",
       value: String(h.potencialCuraEscudo),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "pot",
+        display: String(h.potencialCuraEscudo),
+        potencialNumeric: h.potencialCuraEscudo,
+      }),
     });
+    const xpDE = `+${model.xpGainBonusPercentForHero(h)}%`;
     cells.push({
       icon: "xp_bonus",
       label: "Bônus XP",
-      value: `+${model.xpGainBonusPercentForHero(h)}%`,
-      tooltipValue: `+${model.xpGainBonusPercentForHero(h)}%`,
+      value: xpDE,
+      tooltipValue: xpDE,
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "xp_bonus",
+        display: xpDE,
+      }),
     });
     cells.push({
       icon: "pen",
       label: "Penetração",
       value: String(h.penetracao),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "pen",
+        display: String(h.penetracao),
+      }),
     });
     cells.push({
       icon: "pen_escudo",
       label: "Penetração de escudo",
       value: String(h.penetracaoEscudo),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "pen_escudo",
+        display: String(h.penetracaoEscudo),
+      }),
     });
     cells.push({
       icon: "lifesteal",
       label: "Roubo de vida",
       value: `${h.lifesteal}%`,
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "lifesteal",
+        display: `${h.lifesteal}%`,
+      }),
     });
-    cells.push({ icon: "luck", label: "Sorte", value: String(h.sorte) });
+    cells.push({
+      icon: "luck",
+      label: "Sorte",
+      value: String(h.sorte),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "luck",
+        display: String(h.sorte),
+      }),
+    });
+    const flyDE = h.flying ? "Sim" : "Não";
     cells.push({
       icon: "fly",
       label: "Voo",
-      value: h.flying ? "Sim" : "Não",
+      value: flyDE,
+      tooltipHtml: combatHeroStatTooltip({ stat: "fly", display: flyDE }),
     });
   }
 
@@ -3825,6 +4047,11 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "basic",
       label: "Ataques básicos restantes",
       value: String(m.basicLeft),
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "basic",
+        display: String(m.basicLeft),
+        basicManaNote: true,
+      }),
     });
   }
   const Bb = m.bunkerAtHex(h.q, h.r);
