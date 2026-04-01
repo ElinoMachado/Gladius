@@ -1,13 +1,16 @@
 import { damageReductionPercentFromDefense } from "../game/combatMath";
 import type { StatIconId } from "./statIcons";
 
+/** PT: arredonda a 2 casas e mostra sempre duas casas decimais (vírgula). */
+export function formatTooltipNumber(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  const r = Math.round(n * 100) / 100;
+  return r.toFixed(2).replace(".", ",");
+}
+
 function formatReductionPctFromDefense(effDef: number): string {
   const pct = damageReductionPercentFromDefense(effDef, 0);
-  const rounded = Math.round(pct * 10) / 10;
-  if (Math.abs(rounded - Math.round(rounded)) < 0.001) {
-    return String(Math.round(rounded));
-  }
-  return rounded.toFixed(1).replace(".", ",");
+  return formatTooltipNumber(pct);
 }
 
 function esc(s: string): string {
@@ -26,6 +29,104 @@ function wrap(title: string, bodies: string[]): string {
   return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">${esc(title)}</div>${bodies.map(p).join("")}</div>`;
 }
 
+/** Texto no &lt;strong&gt; dos tooltips, com números a 2 casas decimais. */
+function formatStrongDisplay(stat: StatIconId, display: string): string {
+  return esc(formatDisplayRawForTooltip(stat, display));
+}
+
+function formatDisplayRawForTooltip(stat: StatIconId, display: string): string {
+  const d = display.trim();
+  switch (stat) {
+    case "max_hp":
+    case "max_mana": {
+      const parts = d.split("/");
+      if (parts.length === 2) {
+        const a = Number(parts[0]!.replace(",", "."));
+        const b = Number(parts[1]!.replace(",", "."));
+        if (Number.isFinite(a) && Number.isFinite(b))
+          return `${formatTooltipNumber(a)}/${formatTooltipNumber(b)}`;
+      }
+      return d;
+    }
+    case "crit_hit":
+    case "crit_dmg":
+    case "lifesteal": {
+      const m = d.match(/^(\+?)\s*([\d.,]+)\s*%$/);
+      if (m) {
+        const n = Number(m[2]!.replace(",", "."));
+        if (Number.isFinite(n))
+          return `${m[1] ?? ""}${formatTooltipNumber(n)}%`;
+      }
+      return d;
+    }
+    case "xp_bonus": {
+      const m = d.match(/^\+\s*([\d.,]+)\s*%$/);
+      if (m) {
+        const n = Number(m[1]!.replace(",", "."));
+        if (Number.isFinite(n)) return `+${formatTooltipNumber(n)}%`;
+      }
+      return d;
+    }
+    case "fly":
+    case "basic":
+    case "kills":
+    case "stone":
+    case "motor":
+    case "poison":
+      return d;
+    case "def":
+    case "range":
+    case "mov":
+    case "regen_hp":
+    case "regen_mp":
+    case "dmg":
+    case "pen":
+    case "pen_escudo":
+    case "luck":
+    case "pot": {
+      const n = Number(d.replace(",", "."));
+      if (Number.isFinite(n)) return formatTooltipNumber(n);
+      return d;
+    }
+    default:
+      return d;
+  }
+}
+
+/**
+ * Remove do texto da célula o prefixo igual a `display` e sufixos "(±Δ)" / "(voo)" etc.,
+ * deixando só notas extra (ex.: Ronin, pântano) para o bloco a itálico.
+ */
+function stripTooltipDetailSuffix(plain: string, display: string): string {
+  const pTrim = plain.trim();
+  const dTrim = display.trim();
+  if (!pTrim.startsWith(dTrim)) return pTrim;
+  let rest = pTrim.slice(dTrim.length).trimStart();
+  while (rest.length > 0) {
+    const mNum = rest.match(/^\(\s*([-+])\s*([\d.,]+)\s*(%?)\s*\)/);
+    if (mNum) {
+      rest = rest.slice(mNum[0].length).trimStart();
+      continue;
+    }
+    const mw = rest.match(/^\(\s*([^)]*)\s*\)/);
+    if (mw) {
+      const inner = mw[1]!.trim();
+      if (!/^[-+]/.test(inner)) {
+        rest = rest.slice(mw[0].length).trimStart();
+        continue;
+      }
+      if (/^[-+]?[\d.,]+%?$/.test(inner)) {
+        rest = rest.slice(mw[0].length).trimStart();
+        continue;
+      }
+      break;
+    }
+    break;
+  }
+  rest = rest.replace(/^[—–\-]\s*/, "").trim();
+  return rest;
+}
+
 export interface SetupStatTooltipInput {
   stat: StatIconId;
   display: string;
@@ -34,7 +135,7 @@ export interface SetupStatTooltipInput {
 /** Setup: corpo sem repetir o nome do atributo antes dos dois pontos; título identifica o stat. */
 export function setupHeroStatTooltip(t: SetupStatTooltipInput): string {
   const { stat, display } = t;
-  const v = esc(display);
+  const v = formatStrongDisplay(stat, display);
 
   switch (stat) {
     case "max_hp":
@@ -66,7 +167,7 @@ export function setupHeroStatTooltip(t: SetupStatTooltipInput): string {
         `<strong>${v}</strong>. Representa o seu dano crítico caso acerte um golpe crítico. Você pode causar (dano x dano critico) de dano!`,
       ]);
     case "def": {
-      const n = parseInt(String(display).trim(), 10);
+      const n = parseFloat(String(display).replace(",", ".").trim());
       const pct = Number.isFinite(n) ? formatReductionPctFromDefense(n) : "—";
       return wrap("Defesa", [
         `<strong>${v}</strong>. ${pct}% de redução de dano.`,
@@ -106,7 +207,7 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
     potencialNumeric,
   } = i;
 
-  const v = esc(display);
+  const v = formatStrongDisplay(stat, display);
 
   let core: string;
   switch (stat) {
@@ -147,14 +248,17 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
       break;
     case "def": {
       const numShown = defenseNumeric ?? display;
-      const n = parseInt(String(numShown).trim(), 10);
-      const pct =
+      const n = parseFloat(String(numShown).replace(",", ".").trim());
+      const numLine = Number.isFinite(n)
+        ? esc(formatTooltipNumber(n))
+        : esc(numShown);
+      const pctRaw =
         defenseReductionPct ??
         (Number.isFinite(n) ? formatReductionPctFromDefense(n) : null);
       core = wrap("Defesa", [
-        pct != null
-          ? `<strong>${esc(numShown)}</strong>. ${esc(pct)}% de redução de dano.`
-          : `<strong>${esc(numShown)}</strong>.`,
+        pctRaw != null
+          ? `<strong>${numLine}</strong>. ${esc(pctRaw)}% de redução de dano.`
+          : `<strong>${numLine}</strong>.`,
       ]);
       break;
     }
@@ -171,7 +275,7 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
     case "pot": {
       const pctStr =
         potencialNumeric != null && Number.isFinite(potencialNumeric)
-          ? `${esc(String(Math.round(potencialNumeric * 10) / 10).replace(".", ","))}%`
+          ? `${esc(formatTooltipNumber(potencialNumeric))}%`
           : `${v}%`;
       core = wrap("Potencial de cura e escudo", [
         `<strong>${pctStr}</strong>. Valor aplicado em artefatos e habilidades que curem ou concedam escudo a você e aos seus aliados.`,
@@ -218,10 +322,13 @@ export function combatHeroStatTooltip(i: CombatStatTooltipInput): string {
   }
 
   if (detailPlain && detailPlain.trim().length > 0) {
-    core = appendBeforeLastClosingDiv(
-      core,
-      p(`<em>${esc(detailPlain.trim())}</em>`),
-    );
+    const extra = stripTooltipDetailSuffix(detailPlain.trim(), display.trim());
+    if (extra.length > 0) {
+      core = appendBeforeLastClosingDiv(
+        core,
+        p(`<em>${esc(extra)}</em>`),
+      );
+    }
   }
   return core;
 }
