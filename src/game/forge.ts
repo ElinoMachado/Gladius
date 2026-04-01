@@ -337,15 +337,15 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
     if (c.level === 1) {
       u.maxHp += 100;
       u.hp += 100;
-      u.defesa += 5;
+      u.defesa += 25;
     } else if (c.level === 2) {
       u.maxHp += 200;
       u.hp += 200;
-      u.defesa += 10;
+      u.defesa += 50;
     } else {
       u.maxHp += 500;
       u.hp += 500;
-      u.defesa += 25;
+      u.defesa += 100;
     }
   }
   const m = resolved.manoplas;
@@ -386,9 +386,9 @@ export function forgePieceDescription(
     return "+2 alcance, +2 movimento";
   }
   if (slot === "capa") {
-    if (level === 1) return "+100 vida máx., +5 armadura";
-    if (level === 2) return "+200 vida máx., +10 armadura";
-    return "+500 vida máx., +25 armadura";
+    if (level === 1) return "+100 vida máx., +25 armadura";
+    if (level === 2) return "+200 vida máx., +50 armadura";
+    return "+500 vida máx., +100 armadura";
   }
   if (level === 1) return "+10 dano, +25% chance crítica";
   if (level === 2) return "+25 dano, +50% crítico, +25% dano crítico";
@@ -422,13 +422,13 @@ export function forgePieceEffectHtml(
   } else if (kind === "capa") {
     if (level === 1) {
       p.push(forgeFxSeg("max_hp", u, "+100 vida máx., "));
-      p.push(forgeFxSeg("def", u, "+5 armadura"));
+      p.push(forgeFxSeg("def", u, "+25 armadura"));
     } else if (level === 2) {
       p.push(forgeFxSeg("max_hp", u, "+200 vida máx., "));
-      p.push(forgeFxSeg("def", u, "+10 armadura"));
+      p.push(forgeFxSeg("def", u, "+50 armadura"));
     } else {
       p.push(forgeFxSeg("max_hp", u, "+500 vida máx., "));
-      p.push(forgeFxSeg("def", u, "+25 armadura"));
+      p.push(forgeFxSeg("def", u, "+100 armadura"));
     }
   } else {
     if (level === 1) {
