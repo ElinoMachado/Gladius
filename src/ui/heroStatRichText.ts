@@ -7,7 +7,8 @@ export const HERO_STAT_TIP: Record<StatIconId, string> = {
   def: "Defesa / armadura: reduz dano recebido.",
   pen: "Penetração de armadura.",
   pen_escudo: "Penetração de escudo azul (dano que ignora absorção do escudo).",
-  crit_hit: "Chance de acerto crítico.",
+  crit_hit:
+    "Chance de rolar crítico (máx. 100% no dado). Sem Ronin, o HUD mostra no máximo 100% mesmo com mais % na ficha. Com Ronin, mostra o total e o que passa de 100% converte em dano.",
   crit_dmg: "Dano crítico (multiplicador extra no crítico).",
   mov: "Movimento: hexágonos por turno.",
   range: "Alcance de ataque (hexágonos).",

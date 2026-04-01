@@ -793,7 +793,7 @@ function enemyInspectExtraRows(u: Unit, m: GameModel): [string, string][] {
     ],
     ["Penetração", String(u.penetracao)],
     ["Penetração de escudo", String(u.penetracaoEscudo)],
-    ["Crítico", `${u.acertoCritico}%`],
+    ["Crítico", `${Math.min(100, u.acertoCritico)}%`],
     ["Mult. crítico", `${Math.round(u.danoCritico * 100)}%`],
     ["Movimento (base)", String(u.movimento)],
     [
@@ -3250,6 +3250,36 @@ function roninCritChanceBonus(artifacts: Unit["artifacts"]): number {
   return 20 * (artifacts["ronin"] ?? 0);
 }
 
+function totalCritChancePercent(h: Unit): number {
+  return h.acertoCritico + roninCritChanceBonus(h.artifacts);
+}
+
+function totalCritChanceFromParts(
+  acertoCritico: number,
+  artifacts: Unit["artifacts"],
+): number {
+  return acertoCritico + roninCritChanceBonus(artifacts);
+}
+
+/**
+ * HUD: sem Ronin, mostra no máximo 100% (excesso não aumenta o dado de crítico).
+ * Com Ronin, mostra o total real (excesso converte em dano).
+ */
+function displayedCritChancePercent(h: Unit): number {
+  const t = totalCritChancePercent(h);
+  if ((h.artifacts["ronin"] ?? 0) > 0) return t;
+  return Math.min(100, t);
+}
+
+function displayedCritChanceFromParts(
+  acertoCritico: number,
+  artifacts: Unit["artifacts"],
+): number {
+  const t = totalCritChanceFromParts(acertoCritico, artifacts);
+  if ((artifacts["ronin"] ?? 0) > 0) return t;
+  return Math.min(100, t);
+}
+
 function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   const bio = biomeAt(m.grid, h.q, h.r) as BiomeId;
   const ign = unitIgnoresTerrain(h);
@@ -3379,17 +3409,26 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       h.dano - b.dano + waveExtra,
       "int",
     );
-    pushStat(
-      cells,
-      "crit_hit",
-      "Acerto crítico",
-      `${h.acertoCritico + roninCritChanceBonus(h.artifacts)}%`,
-      h.acertoCritico -
-        b.acertoCritico +
-        roninCritChanceBonus(h.artifacts) -
-        roninCritChanceBonus(b.artifacts),
-      "pct",
-    );
+    {
+      const critDisp = displayedCritChancePercent(h);
+      const critDispDelta =
+        critDisp - displayedCritChanceFromParts(b.acertoCritico, b.artifacts);
+      const critPair = valWithDelta(`${critDisp}%`, critDispDelta, "pct");
+      const tot = totalCritChancePercent(h);
+      let critPlain = critPair.plain;
+      if (tot > critDisp) {
+        critPlain += ` — +${tot - critDisp}% acima do teto de crítico (sem Ronin não entra no dado; com Ronin mostra o total e vira dano).`;
+      } else if (tot > 100 && (h.artifacts["ronin"] ?? 0) > 0) {
+        critPlain += ` — excesso acima de 100% converte em dano (Ronin).`;
+      }
+      cells.push({
+        icon: "crit_hit",
+        label: "Acerto crítico",
+        value: `${critDisp}%`,
+        valueHtml: critPair.html,
+        tooltipValue: critPlain,
+      });
+    }
     pushStat(
       cells,
       "crit_dmg",
@@ -3551,7 +3590,13 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     cells.push({
       icon: "crit_hit",
       label: "Acerto crítico",
-      value: `${h.acertoCritico + roninCritChanceBonus(h.artifacts)}%`,
+      value: `${displayedCritChancePercent(h)}%`,
+      tooltipValue:
+        totalCritChancePercent(h) > displayedCritChancePercent(h)
+          ? `${displayedCritChancePercent(h)}% (chance no dado; +${totalCritChancePercent(h) - displayedCritChancePercent(h)}% acima de 100% sem efeito em crítico até teres Ronin)`
+          : totalCritChancePercent(h) > 100
+            ? `${displayedCritChancePercent(h)}% (excesso acima de 100% vira +1 dano por cada 5% com Ronin)`
+            : `${displayedCritChancePercent(h)}%`,
     });
     cells.push({
       icon: "crit_dmg",
