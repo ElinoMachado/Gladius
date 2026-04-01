@@ -236,6 +236,37 @@ export interface CombatFloatEvent {
   poisonDot?: boolean;
 }
 
+export function roninCritBonusFromArtifacts(
+  artifacts: Record<string, number>,
+): number {
+  return 20 * (artifacts["ronin"] ?? 0);
+}
+
+/** +1 dano por cada 5% de crítico acima de 100% (só com Ronin). */
+export function roninOverflowFlatDamage(
+  acertoCritico: number,
+  artifacts: Record<string, number>,
+): number {
+  const stacks = artifacts["ronin"] ?? 0;
+  if (stacks <= 0) return 0;
+  const totalCrit = acertoCritico + roninCritBonusFromArtifacts(artifacts);
+  if (totalCrit <= 100) return 0;
+  return Math.floor((totalCrit - 100) / 5);
+}
+
+/** Dano base da ficha + bónus plano do Ronin (não altera `u.dano`). */
+export function heroDanoPlusRoninOverflow(u: Unit): number {
+  return u.dano + roninOverflowFlatDamage(u.acertoCritico, u.artifacts);
+}
+
+export function heroDanoPlusRoninFromBaseline(b: {
+  dano: number;
+  acertoCritico: number;
+  artifacts: Record<string, number>;
+}): number {
+  return b.dano + roninOverflowFlatDamage(b.acertoCritico, b.artifacts);
+}
+
 export class GameModel {
   meta: MetaProgress;
   grid: Map<string, HexCell> = new Map();
@@ -1418,8 +1449,11 @@ export class GameModel {
 
   private rainhaEndTurn(priest: Unit): void {
     const dmgRaw =
-      Math.floor(priest.dano * (1 + priest.potencialCuraEscudo / 100) * 2) +
-      this.artifactGarraFerroRawBonus(priest);
+      Math.floor(
+        heroDanoPlusRoninOverflow(priest) *
+          (1 + priest.potencialCuraEscudo / 100) *
+          2,
+      ) + this.artifactGarraFerroRawBonus(priest);
     let healed = 0;
     for (const e of [...this.enemies()]) {
       if (e.hp <= 0) continue;
@@ -1951,7 +1985,10 @@ export class GameModel {
   }
 
   computeBasicAttackRawDamage(h: Unit): number {
-    let raw = h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+    let raw =
+      heroDanoPlusRoninOverflow(h) +
+      h.pistoleiroBonusDanoWave +
+      h.curandeiroDanoWave;
     if (h.heroClass === "gladiador" && h.ultimateId === "campeao") {
       raw = Math.floor(raw * (1 + 0.05 * h.gladiadorKills));
     }
@@ -1968,28 +2005,38 @@ export class GameModel {
   computeAtirarTodoLadoDamagePerHit(h: Unit): number {
     const mult = atirarDamageMult(h.weaponLevel);
     return (
-      Math.floor((h.dano + h.pistoleiroBonusDanoWave) * mult) +
-      this.artifactGarraFerroRawBonus(h)
+      Math.floor(
+        (heroDanoPlusRoninOverflow(h) + h.pistoleiroBonusDanoWave) * mult,
+      ) + this.artifactGarraFerroRawBonus(h)
     );
   }
 
   computeDuelGladiatorHitDamage(h: Unit): number {
     const mult = ateMorteDamageMult(h.weaponLevel);
-    return Math.floor(h.dano * mult) + this.artifactGarraFerroRawBonus(h);
+    return (
+      Math.floor(heroDanoPlusRoninOverflow(h) * mult) +
+      this.artifactGarraFerroRawBonus(h)
+    );
   }
 
   computeSentencaDamagePerEnemy(h: Unit): number {
     const mult = sentencaDamageMult(h.weaponLevel);
-    return Math.floor(h.dano * mult) + this.artifactGarraFerroRawBonus(h);
+    return (
+      Math.floor(heroDanoPlusRoninOverflow(h) * mult) +
+      this.artifactGarraFerroRawBonus(h)
+    );
   }
 
   computeSentencaHealParty(h: Unit): number {
     const mult = sentencaHealMult(h.weaponLevel);
-    return Math.floor(h.dano * mult);
+    return Math.floor(heroDanoPlusRoninOverflow(h) * mult);
   }
 
   computeEspecialistaDestruicaoRaw(h: Unit): number {
-    return Math.floor(h.dano * 7) + this.artifactGarraFerroRawBonus(h);
+    return (
+      Math.floor(heroDanoPlusRoninOverflow(h) * 7) +
+      this.artifactGarraFerroRawBonus(h)
+    );
   }
 
   private maxBasicAttacksForHero(h: Unit): number {
@@ -2155,7 +2202,9 @@ export class GameModel {
         staggerMs: stag,
       });
       const baseDano =
-        h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+        heroDanoPlusRoninOverflow(h) +
+        h.pistoleiroBonusDanoWave +
+        h.curandeiroDanoWave;
       for (let ring = 1; ring <= maxR; ring++) {
         const delay = (ring - 1) * stag;
         this.queueCombat(delay, () => {
@@ -2203,7 +2252,9 @@ export class GameModel {
       const tgt = this.units.find((u) => u.id === targetId);
       if (!tgt || tgt.isPlayer || tgt.hp <= 0) return false;
       const baseDano =
-        h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+        heroDanoPlusRoninOverflow(h) +
+        h.pistoleiroBonusDanoWave +
+        h.curandeiroDanoWave;
       const raw = Math.floor(baseDano * 10);
       if (!this.devSandboxMode) h.skillCd[skillId] = bunkerTiroCooldownWaves();
       this.pendingCombatVfxQueue.push({
@@ -2299,7 +2350,8 @@ export class GameModel {
       const maxD = pisotearMaxHexDistance(h.weaponLevel);
       const mult = pisotearDamageMult(h.weaponLevel);
       const raw =
-        Math.floor(h.dano * mult) + this.artifactGarraFerroRawBonus(h);
+        Math.floor(heroDanoPlusRoninOverflow(h) * mult) +
+        this.artifactGarraFerroRawBonus(h);
       const targets = [...this.enemies()].filter((e) => {
         if (e.hp <= 0) return false;
         const d = hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r });
@@ -2592,12 +2644,6 @@ export class GameModel {
         rochosoCritAdd = 1;
       }
     }
-    const totalCrit = src.acertoCritico + roninCritBonus(src);
-    const roninStacks = src.artifacts["ronin"] ?? 0;
-    const roninOverflowFlatDano =
-      roninStacks > 0 && totalCrit > 100
-        ? Math.floor((totalCrit - 100) / 5)
-        : 0;
     let useCrit = crit;
     let critMultExtra = 0;
     if (!fromBasicAttack && src.isPlayer && src.heroClass) {
@@ -2616,7 +2662,7 @@ export class GameModel {
       useCrit,
       rochosoCritAdd,
     );
-    let dmg = mit + roninOverflowFlatDano;
+    let dmg = mit;
     if (useBunkerDefense) {
       dmg = Math.max(1, Math.floor(dmg * BUNKER_DAMAGE_TAKEN_MULT));
     }
@@ -3172,7 +3218,10 @@ export class GameModel {
 
   private castFuracaoBalas(h: Unit): boolean {
     const mult = furacaoDamageMult(h.weaponLevel);
-    const base = h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+    const base =
+      heroDanoPlusRoninOverflow(h) +
+      h.pistoleiroBonusDanoWave +
+      h.curandeiroDanoWave;
     const raw = Math.floor(base * mult);
     const targets = [...this.enemies()].filter((e) => e.hp > 0);
     const targetIds = targets.map((t) => t.id);
@@ -4325,8 +4374,7 @@ export class GameModel {
 }
 
 function roninCritBonus(u: Unit): number {
-  const s = u.artifacts["ronin"] ?? 0;
-  return 20 * s;
+  return roninCritBonusFromArtifacts(u.artifacts);
 }
 
 function hexNeighborsOffset(i: number): { q: number; r: number } {

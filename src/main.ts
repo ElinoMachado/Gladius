@@ -2,6 +2,8 @@ import "./style.css";
 import {
   BUNKER_COMBAT_FLOAT_ID,
   GameModel,
+  heroDanoPlusRoninFromBaseline,
+  heroDanoPlusRoninOverflow,
   type CombatFloatEvent,
   type CombatVfxHint,
 } from "./game/gameModel";
@@ -3128,7 +3130,9 @@ function tooltipSkillAteMorte(h: Unit, m: GameModel, sk: SkillDef): string {
 
 function tooltipSkillPisotear(h: Unit, _m: GameModel): string {
   const w = h.weaponLevel;
-  const dmgApprox = Math.floor(h.dano * pisotearDamageMult(w));
+  const dmgApprox = Math.floor(
+    heroDanoPlusRoninOverflow(h) * pisotearDamageMult(w),
+  );
   const cdv = h.skillCd["pisotear"] ?? 0;
   const cdB = pisotearCooldownWaves(w);
   const cdrStr =
@@ -3170,7 +3174,9 @@ function tooltipBunkerMinasCombat(h: Unit, m: GameModel): string {
   const rings = bunkerMinasMaxRing(t);
   const cdBase = bunkerMinasCooldownWaves(t);
   const baseDano =
-    h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+    heroDanoPlusRoninOverflow(h) +
+    h.pistoleiroBonusDanoWave +
+    h.curandeiroDanoWave;
   const per = Math.floor(baseDano * mult);
   const cdv = h.skillCd["bunker_minas"] ?? 0;
   const cdrStr =
@@ -3201,7 +3207,9 @@ function tooltipBunkerTiroCombat(h: Unit, _m: GameModel): string {
   const cdv = h.skillCd["bunker_tiro_preciso"] ?? 0;
   const cd = bunkerTiroCooldownWaves();
   const baseDano =
-    h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
+    heroDanoPlusRoninOverflow(h) +
+    h.pistoleiroBonusDanoWave +
+    h.curandeiroDanoWave;
   const raw = Math.floor(baseDano * 10);
   const cdrStr =
     cdv > 0 ? `${cdv} onda(s) até disponível` : String(cd);
@@ -3454,14 +3462,24 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       effRegM - baseRegM,
       "int",
     );
-    pushStat(
-      cells,
-      "dmg",
-      "Dano",
-      String(h.dano),
-      h.dano - b.dano + waveExtra,
-      "int",
-    );
+    {
+      const effDmg = heroDanoPlusRoninOverflow(h);
+      const dmgDelta =
+        effDmg - heroDanoPlusRoninFromBaseline(b) + waveExtra;
+      const roninFlat = effDmg - h.dano;
+      const dmgPair = valWithDelta(String(effDmg), dmgDelta, "int");
+      let dmgPlain = dmgPair.plain;
+      if (roninFlat > 0) {
+        dmgPlain += ` — +${roninFlat} do Ronin (crítico >100%)`;
+      }
+      cells.push({
+        icon: "dmg",
+        label: "Dano",
+        value: String(effDmg),
+        valueHtml: dmgPair.html,
+        tooltipValue: dmgPlain,
+      });
+    }
     {
       const critDisp = displayedCritChancePercent(h);
       const critDispDelta =
@@ -3634,11 +3652,16 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     cells.push({
       icon: "dmg",
       label: "Dano",
-      value: String(h.dano),
-      tooltipValue:
-        we > 0
-          ? `${h.dano} (+${we} bônus de wave no combate)`
-          : String(h.dano),
+      value: String(heroDanoPlusRoninOverflow(h)),
+      tooltipValue: (() => {
+        const eff = heroDanoPlusRoninOverflow(h);
+        const flat = eff - h.dano;
+        const base =
+          we > 0
+            ? `${eff} (+${we} bônus de wave no combate)`
+            : String(eff);
+        return flat > 0 ? `${base} — +${flat} do Ronin (crítico >100%)` : base;
+      })(),
     });
     cells.push({
       icon: "crit_hit",
