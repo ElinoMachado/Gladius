@@ -359,6 +359,10 @@ export class GameModel {
   private waveXpGained = 0;
   private waveEssencesGained: Partial<Record<ForgeEssenceId, number>> = {};
   private waveLootSummaryPending: WaveEndLootSummary | null = null;
+  /** Cópia de `meta.essences` ao iniciar a run; revertida ao sair com forfeit. */
+  private metaEssencesAtRunStart: Partial<
+    Record<ForgeEssenceId, number>
+  > | null = null;
 
   constructor() {
     this.meta = loadMeta();
@@ -510,12 +514,68 @@ export class GameModel {
   abandonRunFromShop(): void {
     this.meta.crystals += this.crystalsRun;
     this.crystalsRun = 0;
+    this.metaEssencesAtRunStart = null;
     this.saveMeta();
     this.units = [];
     this.bunkers = {};
     this.partyOrder = [];
     this.phase = "main_menu";
     this.wave = 0;
+    this.emit();
+  }
+
+  /**
+   * Abandona a run sem gravar cristais da run; reverte essências ao estado de antes da run.
+   */
+  forfeitRunToMainMenu(): void {
+    if (this.metaEssencesAtRunStart) {
+      this.meta.essences = { ...this.metaEssencesAtRunStart };
+      this.metaEssencesAtRunStart = null;
+    }
+    this.crystalsRun = 0;
+    this.waveCrystalsGained = 0;
+    this.waveEssencesGained = {};
+    this.waveLootSummaryPending = null;
+    this.pendingWaveSummaryNext = null;
+    this.waveXpGained = 0;
+
+    this.playerTurnJustStarted = false;
+    this.inEnemyPhase = false;
+    this.lastEnemyActedId = null;
+    this.enemyTurnQueue = [];
+    this.rochosoTauntHeroId = null;
+    this.blockEnemyPhaseForWaveIntro = false;
+
+    this.clearCombatSchedule();
+    this.pendingCombatVfxQueue = [];
+    clearCombatOutcomeQueue();
+    this.pendingSentencaPartyHeal = null;
+    this.duel = null;
+    this.duelNextIsGladiatorStrike = true;
+    this.killLevelUpFlushSuppressed = false;
+    this.pendingKillLevelUpFlushHeroIds.clear();
+
+    this.pendingArtifacts = null;
+    this.pendingUltimate = null;
+    this.pendingBunkerHint = null;
+    this.pendingMoveBlockedHint = null;
+    this.pendingMoveAnim = null;
+
+    this.victoryWave20 = false;
+    this.basicAttacksSpentThisTurn = 0;
+
+    this.units = [];
+    this.bunkers = {};
+    this.partyOrder = [];
+    this.phase = "main_menu";
+    this.wave = 0;
+    this.currentHeroIndex = 0;
+    this.movementLeft = 0;
+    this.basicLeft = 0;
+    this.selectedUnitId = null;
+    this.logLines = [];
+
+    this.saveMeta();
     this.emit();
   }
 
@@ -749,6 +809,7 @@ export class GameModel {
     this.enemyTurnQueue = [];
     this.units = [];
     this.wave = 0;
+    this.metaEssencesAtRunStart = { ...this.meta.essences };
     this.crystalsRun = 0;
     this.waveCrystalsGained = 0;
     this.waveEssencesGained = {};

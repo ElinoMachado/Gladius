@@ -540,6 +540,11 @@ let movePreviewActive = false;
 let pendingCombat: PendingCombat = null;
 /** Evita acumular `keydown` de combate a cada `render()` / `showCombatHUD()`. */
 let combatHotkeysAbort: AbortController | null = null;
+
+/** Menu Esc durante a run (pausa + sair com confirmação). */
+let runPauseOpen = false;
+let runPauseStep: "menu" | "confirm" = "menu";
+let runPauseEl: HTMLElement | null = null;
 /** Inimigo selecionado para painel de atributos (combate). */
 let combatInspectEnemyId: string | null = null;
 /** Herói cujo loadout LOL está em foco (pode ≠ turno atual). */
@@ -3881,7 +3886,7 @@ function showCombatHUD(): void {
   const hud = el(`
     <div class="hud">
       ${sandboxHudHtml}
-      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Clique num <strong>inimigo</strong> para ver atributos. Ações abaixo mostram <strong>alcance</strong> em vermelho; repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados.</div>
+      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Clique num <strong>inimigo</strong> para ver atributos. Ações abaixo mostram <strong>alcance</strong> em vermelho; repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados · <strong>Esc</strong> pausar.</div>
       <div class="hud-block">Wave <strong id="wv">1</strong></div>
     </div>
   `);
@@ -5026,6 +5031,7 @@ function showCombatHUD(): void {
           t.isContentEditable)
       )
         return;
+      if (runPauseOpen) return;
       if (model.phase !== "combat" || model.inEnemyPhase) return;
       if (model.hasPendingCombatSchedule()) return;
       if (view.isUnitMoveAnimating()) return;
@@ -5589,7 +5595,7 @@ function render(): void {
     showBunkers,
   );
   applyCombatOverlays();
-  view.setCameraInputEnabled(model.phase === "combat");
+  view.setCameraInputEnabled(model.phase === "combat" && !runPauseOpen);
 
   /** Run ativa: manter música da arena (evita cair no tema do menu entre waves / loja). */
   const arenaMusicPhase =
@@ -5647,9 +5653,11 @@ model.subscribe(() => {
 
 function loop(): void {
   if (model.phase === "combat") {
-    model.tickCombatSchedule();
-    for (const vfxHint of model.takeCombatVfxHints()) {
-      applyCombatVfxHint(vfxHint);
+    if (!runPauseOpen) {
+      model.tickCombatSchedule();
+      for (const vfxHint of model.takeCombatVfxHints()) {
+        applyCombatVfxHint(vfxHint);
+      }
     }
     const vh = lolViewedHero(model);
     view.setCombatSelectionUnitId(
@@ -5658,7 +5666,10 @@ function loop(): void {
   } else {
     view.setCombatSelectionUnitId(null);
   }
-  const pops = model.phase === "combat" ? model.takeCombatFloats() : [];
+  const pops =
+    model.phase === "combat" && !runPauseOpen
+      ? model.takeCombatFloats()
+      : [];
   for (const p of pops) {
     if (p.kind === "damage" || p.kind === "shield_absorb") {
       if (p.unitId === BUNKER_COMBAT_FLOAT_ID && p.bunkerHex) {
@@ -5837,6 +5848,148 @@ function toggleEquipmentModal(): void {
   if (equipmentModalOpen) removeEquipmentModal();
   else openEquipmentModal();
 }
+
+function isRunPhaseForPauseMenu(phase: GamePhase): boolean {
+  return (
+    phase === "shop_initial" ||
+    phase === "shop_wave" ||
+    phase === "combat" ||
+    phase === "wave_summary" ||
+    phase === "level_up_pick" ||
+    phase === "ultimate_pick"
+  );
+}
+
+function isCrystalSelectListOpen(): boolean {
+  return document.querySelector(".crystal-select__list:not([hidden])") != null;
+}
+
+function syncRunPausePanels(): void {
+  if (!runPauseEl) return;
+  const menu = runPauseEl.querySelector(".run-pause-step--menu") as
+    | HTMLElement
+    | null;
+  const confirm = runPauseEl.querySelector(".run-pause-step--confirm") as
+    | HTMLElement
+    | null;
+  if (!menu || !confirm) return;
+  const onMenu = runPauseStep === "menu";
+  menu.hidden = !onMenu;
+  confirm.hidden = onMenu;
+  runPauseEl.setAttribute("aria-label", onMenu ? "Pausa" : "Confirmar saída");
+}
+
+function closeRunPauseMenu(): void {
+  if (!runPauseOpen) return;
+  runPauseOpen = false;
+  runPauseStep = "menu";
+  runPauseEl?.remove();
+  runPauseEl = null;
+  view.setCameraInputEnabled(model.phase === "combat");
+}
+
+function openRunPauseMenu(): void {
+  if (!isRunPhaseForPauseMenu(model.phase) || runPauseOpen) return;
+  runPauseOpen = true;
+  runPauseStep = "menu";
+  hideGameTooltip();
+  view.setCameraInputEnabled(false);
+
+  const backdrop = document.createElement("div");
+  backdrop.id = "run-pause-backdrop";
+  backdrop.className = "run-pause-backdrop";
+  backdrop.setAttribute("role", "dialog");
+  backdrop.setAttribute("aria-modal", "true");
+  backdrop.setAttribute("aria-label", "Pausa");
+  backdrop.innerHTML = `
+    <div class="run-pause-panel game-ui-tooltip-inner">
+      <div class="run-pause-step run-pause-step--menu">
+        <h2 class="run-pause-title">Pausa</h2>
+        <div class="run-pause-actions">
+          <button type="button" class="btn btn-primary" id="run-pause-continue">Continuar</button>
+          <button type="button" class="btn" id="run-pause-exit">Sair</button>
+        </div>
+      </div>
+      <div class="run-pause-step run-pause-step--confirm" hidden>
+        <p class="run-pause-warning">Suas essências e diamantes serão perdidos. Você tem certeza?</p>
+        <div class="run-pause-actions run-pause-actions--confirm">
+          <button type="button" class="btn btn-primary" id="run-pause-confirm-yes">Sim</button>
+          <button type="button" class="btn" id="run-pause-confirm-no">não</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  runPauseEl = backdrop;
+
+  backdrop.querySelector("#run-pause-continue")!.addEventListener("click", () => {
+    playUiClick();
+    closeRunPauseMenu();
+  });
+  backdrop.querySelector("#run-pause-exit")!.addEventListener("click", () => {
+    playUiClick();
+    runPauseStep = "confirm";
+    syncRunPausePanels();
+  });
+  backdrop.querySelector("#run-pause-confirm-no")!.addEventListener("click", () => {
+    playUiClick();
+    runPauseStep = "menu";
+    syncRunPausePanels();
+  });
+  backdrop.querySelector("#run-pause-confirm-yes")!.addEventListener("click", () => {
+    playUiClick();
+    model.forfeitRunToMainMenu();
+    closeRunPauseMenu();
+    if (equipmentModalOpen) removeEquipmentModal();
+    render();
+  });
+
+  backdrop.addEventListener("click", (ev) => {
+    if (ev.target !== backdrop) return;
+    playUiClick();
+    if (runPauseStep === "confirm") {
+      runPauseStep = "menu";
+      syncRunPausePanels();
+    } else {
+      closeRunPauseMenu();
+    }
+  });
+
+  syncRunPausePanels();
+}
+
+document.addEventListener(
+  "keydown",
+  (ev: KeyboardEvent) => {
+    if (ev.key !== "Escape") return;
+    if (ev.repeat) return;
+    if (isTextInputTarget(ev.target)) return;
+    if (isCrystalSelectListOpen()) return;
+
+    if (equipmentModalOpen) {
+      removeEquipmentModal();
+      ev.preventDefault();
+      return;
+    }
+
+    if (runPauseOpen) {
+      if (runPauseStep === "confirm") {
+        runPauseStep = "menu";
+        syncRunPausePanels();
+      } else {
+        closeRunPauseMenu();
+      }
+      ev.preventDefault();
+      return;
+    }
+
+    if (!isRunPhaseForPauseMenu(model.phase)) return;
+
+    openRunPauseMenu();
+    ev.preventDefault();
+  },
+  true,
+);
 
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "i" && ev.key !== "I") return;
