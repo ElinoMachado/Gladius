@@ -3,6 +3,7 @@ export type StatIconId =
   | "dmg"
   | "def"
   | "pen"
+  | "pen_escudo"
   | "crit_hit"
   | "crit_dmg"
   | "mov"
@@ -46,6 +47,8 @@ export function statIconSvg(id: StatIconId, uniqueIndex: number): string {
       return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#5d4037" stroke="#3e2723" stroke-width="0.8" d="M12 2.5l6.5 2.8v6.4c0 4.2-3.2 8.1-6.5 9.8-3.3-1.7-6.5-5.6-6.5-9.8V5.3L12 2.5z"/><path fill="#8d6e63" d="M12 5.2L9 6.5v5.6c0 2.5 1.8 4.9 3 6 1.2-1.1 3-3.5 3-6V6.5l-3-1.3z"/></svg>`;
     case "pen":
       return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#6a1b9a" stroke="#4a148c" stroke-width="0.6" d="M12 3l5.5 2.4v5.5c0 1.2-.3 2.4-.8 3.5L12 21l-4.7-6.6c-.5-1.1-.8-2.3-.8-3.5V5.4L12 3z"/><path fill="none" stroke="#ce93d8" stroke-width="1.4" stroke-linecap="round" d="M8 9l3 5M14 7l-2 8"/></svg>`;
+    case "pen_escudo":
+      return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#0277bd" stroke="#01579b" stroke-width="0.65" d="M12 3.2l6.2 2.7v5.8c0 3.6-2.8 7-5.6 8.5l-.6.3-.6-.3c-2.8-1.5-5.6-4.9-5.6-8.5V5.9L12 3.2z"/><path fill="none" stroke="#ff7043" stroke-width="1.35" stroke-linecap="round" d="M7.5 9.5l4 5.5M11 8l5.5 7"/></svg>`;
     case "crit_hit":
       return `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#ffb74d" d="M12 2l1.8 5.5h5.7l-4.6 3.4 1.8 5.5-4.7-3.4-4.7 3.4 1.8-5.5-4.6-3.4h5.7L12 2z"/></svg>`;
     case "crit_dmg":

@@ -6,6 +6,7 @@ export const HERO_STAT_TIP: Record<StatIconId, string> = {
   dmg: "Dano: reduz vida do alvo.",
   def: "Defesa / armadura: reduz dano recebido.",
   pen: "Penetração de armadura.",
+  pen_escudo: "Penetração de escudo azul (dano que ignora absorção do escudo).",
   crit_hit: "Chance de acerto crítico.",
   crit_dmg: "Dano crítico (multiplicador extra no crítico).",
   mov: "Movimento: hexágonos por turno.",

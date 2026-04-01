@@ -117,6 +117,7 @@ export function createHeroUnit(
     danoCritico:
       cls === "sacerdotisa" ? 1.5 : cls === "gladiador" ? 1.75 : 2,
     penetracao: 0,
+    penetracaoEscudo: 0,
     regenVida: t.regenVida,
     regenMana: t.regenMana,
     alcance: t.alcance,
@@ -151,6 +152,7 @@ export function createHeroUnit(
     acertoCritico: u.acertoCritico,
     danoCritico: u.danoCritico,
     penetracao: u.penetracao,
+    penetracaoEscudo: u.penetracaoEscudo,
     regenVida: u.regenVida,
     regenMana: u.regenMana,
     movimento: u.movimento,
@@ -277,6 +279,7 @@ export function createEnemyUnit(
     acertoCritico: 8,
     danoCritico: 1.45,
     penetracao: 0,
+    penetracaoEscudo: 0,
     regenVida: 0,
     regenMana: 0,
     alcance: arch.alcance,

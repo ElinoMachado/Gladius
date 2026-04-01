@@ -789,6 +789,7 @@ function enemyInspectExtraRows(u: Unit, m: GameModel): [string, string][] {
       String(effectiveDefenseForBiome(u.defesa, bio, ign)),
     ],
     ["Penetração", String(u.penetracao)],
+    ["Penetração de escudo", String(u.penetracaoEscudo)],
     ["Crítico", `${u.acertoCritico}%`],
     ["Mult. crítico", `${Math.round(u.danoCritico * 100)}%`],
     ["Movimento (base)", String(u.movimento)],
@@ -3391,6 +3392,14 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     );
     pushStat(
       cells,
+      "pen_escudo",
+      "Penetração de escudo",
+      String(h.penetracaoEscudo),
+      h.penetracaoEscudo - b.penetracaoEscudo,
+      "int",
+    );
+    pushStat(
+      cells,
       "lifesteal",
       "Roubo de vida",
       `${h.lifesteal}%`,
@@ -3506,6 +3515,11 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "pen",
       label: "Penetração",
       value: String(h.penetracao),
+    });
+    cells.push({
+      icon: "pen_escudo",
+      label: "Penetração de escudo",
+      value: String(h.penetracaoEscudo),
     });
     cells.push({
       icon: "lifesteal",

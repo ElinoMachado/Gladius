@@ -52,6 +52,8 @@ export interface CoreStats {
   acertoCritico: number;
   danoCritico: number;
   penetracao: number;
+  /** Por golpe: até este valor do dano mitigado ignora o escudo azul e vai direto aos PV. */
+  penetracaoEscudo: number;
   regenVida: number;
   regenMana: number;
   alcance: number;
@@ -71,6 +73,7 @@ export interface HeroStatBaseline {
   acertoCritico: number;
   danoCritico: number;
   penetracao: number;
+  penetracaoEscudo: number;
   regenVida: number;
   regenMana: number;
   movimento: number;

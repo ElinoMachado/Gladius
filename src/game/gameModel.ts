@@ -2612,7 +2612,9 @@ export class GameModel {
     }
     let shieldAbsorb = 0;
     if (tgt.shieldGGBlue > 0) {
-      const absorbed = Math.min(tgt.shieldGGBlue, dmg);
+      const bypass = Math.max(0, Math.floor(src.penetracaoEscudo));
+      const dmgVsShield = Math.max(0, dmg - bypass);
+      const absorbed = Math.min(tgt.shieldGGBlue, dmgVsShield);
       shieldAbsorb = absorbed;
       tgt.shieldGGBlue -= absorbed;
       dmg -= absorbed;

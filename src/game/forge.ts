@@ -366,6 +366,17 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
       }
     } else if (h.biome === "rochoso") {
       /* +1/+2/+3 básicos: `getForgeLevel(..., "helmo", "rochoso")` em `maxBasicAttacksForHero`. */
+    } else if (h.biome === "vulcanico") {
+      if (h.level === 1) {
+        u.penetracaoEscudo += 10;
+        u.lifesteal += 5;
+      } else if (h.level === 2) {
+        u.penetracaoEscudo += 25;
+        u.lifesteal += 12;
+      } else {
+        u.penetracaoEscudo += 60;
+        u.lifesteal += 25;
+      }
     } else {
       const hel =
         h.level === 1
@@ -433,6 +444,23 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
         u.maxHp += 1800;
         u.hp += 1800;
       }
+    } else if (c.biome === "vulcanico") {
+      if (c.level === 1) {
+        u.maxHp += 100;
+        u.hp += 100;
+        u.defesa += 10;
+        u.dano += 20;
+      } else if (c.level === 2) {
+        u.maxHp += 150;
+        u.hp += 150;
+        u.defesa += 20;
+        u.dano += 40;
+      } else {
+        u.maxHp += 200;
+        u.hp += 200;
+        u.defesa += 30;
+        u.dano += 60;
+      }
     } else if (c.level === 1) {
       u.maxHp += 100;
       u.hp += 100;
@@ -487,14 +515,14 @@ export function applyForgeGearToUnit(u: Unit, loadout: ForgeHeroLoadout): void {
       }
     } else if (m.biome === "rochoso") {
       if (m.level === 1) {
-        u.dano += 10;
-        u.danoCritico += 0.75;
-      } else if (m.level === 2) {
-        u.dano += 20;
-        u.danoCritico += 1.5;
-      } else {
         u.dano += 30;
-        u.danoCritico += 3;
+        u.acertoCritico += 50;
+      } else if (m.level === 2) {
+        u.dano += 75;
+        u.acertoCritico += 75;
+      } else {
+        u.dano += 120;
+        u.acertoCritico += 100;
       }
     } else {
       const mn =
@@ -553,6 +581,11 @@ export function forgePieceDescription(
       if (level === 2) return "+2 ataques básicos extra";
       return "+3 ataques básicos extra";
     }
+    if (biome === "vulcanico") {
+      if (level === 1) return "+10 penetração de escudo, +5% roubo de vida";
+      if (level === 2) return "+25 penetração de escudo, +12% roubo de vida";
+      return "+60 penetração de escudo, +25% roubo de vida";
+    }
     if (level === 1) return "+1 movimento";
     if (level === 2) return "+1 alcance, +1 movimento";
     return "+2 alcance, +2 movimento";
@@ -578,6 +611,11 @@ export function forgePieceDescription(
       if (level === 2) return "+1000 vida máx.";
       return "+1800 vida máx.";
     }
+    if (biome === "vulcanico") {
+      if (level === 1) return "+100 vida máx., +10 defesa, +20 dano";
+      if (level === 2) return "+150 vida máx., +20 defesa, +40 dano";
+      return "+200 vida máx., +30 defesa, +60 dano";
+    }
     if (level === 1) return "+100 vida máx., +25 armadura";
     if (level === 2) return "+200 vida máx., +50 armadura";
     return "+500 vida máx., +100 armadura";
@@ -598,9 +636,9 @@ export function forgePieceDescription(
     return "+60 dano, +75% crítico, +25% roubo de vida";
   }
   if (biome === "rochoso") {
-    if (level === 1) return "+10 dano, +75% dano crítico";
-    if (level === 2) return "+20 dano, +150% dano crítico";
-    return "+30 dano, +300% dano crítico";
+    if (level === 1) return "+30 dano, +50% chance crítica";
+    if (level === 2) return "+75 dano, +75% chance crítica";
+    return "+120 dano, +100% chance crítica";
   }
   if (level === 1) return "+10 dano, +25% chance crítica";
   if (level === 2) return "+25 dano, +50% crítico, +25% dano crítico";
@@ -663,6 +701,17 @@ export function forgePieceEffectHtml(
       else if (level === 2)
         p.push(forgeFxSeg("basic", u, "+2 ataques básicos extra"));
       else p.push(forgeFxSeg("basic", u, "+3 ataques básicos extra"));
+    } else if (biome === "vulcanico") {
+      if (level === 1) {
+        p.push(forgeFxSeg("pen_escudo", u, "+10 pen. escudo, "));
+        p.push(forgeFxSeg("lifesteal", u, "+5% roubo de vida"));
+      } else if (level === 2) {
+        p.push(forgeFxSeg("pen_escudo", u, "+25 pen. escudo, "));
+        p.push(forgeFxSeg("lifesteal", u, "+12% roubo de vida"));
+      } else {
+        p.push(forgeFxSeg("pen_escudo", u, "+60 pen. escudo, "));
+        p.push(forgeFxSeg("lifesteal", u, "+25% roubo de vida"));
+      }
     } else if (level === 1) p.push(forgeFxSeg("mov", u, "+1 movimento"));
     else if (level === 2) {
       p.push(forgeFxSeg("range", u, "+1 alcance, "));
@@ -709,6 +758,20 @@ export function forgePieceEffectHtml(
       if (level === 1) p.push(forgeFxSeg("max_hp", u, "+450 vida máx."));
       else if (level === 2) p.push(forgeFxSeg("max_hp", u, "+1000 vida máx."));
       else p.push(forgeFxSeg("max_hp", u, "+1800 vida máx."));
+    } else if (biome === "vulcanico") {
+      if (level === 1) {
+        p.push(forgeFxSeg("max_hp", u, "+100 vida máx., "));
+        p.push(forgeFxSeg("def", u, "+10 defesa, "));
+        p.push(forgeFxSeg("dmg", u, "+20 dano"));
+      } else if (level === 2) {
+        p.push(forgeFxSeg("max_hp", u, "+150 vida máx., "));
+        p.push(forgeFxSeg("def", u, "+20 defesa, "));
+        p.push(forgeFxSeg("dmg", u, "+40 dano"));
+      } else {
+        p.push(forgeFxSeg("max_hp", u, "+200 vida máx., "));
+        p.push(forgeFxSeg("def", u, "+30 defesa, "));
+        p.push(forgeFxSeg("dmg", u, "+60 dano"));
+      }
     } else if (level === 1) {
       p.push(forgeFxSeg("max_hp", u, "+100 vida máx., "));
       p.push(forgeFxSeg("def", u, "+25 armadura"));
@@ -757,14 +820,14 @@ export function forgePieceEffectHtml(
     }
   } else if (biome === "rochoso") {
     if (level === 1) {
-      p.push(forgeFxSeg("dmg", u, "+10 dano, "));
-      p.push(forgeFxSeg("crit_dmg", u, "+75% dano crítico"));
-    } else if (level === 2) {
-      p.push(forgeFxSeg("dmg", u, "+20 dano, "));
-      p.push(forgeFxSeg("crit_dmg", u, "+150% dano crítico"));
-    } else {
       p.push(forgeFxSeg("dmg", u, "+30 dano, "));
-      p.push(forgeFxSeg("crit_dmg", u, "+300% dano crítico"));
+      p.push(forgeFxSeg("crit_hit", u, "+50% chance crítica"));
+    } else if (level === 2) {
+      p.push(forgeFxSeg("dmg", u, "+75 dano, "));
+      p.push(forgeFxSeg("crit_hit", u, "+75% chance crítica"));
+    } else {
+      p.push(forgeFxSeg("dmg", u, "+120 dano, "));
+      p.push(forgeFxSeg("crit_hit", u, "+100% chance crítica"));
     }
   } else if (level === 1) {
     p.push(forgeFxSeg("dmg", u, "+10 dano, "));
