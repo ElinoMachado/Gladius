@@ -1,5 +1,8 @@
 import * as THREE from "three";
-import { createBunkerStructureGroup } from "./bunkerMesh";
+import {
+  applyBunkerTierMaterials,
+  createBunkerStructureGroup,
+} from "./bunkerMesh";
 
 function disposeObject3D(o: THREE.Object3D): void {
   o.traverse((obj) => {
@@ -18,6 +21,7 @@ export class BunkerPreview3D {
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
   private root = new THREE.Group();
+  private readonly bunkerModel: THREE.Group;
   private host: HTMLElement;
   private raf = 0;
   private running = false;
@@ -44,8 +48,8 @@ export class BunkerPreview3D {
     rim.position.set(-2, 2, -3);
     this.scene.add(amb, key, rim);
 
-    const bunker = createBunkerStructureGroup();
-    this.root.add(bunker);
+    this.bunkerModel = createBunkerStructureGroup(0);
+    this.root.add(this.bunkerModel);
     this.scene.add(this.root);
 
     window.addEventListener("resize", this.onResize);
@@ -53,6 +57,7 @@ export class BunkerPreview3D {
   }
 
   setTier(tier: 0 | 1 | 2): void {
+    applyBunkerTierMaterials(this.bunkerModel, tier);
     const s = tier === 0 ? 1 : tier === 1 ? 1.06 : 1.12;
     this.root.scale.setScalar(s);
   }

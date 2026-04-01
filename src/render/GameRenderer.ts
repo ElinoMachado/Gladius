@@ -1,5 +1,8 @@
 import * as THREE from "three";
-import { UNIT_MOVE_SEGMENT_MS } from "../game/combatTiming";
+import {
+  FURACAO_ULT_JUMP_MS,
+  UNIT_MOVE_SEGMENT_MS,
+} from "../game/combatTiming";
 import { axialToWorld, axialKey, hexDistance, type Axial } from "../game/hex";
 import type { HexCell } from "../game/grid";
 import type { Unit } from "../game/types";
@@ -9,7 +12,11 @@ import { BIOME_LABELS } from "../game/data/biomes";
 import { enemyTierFromId, waveConfigFromIndex } from "../game/data/enemies";
 import type { BiomeId } from "../game/types";
 import { buildUnitBodyGroup, modelKeyForUnit } from "./unitModels";
-import { createBunkerStructureGroup } from "./bunkerMesh";
+import {
+  applyBunkerTierMaterials,
+  createBunkerStructureGroup,
+  type BunkerRenderTier,
+} from "./bunkerMesh";
 
 const BIOME_HEX_COLOR: Record<BiomeId, number> = {
   hub: 0x6b5a4a,
@@ -114,6 +121,11 @@ export class GameRenderer {
     rings: THREE.Mesh[];
   }[] = [];
   private readonly duelFlameByUnit = new Map<string, THREE.Group>();
+  /** Salto visual (ultimate pistoleiro): Y animado em `tick`; XZ atualizados em `syncUnits`. */
+  private readonly heroUltJumpById = new Map<
+    string,
+    { startMs: number; durationMs: number; peakY: number; baseX: number; baseZ: number }
+  >();
   private readonly bunkerRoots = new Map<string, THREE.Group>();
   private readonly bunkerHitFlashUntil = new Map<string, number>();
   /** Quando (ms perf.now) o herói deve ficar oculto ao entrar no bunker. */
@@ -1402,10 +1414,17 @@ export class GameRenderer {
       }
       if (!this.unitMoveAnims.has(u.id)) {
         const { x, z } = axialToWorld(u.q, u.r, HEX_SIZE);
-        g.position.set(x, 0, z);
+        const ju = this.heroUltJumpById.get(u.id);
+        if (ju) {
+          ju.baseX = x;
+          ju.baseZ = z;
+        } else {
+          g.position.set(x, 0, z);
+        }
       }
+      /** 2× no gigante: evita cobrir inimigos no raycast (antes 5×). */
       const furyScale =
-        u.isPlayer && (u.furiaGiganteTurns ?? 0) > 0 ? 5 : 1;
+        u.isPlayer && (u.furiaGiganteTurns ?? 0) > 0 ? 2 : 1;
       g.scale.setScalar(furyScale);
       g.userData.unitId = u.id;
       this.ensureUnitBars(g, u);
@@ -1856,6 +1875,22 @@ export class GameRenderer {
   }
 
   /** Rajadas radiais (Atirar pra todo lado / pistoleiro Arauto). */
+  /** Salto curvo no eixo Y durante a ultimate “Furacão de balas” (alinhar duração ao combatTiming). */
+  triggerWeaponUltFuracaoJump(
+    heroId: string,
+    durationMs: number = FURACAO_ULT_JUMP_MS,
+  ): void {
+    const g = this.unitMeshes.get(heroId);
+    if (!g) return;
+    this.heroUltJumpById.set(heroId, {
+      startMs: performance.now(),
+      durationMs,
+      peakY: 1.18,
+      baseX: g.position.x,
+      baseZ: g.position.z,
+    });
+  }
+
   triggerRadialShotVfx(
     heroId: string,
     opts?: { rays?: number; durationMs?: number; scale?: number },
@@ -2184,7 +2219,13 @@ export class GameRenderer {
   }
 
   setBunkers(
-    bunkers: { q: number; r: number; hp: number; maxHp: number }[] | null,
+    bunkers: {
+      q: number;
+      r: number;
+      hp: number;
+      maxHp: number;
+      tier: BunkerRenderTier;
+    }[] | null,
     show: boolean,
   ): void {
     if (!show || !bunkers || bunkers.length === 0) {
@@ -2212,10 +2253,13 @@ export class GameRenderer {
       if (b.hp <= 0) continue;
       const k = axialKey(b.q, b.r);
       let root = this.bunkerRoots.get(k);
+      const tier = b.tier;
       if (!root) {
-        root = createBunkerStructureGroup();
+        root = createBunkerStructureGroup(tier);
         this.bunkerRoots.set(k, root);
         this.arenaRoot.add(root);
+      } else if ((root.userData.bunkerTier as BunkerRenderTier | undefined) !== tier) {
+        applyBunkerTierMaterials(root, tier);
       }
       const { x, z } = axialToWorld(b.q, b.r, HEX_SIZE);
       root.position.set(x, 0, z);
@@ -2264,6 +2308,26 @@ export class GameRenderer {
   triggerHealGust(unitIds: string[]): void {
     for (const id of unitIds) {
       this.triggerUnitHitFlash(id, true, "heal_swirl");
+    }
+  }
+
+  private updateHeroUltJumps(): void {
+    const now = performance.now();
+    for (const [id, ju] of [...this.heroUltJumpById]) {
+      const g = this.unitMeshes.get(id);
+      if (!g) {
+        this.heroUltJumpById.delete(id);
+        continue;
+      }
+      const elapsed = now - ju.startMs;
+      if (elapsed >= ju.durationMs) {
+        g.position.set(ju.baseX, 0, ju.baseZ);
+        this.heroUltJumpById.delete(id);
+        continue;
+      }
+      const t = elapsed / ju.durationMs;
+      const y = ju.peakY * Math.sin(Math.PI * t);
+      g.position.set(ju.baseX, y, ju.baseZ);
     }
   }
 
@@ -2507,6 +2571,7 @@ export class GameRenderer {
       const br = g.userData.barRoot as THREE.Group | undefined;
       if (br) br.lookAt(camPos);
     }
+    this.updateHeroUltJumps();
     this.updateCombatDecorations(dt);
     this.updateHeroSelectionCone();
     this.updateHitFlashes();

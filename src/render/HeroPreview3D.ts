@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { HeroClassId } from "../game/types";
+import type { ForgeHeroLoadout, HeroClassId } from "../game/types";
 import { buildHeroBody } from "./unitModels";
 
 function disposeObject3D(o: THREE.Object3D): void {
@@ -45,10 +45,14 @@ export class HeroPreview3D {
     this.scene.add(this.pivot);
   }
 
-  setHero(heroClass: HeroClassId, displayColor: number): void {
+  setHero(
+    heroClass: HeroClassId,
+    displayColor: number,
+    forgeLoadout?: ForgeHeroLoadout,
+  ): void {
     disposeObject3D(this.pivot);
     this.pivot.clear();
-    const body = buildHeroBody(heroClass, displayColor);
+    const body = buildHeroBody(heroClass, displayColor, forgeLoadout);
     body.position.set(0, 0, 0);
     this.pivot.add(body);
     this.pivot.rotation.y = 0.35;

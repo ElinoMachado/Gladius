@@ -99,6 +99,12 @@ import {
   BUNKER_TIRO_FLIGHT_MS,
   DUEL_FIRST_HIT_MS,
   DUEL_HIT_MS,
+  FURACAO_ULT_FIRST_DAMAGE_MS,
+  FURACAO_ULT_STAGGER_MS,
+  FURACAO_ULT_TAIL_BUFFER_MS,
+  PISOTEAR_FIRST_DAMAGE_MS,
+  PISOTEAR_STAGGER_MS,
+  PISOTEAR_TAIL_BUFFER_MS,
   SENTENCA_FIRST_DAMAGE_MS,
   SENTENCA_HEAL_AFTER_LAST_HIT_MS,
   SENTENCA_STAGGER_MS,
@@ -155,7 +161,13 @@ export type CombatVfxHint =
       attackerId: string;
       targetId: string;
       archetypeId: string | undefined;
-    };
+    }
+  | {
+      kind: "weapon_ult_furacao";
+      heroId: string;
+      targetIds: string[];
+    }
+  | { kind: "pisotear_chain"; heroId: string; targetIds: string[] };
 
 /** Id sintético para números flutuantes de dano no bunker (HUD / canvas). */
 export const BUNKER_COMBAT_FLOAT_ID = "__bunker__";
@@ -203,6 +215,8 @@ export interface CombatFloatEvent {
   targetIsPlayer?: boolean;
   /** Atacante herói (SFX). */
   sourceClass?: HeroClassId;
+  /** Evita SFX duplo com `basic_projectile` (tiro/whoosh no disparo). */
+  suppressSourceHitSfx?: boolean;
   /** Golpe no duelo (VFX sangue + som de corte). */
   duelCut?: boolean;
   /** Dano absorvido pelo bunker (float vermelho próprio). */
@@ -241,6 +255,11 @@ export class GameModel {
   duel: { gladiatorId: string; enemyId: string } | null = null;
   selectedUnitId: string | null = null;
   victoryWave20 = false;
+  /**
+   * Partida de teste (menu “Modo sandbox”): ouro/cristais/essências elevados,
+   * sem CDR em combate e ultimate da arma sempre disponível.
+   */
+  devSandboxMode = false;
   /** Cores da run (sinergia VVA escudo/turno) */
   runColors: TeamColor[] = [];
   /** % extra de XP do grupo (ex.: tricolor verde+azul+vermelho). */
@@ -289,7 +308,13 @@ export class GameModel {
     priestBio: BiomeId;
   } | null = null;
   private duelNextIsGladiatorStrike = true;
-  private pendingCombatVfx: CombatVfxHint = null;
+  /** Fila: um único campo era sobrescrito no mesmo tick (ex.: AOE inimigo), silenciando sons/VFX. */
+  private pendingCombatVfxQueue: CombatVfxHint[] = [];
+  /**
+   * Furacão de balas: `onEnemyKilled` acumula heróis aqui em vez de abrir level-up no meio dos tiros.
+   */
+  private killLevelUpFlushSuppressed = false;
+  private pendingKillLevelUpFlushHeroIds = new Set<string>();
   private waveCrystalsGained = 0;
   private waveXpGained = 0;
   private waveEssencesGained: Partial<Record<ForgeEssenceId, number>> = {};
@@ -318,6 +343,32 @@ export class GameModel {
 
   saveMeta(): void {
     saveMeta(this.meta);
+  }
+
+  /** Mantém economia e cargas “infinitas” enquanto `devSandboxMode` estiver ativo. */
+  applyDevSandboxBuffs(): void {
+    if (!this.devSandboxMode) return;
+    const C = 99_999_999;
+    const E = 99_999;
+    this.meta.crystals = C;
+    this.crystalsRun = Math.max(this.crystalsRun, C);
+    for (const id of COMBAT_BIOMES) {
+      this.meta.essences[id as ForgeEssenceId] = E;
+    }
+    for (const u of this.units) {
+      if (!u.isPlayer || u.hp <= 0) continue;
+      u.ouro = C;
+      u.ouroWave = C;
+      if (u.heroClass) {
+        u.weaponUltMeter = 1;
+        u.weaponUltHealAcc = 999999;
+        u.weaponUltHitAcc = 999999;
+        u.weaponUltTakenAcc = 999999;
+      }
+      for (const k of Object.keys(u.skillCd)) {
+        u.skillCd[k] = 0;
+      }
+    }
   }
 
   /** Bónus % de ouro meta (loja de cristais) aplicado a qualquer ganho de ouro na run. */
@@ -375,7 +426,13 @@ export class GameModel {
   }
 
   /** Render 3D: bunkers com PV > 0. */
-  bunkersForRender(): { q: number; r: number; hp: number; maxHp: number }[] {
+  bunkersForRender(): {
+    q: number;
+    r: number;
+    hp: number;
+    maxHp: number;
+    tier: 0 | 1 | 2;
+  }[] {
     return this.allBunkerStates()
       .filter((b) => b.hp > 0)
       .map((b) => ({
@@ -383,6 +440,7 @@ export class GameModel {
         r: b.r,
         hp: b.hp,
         maxHp: b.maxHp,
+        tier: b.tier,
       }));
   }
 
@@ -475,10 +533,10 @@ export class GameModel {
     this.runEnemyPhase();
   }
 
-  takeCombatVfxHint(): CombatVfxHint {
-    const x = this.pendingCombatVfx;
-    this.pendingCombatVfx = null;
-    return x;
+  takeCombatVfxHints(): CombatVfxHint[] {
+    const q = this.pendingCombatVfxQueue;
+    this.pendingCombatVfxQueue = [];
+    return q;
   }
 
   /** Fila de dano/efeitos alinhada ao tempo; chamar no loop do combate. */
@@ -513,6 +571,18 @@ export class GameModel {
 
   private clearCombatSchedule(): void {
     this.combatSchedule = [];
+    this.drainDeferredKillLevelUpQueue();
+  }
+
+  /** Liberta level-ups adiados (Furacão) ou limpa estado ao abortar a fila de combate. */
+  private drainDeferredKillLevelUpQueue(): void {
+    this.killLevelUpFlushSuppressed = false;
+    const ids = [...this.pendingKillLevelUpFlushHeroIds];
+    this.pendingKillLevelUpFlushHeroIds.clear();
+    for (const id of ids) {
+      const hero = this.units.find((u) => u.id === id);
+      if (hero) this.flushCombatLevelUp(hero);
+    }
   }
 
   /** Fila de dano/VFX ainda por executar (bloqueia “Encerrar turno”). */
@@ -552,6 +622,7 @@ export class GameModel {
     this.logLines = [];
     this.duel = null;
     this.clearCombatSchedule();
+    this.pendingCombatVfxQueue = [];
     clearCombatOutcomeQueue();
     this.basicAttacksSpentThisTurn = 0;
     this.pendingSentencaPartyHeal = null;
@@ -622,6 +693,7 @@ export class GameModel {
   startWave(n: number): void {
     this.playerTurnJustStarted = false;
     this.clearCombatSchedule();
+    this.pendingCombatVfxQueue = [];
     clearCombatOutcomeQueue();
     this.pendingSentencaPartyHeal = null;
     this.duel = null;
@@ -1182,9 +1254,11 @@ export class GameModel {
   endHeroTurn(): void {
     const h = this.currentHero();
     if (h) {
-      for (const k of Object.keys(h.skillCd)) {
-        const v = h.skillCd[k] ?? 0;
-        if (v > 0) h.skillCd[k] = v - 1;
+      if (!this.devSandboxMode) {
+        for (const k of Object.keys(h.skillCd)) {
+          const v = h.skillCd[k] ?? 0;
+          if (v > 0) h.skillCd[k] = v - 1;
+        }
       }
       this.applyEndTurnEffects(h);
       if (h.ultimateId === "rainha_desespero") {
@@ -1289,13 +1363,13 @@ export class GameModel {
       priestBio,
     };
 
-    this.pendingCombatVfx = {
+    this.pendingCombatVfxQueue.push({
       kind: "sentenca",
       priestId: p.id,
       targetIds: targets.map((t) => t.id),
       allyIds: alliesToHeal.map((a) => a.id),
       enemyHitCount: targets.length,
-    };
+    });
 
     targets.forEach((e, i) => {
       const delay = SENTENCA_FIRST_DAMAGE_MS + i * SENTENCA_STAGGER_MS;
@@ -1569,6 +1643,7 @@ export class GameModel {
   private onWaveCleared(): void {
     this.applySentencaPartyHeal({ resumeCombat: false });
     this.clearCombatSchedule();
+    this.pendingCombatVfxQueue = [];
     this.duel = null;
     this.duelNextIsGladiatorStrike = true;
     this.blockEnemyPhaseForWaveIntro = false;
@@ -1834,11 +1909,11 @@ export class GameModel {
           e.hp > 0 &&
           hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r }) <= alc,
       );
-      this.pendingCombatVfx = {
+      this.pendingCombatVfxQueue.push({
         kind: "basic_volley",
         fromId: h.id,
         targetIds: inRange.map((e) => e.id),
-      };
+      });
       this.basicAttacksSpentThisTurn++;
       this.syncBasicLeftFromSpent(h);
       const volleyStagger = 95;
@@ -1867,12 +1942,12 @@ export class GameModel {
     }
 
     if (h.heroClass === "pistoleiro") {
-      this.pendingCombatVfx = {
+      this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: h.id,
         toId: tgt.id,
         style: "bullet",
-      };
+      });
       this.basicAttacksSpentThisTurn++;
       this.syncBasicLeftFromSpent(h);
       this.queueCombat(BASIC_PISTOL_FLIGHT_MS, () => {
@@ -1885,12 +1960,12 @@ export class GameModel {
     }
 
     if (h.heroClass === "sacerdotisa") {
-      this.pendingCombatVfx = {
+      this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: h.id,
         toId: tgt.id,
         style: "magic",
-      };
+      });
       this.basicAttacksSpentThisTurn++;
       this.syncBasicLeftFromSpent(h);
       this.queueCombat(BASIC_MAGIC_FLIGHT_MS, () => {
@@ -1923,23 +1998,24 @@ export class GameModel {
     if (!h || h.hp <= 0) return false;
 
     if (skillId === "bunker_minas") {
-      if ((h.skillCd[skillId] ?? 0) > 0) return false;
+      if (!this.devSandboxMode && (h.skillCd[skillId] ?? 0) > 0) return false;
       const b = this.bunkerAtHex(h.q, h.r);
       if (!b || b.hp <= 0 || b.occupantId !== h.id) return false;
       const tier = b.tier;
       const mult = bunkerMinasDamageMult(tier);
       const maxR = bunkerMinasMaxRing(tier);
-      h.skillCd[skillId] = bunkerMinasCooldownWaves(tier);
+      if (!this.devSandboxMode)
+        h.skillCd[skillId] = bunkerMinasCooldownWaves(tier);
       const fromQ = b.q;
       const fromR = b.r;
       const stag = BUNKER_MINAS_RING_STAGGER_MS;
-      this.pendingCombatVfx = {
+      this.pendingCombatVfxQueue.push({
         kind: "bunker_minas",
         centerQ: fromQ,
         centerR: fromR,
         maxRing: maxR,
         staggerMs: stag,
-      };
+      });
       const baseDano =
         h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
       for (let ring = 1; ring <= maxR; ring++) {
@@ -1982,7 +2058,7 @@ export class GameModel {
     }
 
     if (skillId === "bunker_tiro_preciso") {
-      if ((h.skillCd[skillId] ?? 0) > 0) return false;
+      if (!this.devSandboxMode && (h.skillCd[skillId] ?? 0) > 0) return false;
       const b = this.bunkerAtHex(h.q, h.r);
       if (!b || b.occupantId !== h.id || b.tier < 2) return false;
       if (!targetId) return false;
@@ -1991,12 +2067,12 @@ export class GameModel {
       const baseDano =
         h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
       const raw = Math.floor(baseDano * 10);
-      h.skillCd[skillId] = bunkerTiroCooldownWaves();
-      this.pendingCombatVfx = {
+      if (!this.devSandboxMode) h.skillCd[skillId] = bunkerTiroCooldownWaves();
+      this.pendingCombatVfxQueue.push({
         kind: "bunker_mortar",
         fromId: h.id,
         toId: targetId,
-      };
+      });
       this.queueCombat(BUNKER_TIRO_FLIGHT_MS, () => {
         const att = this.units.find((u) => u.id === h.id);
         const tg = this.units.find((u) => u.id === targetId);
@@ -2020,7 +2096,7 @@ export class GameModel {
       return true;
     }
 
-    if ((h.skillCd[skillId] ?? 0) > 0) return false;
+    if (!this.devSandboxMode && (h.skillCd[skillId] ?? 0) > 0) return false;
     if (this.bunkerAtHex(h.q, h.r)?.occupantId === h.id) return false;
 
     if (skillId === "atirar_todo_lado" && h.heroClass === "pistoleiro") {
@@ -2033,13 +2109,14 @@ export class GameModel {
       );
       const targetIds = targets.map((t) => t.id);
       const shotCount = Math.max(14, targetIds.length * 4);
-      this.pendingCombatVfx = {
+      this.pendingCombatVfxQueue.push({
         kind: "atirar_todo_lado",
         heroId: h.id,
         targetIds,
         shotCount,
-      };
-      h.skillCd[skillId] = atirarCooldownWaves(h.weaponLevel);
+      });
+      if (!this.devSandboxMode)
+        h.skillCd[skillId] = atirarCooldownWaves(h.weaponLevel);
       this.log(`${h.name}: Atirar pra todo lado!`);
 
       targets.forEach((e, i) => {
@@ -2077,35 +2154,58 @@ export class GameModel {
 
     if (skillId === "pisotear" && h.heroClass === "gladiador") {
       if (!h.furiaGiganteTurns || h.furiaGiganteTurns <= 0) return false;
-      if ((h.skillCd["pisotear"] ?? 0) > 0) return false;
+      if (!this.devSandboxMode && (h.skillCd["pisotear"] ?? 0) > 0)
+        return false;
       const mc = pisotearManaCost(h.weaponLevel);
       if (mc > 0 && h.maxMana > 0 && h.mana < mc) return false;
       const maxD = pisotearMaxHexDistance(h.weaponLevel);
       const mult = pisotearDamageMult(h.weaponLevel);
       const raw =
         Math.floor(h.dano * mult) + this.artifactGarraFerroRawBonus(h);
-      let hitAny = false;
-      for (const e of this.enemies()) {
-        if (e.hp <= 0) continue;
+      const targets = [...this.enemies()].filter((e) => {
+        if (e.hp <= 0) return false;
         const d = hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r });
-        if (d < 1 || d > maxD) continue;
-        this.dealDamage(
-          h,
-          e,
-          raw,
-          rollCrit(h.acertoCritico + roninCritBonus(h)),
-          true,
-          false,
-        );
-        hitAny = true;
-      }
-      if (!hitAny) return false;
+        return d >= 1 && d <= maxD;
+      });
+      if (targets.length === 0) return false;
       if (mc > 0 && h.maxMana > 0) h.mana -= mc;
-      h.skillCd["pisotear"] = pisotearCooldownWaves(h.weaponLevel);
-      this.flushCombatLevelUp(h);
-      if (this.phase === "combat") {
-        this.tryResolveWaveClearAfterCombatResume();
-      }
+      if (!this.devSandboxMode)
+        h.skillCd["pisotear"] = pisotearCooldownWaves(h.weaponLevel);
+      const targetIds = targets.map((t) => t.id);
+      this.pendingCombatVfxQueue.push({
+        kind: "pisotear_chain",
+        heroId: h.id,
+        targetIds,
+      });
+      targets.forEach((e, i) => {
+        const enemyId = e.id;
+        const delay = PISOTEAR_FIRST_DAMAGE_MS + i * PISOTEAR_STAGGER_MS;
+        this.queueCombat(delay, () => {
+          const att = this.units.find((u) => u.id === h.id);
+          const tg = this.units.find((u) => u.id === enemyId);
+          if (!att || !tg || tg.hp <= 0 || this.phase !== "combat") return;
+          this.dealDamage(
+            att,
+            tg,
+            raw,
+            rollCrit(att.acertoCritico + roninCritBonus(att)),
+            true,
+            false,
+            { suppressSourceHitSfx: true },
+          );
+          this.emit();
+        });
+      });
+      const last =
+        PISOTEAR_FIRST_DAMAGE_MS +
+        (targets.length - 1) * PISOTEAR_STAGGER_MS;
+      this.queueCombat(last + PISOTEAR_TAIL_BUFFER_MS, () => {
+        this.flushCombatLevelUp(h);
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
+      });
       this.emit();
       return true;
     }
@@ -2120,7 +2220,8 @@ export class GameModel {
         return false;
       if (mc > 0 && h.maxMana > 0) h.mana -= mc;
       this.startDuel(h, tgt);
-      h.skillCd[skillId] = ateMorteCooldownWaves(h.weaponLevel);
+      if (!this.devSandboxMode)
+        h.skillCd[skillId] = ateMorteCooldownWaves(h.weaponLevel);
       return true;
     }
 
@@ -2129,7 +2230,8 @@ export class GameModel {
       if (h.mana < sm) return false;
       h.mana -= sm;
       this.executeSentenca(h);
-      h.skillCd[skillId] = sentencaCooldownWaves(h.weaponLevel);
+      if (!this.devSandboxMode)
+        h.skillCd[skillId] = sentencaCooldownWaves(h.weaponLevel);
       this.emit();
       return true;
     }
@@ -2154,7 +2256,11 @@ export class GameModel {
   private startDuel(g: Unit, e: Unit): void {
     this.duel = { gladiatorId: g.id, enemyId: e.id };
     this.duelNextIsGladiatorStrike = true;
-    this.pendingCombatVfx = { kind: "duel_start", gladiadorId: g.id, enemyId: e.id };
+    this.pendingCombatVfxQueue.push({
+      kind: "duel_start",
+      gladiadorId: g.id,
+      enemyId: e.id,
+    });
     this.log(`Duelo mortal: ${g.name} vs ${e.name}`);
     this.emit();
     this.queueCombat(DUEL_FIRST_HIT_MS, () => this.duelTick());
@@ -2201,7 +2307,10 @@ export class GameModel {
     this.duel = null;
     this.duelNextIsGladiatorStrike = true;
     if (gladId) {
-      this.pendingCombatVfx = { kind: "duel_end", gladiadorId: gladId };
+      this.pendingCombatVfxQueue.push({
+        kind: "duel_end",
+        gladiadorId: gladId,
+      });
     }
     const gladiator = gladId ? this.units.find((u) => u.id === gladId) : undefined;
     if (gladiator && gladiator.hp > 0) {
@@ -2247,6 +2356,7 @@ export class GameModel {
     crit: boolean,
     canProc: boolean,
     fromBasicAttack: boolean,
+    opts?: { suppressSourceHitSfx?: boolean },
   ): number {
     if (tgt.hp <= 0) return 0;
     let rawUse = raw;
@@ -2386,6 +2496,13 @@ export class GameModel {
           crit: useCrit,
           targetIsPlayer: tgt.isPlayer,
           sourceClass: src.isPlayer ? src.heroClass : undefined,
+          suppressSourceHitSfx:
+            opts?.suppressSourceHitSfx ??
+            (!!src.isPlayer &&
+              !!src.heroClass &&
+              fromBasicAttack &&
+              (src.heroClass === "pistoleiro" ||
+                src.heroClass === "sacerdotisa")),
           duelCut: !!this.duel && tgt !== src,
           floatHex: { q: tgt.q, r: tgt.r },
         });
@@ -2407,12 +2524,12 @@ export class GameModel {
       tgt !== src &&
       (shieldAbsorb > 0 || bunkerAbsorbed > 0 || dmgToHero > 0)
     ) {
-      this.pendingCombatVfx = {
+      this.pendingCombatVfxQueue.push({
         kind: "enemy_strike",
         attackerId: src.id,
         targetId: tgt.id,
         archetypeId: src.enemyArchetypeId ?? undefined,
-      };
+      });
     }
     if (
       src.isPlayer &&
@@ -2444,7 +2561,8 @@ export class GameModel {
       !src.isPlayer &&
       mit > 0 &&
       tgt !== src &&
-      (dmgToHero > 0 || shieldAbsorb > 0)
+      (dmgToHero > 0 || shieldAbsorb > 0) &&
+      (tgt.furiaGiganteTurns ?? 0) <= 0
     ) {
       this.addWeaponUltTakenCharge(tgt, dmgToHero + shieldAbsorb);
     }
@@ -2513,7 +2631,11 @@ export class GameModel {
       killer,
     );
     for (const h of xpRecipients) {
-      this.flushCombatLevelUp(h);
+      if (this.killLevelUpFlushSuppressed) {
+        this.pendingKillLevelUpFlushHeroIds.add(h.id);
+      } else {
+        this.flushCombatLevelUp(h);
+      }
     }
     if (killer?.isPlayer) {
       const fo = killer.artifacts["furacao_ouro"] ?? 0;
@@ -2810,7 +2932,7 @@ export class GameModel {
   tryWeaponUltimate(): boolean {
     const h = this.currentHero();
     if (!h || h.hp <= 0 || this.phase !== "combat") return false;
-    if (h.weaponUltMeter < 1) return false;
+    if (!this.devSandboxMode && h.weaponUltMeter < 1) return false;
     if (h.heroClass === "sacerdotisa") return this.castParaisoNaTerra(h);
     if (h.heroClass === "pistoleiro") return this.castFuracaoBalas(h);
     if (h.heroClass === "gladiador") return this.castFuriaGigante(h);
@@ -2833,7 +2955,7 @@ export class GameModel {
         bonusMana: reg,
       };
     }
-    this.resetWeaponUltCharge(h);
+    if (!this.devSandboxMode) this.resetWeaponUltCharge(h);
     this.log(`${h.name}: Paraíso na terra!`);
     this.emit();
     return true;
@@ -2843,24 +2965,53 @@ export class GameModel {
     const mult = furacaoDamageMult(h.weaponLevel);
     const base = h.dano + h.pistoleiroBonusDanoWave + h.curandeiroDanoWave;
     const raw = Math.floor(base * mult);
-    for (const e of [...this.enemies()]) {
-      if (e.hp <= 0) continue;
-      const crit = rollCrit(h.acertoCritico + roninCritBonus(h));
-      const dealt = this.dealDamage(h, e, raw, crit, true, false);
-      if (crit && dealt > 0 && e.hp > 0) {
-        const T = furacaoBleedTurns(h.weaponLevel);
-        const pct = furacaoBleedPct(h.weaponLevel);
-        const total = Math.max(1, Math.floor(dealt * pct));
-        const per = Math.max(1, Math.floor(total / T));
-        e.bleed = { turns: T, perTurn: per };
-      }
-    }
-    this.resetWeaponUltCharge(h);
-    this.flushCombatLevelUp(h);
-    if (this.phase === "combat") {
-      this.tryResolveWaveClearAfterCombatResume();
-    }
+    const targets = [...this.enemies()].filter((e) => e.hp > 0);
+    const targetIds = targets.map((t) => t.id);
+    this.pendingCombatVfxQueue.push({
+      kind: "weapon_ult_furacao",
+      heroId: h.id,
+      targetIds,
+    });
+    if (!this.devSandboxMode) this.resetWeaponUltCharge(h);
+    this.killLevelUpFlushSuppressed = true;
+    this.pendingKillLevelUpFlushHeroIds.clear();
     this.log(`${h.name}: Furacão de balas!`);
+
+    targets.forEach((e, i) => {
+      const enemyId = e.id;
+      const delay = FURACAO_ULT_FIRST_DAMAGE_MS + i * FURACAO_ULT_STAGGER_MS;
+      this.queueCombat(delay, () => {
+        const att = this.units.find((u) => u.id === h.id);
+        const tg = this.units.find((u) => u.id === enemyId);
+        if (!att || !tg || tg.hp <= 0 || this.phase !== "combat") return;
+        const crit = rollCrit(att.acertoCritico + roninCritBonus(att));
+        const dealt = this.dealDamage(att, tg, raw, crit, true, false, {
+          suppressSourceHitSfx: true,
+        });
+        if (crit && dealt > 0 && tg.hp > 0) {
+          const T = furacaoBleedTurns(att.weaponLevel);
+          const pct = furacaoBleedPct(att.weaponLevel);
+          const total = Math.max(1, Math.floor(dealt * pct));
+          const per = Math.max(1, Math.floor(total / T));
+          tg.bleed = { turns: T, perTurn: per };
+        }
+        this.emit();
+      });
+    });
+
+    const last =
+      targets.length === 0
+        ? 0
+        : FURACAO_ULT_FIRST_DAMAGE_MS +
+          (targets.length - 1) * FURACAO_ULT_STAGGER_MS;
+    const tailMs = last + FURACAO_ULT_TAIL_BUFFER_MS;
+    this.queueCombat(tailMs, () => {
+      this.drainDeferredKillLevelUpQueue();
+      if (this.phase === "combat") {
+        this.tryResolveWaveClearAfterCombatResume();
+      }
+      this.emit();
+    });
     this.emit();
     return true;
   }
@@ -2874,7 +3025,7 @@ export class GameModel {
     h.hp += extra;
     h.dano = Math.max(1, Math.floor(h.maxHp * 0.1));
     h.furiaGiganteTurns = 3;
-    this.resetWeaponUltCharge(h);
+    if (!this.devSandboxMode) this.resetWeaponUltCharge(h);
     this.log(`${h.name}: Fúria do gigante!`);
     this.emit();
     return true;
@@ -2890,6 +3041,7 @@ export class GameModel {
     h.furiaGiganteTurns = undefined;
     h.furiaExtraMaxHp = undefined;
     h.furiaSavedDano = undefined;
+    h.skillCd["pisotear"] = 0;
     this.log(`${h.name}: Fúria do gigante termina.`);
     this.emit();
   }

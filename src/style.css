@@ -3175,6 +3175,26 @@ body.enemy-inspect--dragging-body {
   z-index: 2;
 }
 
+/* CDR (ondas restantes): canto superior esquerdo, branco — distinto da mana (canto direito). */
+.lol-skill-cd-badge {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  z-index: 3;
+  min-width: 1.1em;
+  padding: 0.04rem 0.18rem 0.06rem;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    0 0 2px #000,
+    0 1px 3px rgba(0, 0, 0, 0.95);
+  pointer-events: none;
+}
+
 .lol-skill-ico {
   flex: 0 0 auto;
   width: 28px;
@@ -6025,6 +6045,34 @@ select.forge-biome-sel option {
   border-color: rgba(220, 140, 100, 0.55);
 }
 
+.main-menu-link--sandbox {
+  margin-top: 0.2rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-color: rgba(120, 200, 255, 0.4);
+  color: rgba(180, 230, 255, 0.95);
+  background: rgba(20, 40, 58, 0.35);
+}
+
+.main-menu-link--sandbox:hover {
+  border-color: rgba(160, 220, 255, 0.55);
+  background: rgba(24, 52, 72, 0.5);
+}
+
+.hud-sandbox-pill {
+  flex-basis: 100%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #b8e8ff;
+  padding: 0.35rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(100, 180, 220, 0.45);
+  background: rgba(12, 36, 52, 0.75);
+}
+
 .wave-loot-toast {
   position: fixed;
   left: 50%;
@@ -6085,7 +6133,7 @@ select.forge-biome-sel option {
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: rgba(6, 4, 10, 0.82);
+  background: transparent;
   cursor: pointer;
 }
 
@@ -6093,20 +6141,32 @@ select.forge-biome-sel option {
   max-width: min(480px, 94vw);
   padding: 1.35rem 1.5rem 1.1rem;
   border-radius: 10px;
-  background: rgba(22, 16, 28, 0.97);
+  background: rgba(22, 16, 28, 0.94);
   border: 1px solid rgba(232, 180, 80, 0.5);
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.4),
     0 12px 40px rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   pointer-events: auto;
   cursor: default;
 }
 
 .wave-summary-overlay__title {
   font-weight: 800;
-  font-size: 1.15rem;
+  font-size: 1.35rem;
   color: #f0d060;
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.25rem;
+  text-align: center;
+}
+
+.wave-summary-overlay__wave-tag {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a89878;
+  text-align: center;
 }
 
 .wave-summary-overlay__xp {
@@ -6422,19 +6482,21 @@ select.forge-biome-sel option {
 }
 
 .wave-summary-overlay {
-  background: rgba(4, 2, 8, 0.88);
+  background: transparent;
 }
 
 .wave-summary-overlay__panel {
   background: linear-gradient(
     168deg,
-    rgba(48, 42, 58, 0.97) 0%,
-    rgba(20, 16, 28, 0.99) 100%
+    rgba(36, 32, 46, 0.92) 0%,
+    rgba(18, 14, 24, 0.96) 100%
   );
   border: 2px solid rgba(201, 162, 39, 0.48);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 12px 44px rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .eq-hero-col {
@@ -6543,6 +6605,12 @@ select.forge-biome-sel option {
   .lol-skill-btn--square .lol-skill-ico {
     width: 44px;
     height: 44px;
+  }
+
+  .lol-skill-cd-badge {
+    font-size: 0.68rem;
+    top: 3px;
+    left: 4px;
   }
 
   .lol-skill-btn {

@@ -124,6 +124,7 @@ import {
   playInputError,
   playUiClick,
   playWeaponsCock,
+  resume as resumeWebAudio,
 } from "./audio/combatSounds";
 import { setArenaCombatMusicFromWave, stopArenaAmbient } from "./audio/arenaAmbient";
 import { ensureMenuThemePlaying, pauseMenuTheme } from "./audio/menuAmbient";
@@ -175,6 +176,12 @@ import {
   BASIC_MAGIC_FLIGHT_MS,
   BASIC_PISTOL_FLIGHT_MS,
   BUNKER_TIRO_FLIGHT_MS,
+  FURACAO_ULT_FIRST_DAMAGE_MS,
+  FURACAO_ULT_JUMP_MS,
+  FURACAO_ULT_PROJECTILE_SEC,
+  FURACAO_ULT_STAGGER_MS,
+  PISOTEAR_FIRST_DAMAGE_MS,
+  PISOTEAR_STAGGER_MS,
   SENTENCA_FIRST_DAMAGE_MS,
   SENTENCA_HEAL_AFTER_LAST_HIT_MS,
   SENTENCA_STAGGER_MS,
@@ -351,6 +358,37 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
       else playSwordHit();
       view.triggerMeleeSlashBetween(h.attackerId, h.targetId);
       break;
+    case "weapon_ult_furacao": {
+      view.triggerWeaponUltFuracaoJump(h.heroId, FURACAO_ULT_JUMP_MS);
+      view.triggerRadialShotVfx(h.heroId, {
+        rays: Math.min(36, 16 + h.targetIds.length * 3),
+        durationMs: Math.max(480, FURACAO_ULT_JUMP_MS + 120),
+        scale: 1.15,
+      });
+      const n = Math.max(6, Math.min(22, 4 + h.targetIds.length * 2));
+      playGunVolley(n, 38);
+      for (let i = 0; i < h.targetIds.length; i++) {
+        const tid = h.targetIds[i]!;
+        const t0 = FURACAO_ULT_FIRST_DAMAGE_MS + i * FURACAO_ULT_STAGGER_MS;
+        window.setTimeout(() => {
+          view.queueDamageProjectile(h.heroId, tid, {
+            style: "bullet",
+            durationSec: FURACAO_ULT_PROJECTILE_SEC,
+          });
+          playGunshot();
+        }, t0);
+      }
+      break;
+    }
+    case "pisotear_chain":
+      for (let i = 0; i < h.targetIds.length; i++) {
+        const tid = h.targetIds[i]!;
+        window.setTimeout(() => {
+          playSwordHit();
+          view.triggerMeleeSlashBetween(h.heroId, tid);
+        }, PISOTEAR_FIRST_DAMAGE_MS + i * PISOTEAR_STAGGER_MS);
+      }
+      break;
     default:
       break;
   }
@@ -494,6 +532,8 @@ type PendingCombat =
 
 let movePreviewActive = false;
 let pendingCombat: PendingCombat = null;
+/** Evita acumular `keydown` de combate a cada `render()` / `showCombatHUD()`. */
+let combatHotkeysAbort: AbortController | null = null;
 /** Inimigo selecionado para painel de atributos (combate). */
 let combatInspectEnemyId: string | null = null;
 /** Herói cujo loadout LOL está em foco (pode ≠ turno atual). */
@@ -1453,6 +1493,7 @@ function showForge(): void {
 }
 
 function showMainMenu(): void {
+  model.devSandboxMode = false;
   hideGameTooltip();
   disposeMenu3dPreviews();
   mainMenuSword3d?.dispose();
@@ -1472,6 +1513,7 @@ function showMainMenu(): void {
         </header>
         <nav class="main-menu-nav" aria-label="Menu principal">
           <button type="button" class="main-menu-link main-menu-link--primary" data-action="new">Novo jogo</button>
+          <button type="button" class="main-menu-link main-menu-link--sandbox" data-action="dev-sandbox">Modo sandbox (testes)</button>
           <button type="button" class="main-menu-link" data-action="crystal">Loja de cristais</button>
           <button type="button" class="main-menu-link" data-action="forge">Forja</button>
           <button type="button" class="main-menu-link" data-action="artifacts">Artefatos</button>
@@ -1501,6 +1543,15 @@ function showMainMenu(): void {
           showEnemyCompendium();
           break;
         case "new":
+          model.devSandboxMode = false;
+          model.phase = "setup_heroes";
+          setup.slots = [null, null, null];
+          setup.biomes = [];
+          setup.colors = ["azul", "verde", "vermelho"];
+          render();
+          break;
+        case "dev-sandbox":
+          model.devSandboxMode = true;
           model.phase = "setup_heroes";
           setup.slots = [null, null, null];
           setup.biomes = [];
@@ -1542,8 +1593,9 @@ function showWaveSummaryOverlay(): void {
     return;
   }
   const lines: string[] = [];
+  lines.push(`<div class="wave-summary-overlay__title">Vitória!</div>`);
   lines.push(
-    `<div class="wave-summary-overlay__title">Wave ${summary.wave} — recompensas</div>`,
+    `<p class="wave-summary-overlay__wave-tag">Wave ${summary.wave}</p>`,
   );
   lines.push(`<p class="wave-summary-overlay__xp">XP total (wave): <strong>${summary.xpTotal}</strong></p>`);
   for (const g of summary.goldLines) {
@@ -1747,7 +1799,11 @@ function showHeroSetup(): void {
       );
       const host = card.querySelector(`[data-slot-model="${i}"]`) as HTMLElement;
       const prev = new HeroPreview3D(host, 200, 200);
-      prev.setHero(hid, colorHintToDisplayColor(HEROES[hid].colorHint));
+      prev.setHero(
+        hid,
+        colorHintToDisplayColor(HEROES[hid].colorHint),
+        forgeL,
+      );
       prev.start();
       heroSetupPreviewInstances.push(prev);
     } else {
@@ -1826,7 +1882,13 @@ function showBiomeSetup(): void {
 
   const host = s.querySelector("#bio-hero-model-host") as HTMLElement;
   bioHeroPreview = new HeroPreview3D(host, 220, 240);
-  bioHeroPreview.setHero(curHero, colorHintToDisplayColor(tmpl.colorHint));
+  const slotOrder = partySlotByHeroFromSlots();
+  const forgeBio = model.meta.forgeByHeroSlot[slotOrder[step]!]!;
+  bioHeroPreview.setHero(
+    curHero,
+    colorHintToDisplayColor(tmpl.colorHint),
+    forgeBio,
+  );
   bioHeroPreview.start();
 
   const canvas = s.querySelector("#biome-picker-canvas") as HTMLCanvasElement;
@@ -2100,7 +2162,11 @@ function showGoldShop(isInitial: boolean): void {
     ) as HTMLElement;
     if (h.heroClass) {
       goldShopHeroPreview3d = new HeroPreview3D(hero3dHost, 220, 260);
-      goldShopHeroPreview3d.setHero(h.heroClass, h.displayColor);
+      goldShopHeroPreview3d.setHero(
+        h.heroClass,
+        h.displayColor,
+        h.forgeLoadout,
+      );
       goldShopHeroPreview3d.start();
       renderHeroStatsGrid(heroStatsEl, heroStatCells(h, model));
     } else {
@@ -2169,6 +2235,11 @@ function combatSquareSkillHtml(opts: {
   ultFill?: boolean;
   /** Uma letra/número minúsculo: mesmo efeito que o clique (atalho de combate). */
   combatHotkey?: string;
+  /** Ondas restantes de recarga (mostrado no canto superior esquerdo, branco). */
+  cdTurns?: number;
+  /** Se definido, segundo clique/tecla com a mesma skill pendente cancela. */
+  selectKind?: "basic" | "skill";
+  selectId?: string;
 }): string {
   const parts = ["btn", "lol-skill-btn", "lol-skill-btn--square"];
   if (opts.extraClass) parts.push(opts.extraClass);
@@ -2182,7 +2253,17 @@ function combatSquareSkillHtml(opts: {
     opts.combatHotkey && opts.combatHotkey.length > 0
       ? ` data-combat-hotkey="${escapeHtml(opts.combatHotkey.slice(0, 1).toLowerCase())}"`
       : "";
-  return `<button type="button" class="${cls}"${dis}${st}${hkAttr} aria-label="${escapeHtml(opts.ariaLabel)}">${fill}${opts.iconHtml}<span class="lol-skill-key-wrap"><span class="lol-key">${escapeHtml(opts.hotkey)}</span></span><span class="lol-mana-badge" aria-hidden="true">${escapeHtml(opts.manaBadge)}</span></button>`;
+  const cdBadge =
+    opts.cdTurns != null && opts.cdTurns > 0
+      ? `<span class="lol-skill-cd-badge" aria-hidden="true">${String(opts.cdTurns)}</span>`
+      : "";
+  let selAttr = "";
+  if (opts.selectKind) {
+    selAttr += ` data-combat-select-kind="${escapeHtml(opts.selectKind)}"`;
+    if (opts.selectKind === "skill" && opts.selectId)
+      selAttr += ` data-combat-select-id="${escapeHtml(opts.selectId)}"`;
+  }
+  return `<button type="button" class="${cls}"${dis}${st}${hkAttr}${selAttr} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${fill}${opts.iconHtml}<span class="lol-skill-key-wrap"><span class="lol-key">${escapeHtml(opts.hotkey)}</span></span><span class="lol-mana-badge" aria-hidden="true">${escapeHtml(opts.manaBadge)}</span></button>`;
 }
 
 function displayColorCss(n: number): string {
@@ -3484,6 +3565,9 @@ function spawnCombatFloat(
 }
 
 function showCombatHUD(): void {
+  combatHotkeysAbort?.abort();
+  combatHotkeysAbort = new AbortController();
+  const combatInputSignal = combatHotkeysAbort.signal;
   combatArtifactStripPage = 0;
   combatArtifactStripSig = "";
   combatTurnOrderPage = 0;
@@ -3494,9 +3578,13 @@ function showCombatHUD(): void {
   enemyInspectUiAbort?.abort();
   enemyInspectUiAbort = null;
   uiRoot.innerHTML = "";
+  const sandboxHudHtml = model.devSandboxMode
+    ? `<div class="hud-block hud-sandbox-pill" role="status">Modo sandbox — ouro/cristais/essências amplos · sem CDR · ultimate da arma sempre pronta</div>`
+    : "";
   const hud = el(`
     <div class="hud">
-      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis). Clique num <strong>inimigo</strong> para ver atributos. Ações abaixo mostram <strong>alcance</strong> em vermelho. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados.</div>
+      ${sandboxHudHtml}
+      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Clique num <strong>inimigo</strong> para ver atributos. Ações abaixo mostram <strong>alcance</strong> em vermelho; repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados.</div>
       <div class="hud-block">Wave <strong id="wv">1</strong></div>
     </div>
   `);
@@ -4257,15 +4345,18 @@ function showCombatHUD(): void {
         combatHotkey: "q",
         manaBadge: "0",
         ariaLabel: "Ataque básico",
+        selectKind: "basic",
       }),
     );
     bindGameTooltip(bb, () => tooltipBasicAttack(h, model));
     bb.addEventListener("click", () => {
       if (!isViewingActive) return;
-      pendingCombat = { kind: "basic" };
-      movePreviewActive = false;
-      refreshOverlays();
-      update();
+      cancelPendingOrDebouncedActivate(bb, () => {
+        pendingCombat = { kind: "basic" };
+        movePreviewActive = false;
+        refreshOverlays();
+        update();
+      });
     });
     actionRow.appendChild(bb);
 
@@ -4278,7 +4369,8 @@ function showCombatHUD(): void {
       extraDisabled: boolean,
       skillDef: SkillDef,
     ) => {
-      const dis = cd > 0 || extraDisabled || !isViewingActive;
+      const cdEff = model.devSandboxMode ? 0 : cd;
+      const dis = cdEff > 0 || extraDisabled || !isViewingActive;
       const key = hotkeys[hotkeyIdx++] ?? "?";
       const manaBadge = String(skillDef.manaCost ?? 0);
       const b = el(
@@ -4288,16 +4380,21 @@ function showCombatHUD(): void {
           hotkey: key,
           combatHotkey: key.length === 1 && key !== "?" ? key.toLowerCase() : undefined,
           manaBadge,
-          ariaLabel: ariaSkillLabel(name, cd),
+          ariaLabel: ariaSkillLabel(name, cdEff),
+          cdTurns: cdEff > 0 ? cdEff : undefined,
+          selectKind: "skill",
+          selectId: id,
         }),
       );
       bindGameTooltip(b, () => tooltipSkillById(h, model, skillDef));
       b.addEventListener("click", () => {
         if (!isViewingActive) return;
-        pendingCombat = { kind: "skill", id };
-        movePreviewActive = false;
-        refreshOverlays();
-        update();
+        cancelPendingOrDebouncedActivate(b, () => {
+          pendingCombat = { kind: "skill", id };
+          movePreviewActive = false;
+          refreshOverlays();
+          update();
+        });
       });
       actionRow.appendChild(b);
     };
@@ -4305,7 +4402,7 @@ function showCombatHUD(): void {
     const bunk = model.bunkerAtHex(h.q, h.r);
     const inBunker = !!bunk && bunk.occupantId === h.id;
     if (inBunker && bunk) {
-      const cdM = h.skillCd["bunker_minas"] ?? 0;
+      const cdM = model.devSandboxMode ? 0 : (h.skillCd["bunker_minas"] ?? 0);
       const keyW = hotkeys[hotkeyIdx++] ?? "W";
       const bMin = el(
         combatSquareSkillHtml({
@@ -4316,19 +4413,26 @@ function showCombatHUD(): void {
             keyW.length === 1 && keyW !== "?" ? keyW.toLowerCase() : undefined,
           manaBadge: "0",
           ariaLabel: ariaSkillLabel("Minas terrestres", cdM),
+          cdTurns: cdM > 0 ? cdM : undefined,
+          selectKind: "skill",
+          selectId: "bunker_minas",
         }),
       );
       bindGameTooltip(bMin, () => tooltipBunkerMinasCombat(h, model));
       bMin.addEventListener("click", () => {
         if (!isViewingActive) return;
-        pendingCombat = { kind: "skill", id: "bunker_minas" };
-        movePreviewActive = false;
-        refreshOverlays();
-        update();
+        cancelPendingOrDebouncedActivate(bMin, () => {
+          pendingCombat = { kind: "skill", id: "bunker_minas" };
+          movePreviewActive = false;
+          refreshOverlays();
+          update();
+        });
       });
       actionRow.appendChild(bMin);
       if (bunk.tier >= 2) {
-        const cdT = h.skillCd["bunker_tiro_preciso"] ?? 0;
+        const cdT = model.devSandboxMode
+          ? 0
+          : (h.skillCd["bunker_tiro_preciso"] ?? 0);
         const keyE = hotkeys[hotkeyIdx++] ?? "E";
         const bTiro = el(
           combatSquareSkillHtml({
@@ -4339,15 +4443,20 @@ function showCombatHUD(): void {
               keyE.length === 1 && keyE !== "?" ? keyE.toLowerCase() : undefined,
             manaBadge: "0",
             ariaLabel: ariaSkillLabel("Tiro preciso", cdT),
+            cdTurns: cdT > 0 ? cdT : undefined,
+            selectKind: "skill",
+            selectId: "bunker_tiro_preciso",
           }),
         );
         bindGameTooltip(bTiro, () => tooltipBunkerTiroCombat(h, model));
         bTiro.addEventListener("click", () => {
           if (!isViewingActive) return;
-          pendingCombat = { kind: "skill", id: "bunker_tiro_preciso" };
-          movePreviewActive = false;
-          refreshOverlays();
-          update();
+          cancelPendingOrDebouncedActivate(bTiro, () => {
+            pendingCombat = { kind: "skill", id: "bunker_tiro_preciso" };
+            movePreviewActive = false;
+            refreshOverlays();
+            update();
+          });
         });
         actionRow.appendChild(bTiro);
       }
@@ -4355,7 +4464,7 @@ function showCombatHUD(): void {
       if (h.heroClass === "gladiador") {
         const inFuria = (h.furiaGiganteTurns ?? 0) > 0;
         if (inFuria) {
-          const cd = h.skillCd["pisotear"] ?? 0;
+          const cd = model.devSandboxMode ? 0 : (h.skillCd["pisotear"] ?? 0);
           const mc = pisotearManaCost(h.weaponLevel);
           const dis =
             cd > 0 ||
@@ -4371,11 +4480,13 @@ function showCombatHUD(): void {
                 key.length === 1 && key !== "?" ? key.toLowerCase() : undefined,
               manaBadge: String(mc),
               ariaLabel: ariaSkillLabel("Pisotear", cd),
+              cdTurns: cd > 0 ? cd : undefined,
             }),
           );
           bindGameTooltip(b, () => tooltipSkillPisotear(h, model));
           b.addEventListener("click", () => {
             if (!isViewingActive) return;
+            if (!combatAbilityInputDebounce()) return;
             if (model.trySkill("pisotear")) {
               resetCombatSelection();
               refreshOverlays();
@@ -4407,13 +4518,11 @@ function showCombatHUD(): void {
         for (const sk of tmpl.skills) {
           if (sk.id === "sentenca") {
             const sm = sentencaManaCost(h.weaponLevel);
+            const cdS = model.devSandboxMode ? 0 : (h.skillCd[sk.id] ?? 0);
             const dis =
-              (h.skillCd[sk.id] ?? 0) > 0 ||
-              h.mana < sm ||
-              !isViewingActive;
+              cdS > 0 || h.mana < sm || !isViewingActive;
             const key = hotkeys[hotkeyIdx++] ?? "?";
             const manaBadge = String(sm);
-            const cdS = h.skillCd[sk.id] ?? 0;
             const b = el(
               combatSquareSkillHtml({
                 disabled: dis,
@@ -4425,11 +4534,13 @@ function showCombatHUD(): void {
                     : undefined,
                 manaBadge,
                 ariaLabel: ariaSkillLabel(sk.name, cdS),
+                cdTurns: cdS > 0 ? cdS : undefined,
               }),
             );
             bindGameTooltip(b, () => tooltipSkillById(h, model, sk));
             b.addEventListener("click", () => {
               if (!isViewingActive) return;
+              if (!combatAbilityInputDebounce()) return;
               if (model.trySkill("sentenca")) {
                 resetCombatSelection();
                 refreshOverlays();
@@ -4450,8 +4561,10 @@ function showCombatHUD(): void {
         h.heroClass === "gladiador"
       ) {
         const cls = h.heroClass!;
-        const ready = h.weaponUltMeter >= 1;
-        const pct = Math.round(h.weaponUltMeter * 100);
+        const ready = model.devSandboxMode || h.weaponUltMeter >= 1;
+        const pct = Math.round(
+          model.devSandboxMode ? 100 : h.weaponUltMeter * 100,
+        );
         const keyU = hotkeys[hotkeyIdx++] ?? "T";
         const wname = weaponUltNamePt(cls);
         const wid = weaponUltIconId(cls);
@@ -4472,6 +4585,7 @@ function showCombatHUD(): void {
         bindGameTooltip(bWU, () => tooltipWeaponUltimate(h));
         bWU.addEventListener("click", () => {
           if (!isViewingActive || !ready) return;
+          if (!combatAbilityInputDebounce()) return;
           if (model.tryWeaponUltimate()) {
             resetCombatSelection();
             refreshOverlays();
@@ -4496,15 +4610,19 @@ function showCombatHUD(): void {
               key.length === 1 && key !== "?" ? key.toLowerCase() : undefined,
             manaBadge: manaUlt,
             ariaLabel: ult.name,
+            selectKind: "skill",
+            selectId: "especialista_destruicao",
           }),
         );
         bindGameTooltip(bu, () => tooltipEspecialista(h, model));
         bu.addEventListener("click", () => {
           if (!isViewingActive) return;
-          pendingCombat = { kind: "skill", id: "especialista_destruicao" };
-          movePreviewActive = false;
-          refreshOverlays();
-          update();
+          cancelPendingOrDebouncedActivate(bu, () => {
+            pendingCombat = { kind: "skill", id: "especialista_destruicao" };
+            movePreviewActive = false;
+            refreshOverlays();
+            update();
+          });
         });
         actionRow.appendChild(bu);
       }
@@ -4512,6 +4630,48 @@ function showCombatHUD(): void {
 
     refreshOverlays();
   };
+
+  const COMBAT_ABILITY_INPUT_MS = 220;
+  let lastCombatAbilityInputAt = 0;
+  function combatAbilityInputDebounce(): boolean {
+    const t = performance.now();
+    if (t - lastCombatAbilityInputAt < COMBAT_ABILITY_INPUT_MS) return false;
+    lastCombatAbilityInputAt = t;
+    return true;
+  }
+  function pendingSelectMatchesBtn(btn: HTMLElement): boolean {
+    const kind = btn.dataset.combatSelectKind;
+    if (!kind) return false;
+    if (kind === "basic") return pendingCombat?.kind === "basic";
+    if (kind === "skill" && pendingCombat?.kind === "skill")
+      return btn.dataset.combatSelectId === pendingCombat.id;
+    return false;
+  }
+  function cancelPendingOrDebouncedActivate(
+    btn: HTMLElement,
+    activate: () => void,
+  ): void {
+    if (pendingSelectMatchesBtn(btn)) {
+      resetCombatSelection();
+      view.clearCameraFocus();
+      refreshOverlays();
+      update();
+      return;
+    }
+    if (!combatAbilityInputDebounce()) return;
+    activate();
+  }
+  function focusTurnHeroMovePreview(): void {
+    const active = model.currentHero();
+    if (!active || !active.heroClass || active.hp <= 0) return;
+    combatLolInspectHeroId = null;
+    combatInspectEnemyId = null;
+    view.focusOnAxial(active.q, active.r, true);
+    movePreviewActive = true;
+    pendingCombat = null;
+    refreshOverlays();
+    update();
+  }
 
   const chkSkipEnemy = combatAboveBar.querySelector(
     "#chk-skip-enemy-move",
@@ -4556,33 +4716,64 @@ function showCombatHUD(): void {
     update();
   });
 
-  document.addEventListener("keydown", (ev: KeyboardEvent) => {
-    if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return;
-    const t = ev.target as HTMLElement | null;
-    if (
-      t &&
-      (t.tagName === "INPUT" ||
-        t.tagName === "TEXTAREA" ||
-        t.tagName === "SELECT" ||
-        t.isContentEditable)
-    )
-      return;
-    if (model.phase !== "combat" || model.inEnemyPhase) return;
-    if (model.hasPendingCombatSchedule()) return;
-    if (view.isUnitMoveAnimating()) return;
-    const ch = model.currentHero();
-    if (!ch || ch.hp <= 0) return;
-    const k = ev.key.length === 1 ? ev.key.toLowerCase() : "";
-    if (!k || !/^[a-z0-9]$/.test(k)) return;
-    const row = document.getElementById("action-row");
-    if (!row) return;
-    const btn = row.querySelector(
-      `button.btn[data-combat-hotkey="${k}"]:not([disabled])`,
-    ) as HTMLButtonElement | null;
-    if (!btn) return;
-    ev.preventDefault();
-    btn.click();
-  });
+  document.addEventListener(
+    "keydown",
+    (ev: KeyboardEvent) => {
+      if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      const t = ev.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      )
+        return;
+      if (model.phase !== "combat" || model.inEnemyPhase) return;
+      if (model.hasPendingCombatSchedule()) return;
+      if (view.isUnitMoveAnimating()) return;
+      const ch = model.currentHero();
+      if (!ch || ch.hp <= 0) return;
+
+      if (ev.code === "Space" || ev.key === " ") {
+        ev.preventDefault();
+        focusTurnHeroMovePreview();
+        return;
+      }
+
+      const k = ev.key.length === 1 ? ev.key.toLowerCase() : "";
+      if (!k || !/^[a-z0-9]$/.test(k)) return;
+      const row = document.getElementById("action-row");
+      if (!row) return;
+      const btn = row.querySelector(
+        `button.btn[data-combat-hotkey="${k}"]:not([disabled])`,
+      ) as HTMLButtonElement | null;
+      if (!btn) return;
+      if (pendingSelectMatchesBtn(btn)) {
+        ev.preventDefault();
+        resetCombatSelection();
+        view.clearCameraFocus();
+        refreshOverlays();
+        update();
+        return;
+      }
+      if (!combatAbilityInputDebounce()) {
+        ev.preventDefault();
+        return;
+      }
+      ev.preventDefault();
+      btn.click();
+    },
+    { signal: combatInputSignal },
+  );
+
+  canvas.addEventListener(
+    "pointerdown",
+    () => {
+      resumeWebAudio();
+    },
+    { signal: combatInputSignal },
+  );
 
   update();
 
@@ -4965,6 +5156,9 @@ function shouldShowBunkerMeshes(phase: GamePhase): boolean {
 }
 
 function render(): void {
+  if (model.devSandboxMode && model.phase !== "main_menu") {
+    model.applyDevSandboxBuffs();
+  }
   if (model.phase !== "shop_wave" && model.phase !== "shop_initial") {
     refreshGoldShop = null;
   }
@@ -4996,6 +5190,8 @@ function render(): void {
     removeEquipmentModal();
   }
   if (model.phase !== "combat") {
+    combatHotkeysAbort?.abort();
+    combatHotkeysAbort = null;
     killWaveIntroTimers();
     document.querySelectorAll(".wave-intro-overlay").forEach((n) => n.remove());
     resetCombatSelection();
@@ -5026,7 +5222,7 @@ function render(): void {
     if (prevPhase !== "shop_wave") goldShopHeroIndex = 0;
     showGoldShop(false);
   } else if (model.phase === "wave_summary") {
-    canvas.style.opacity = "0.45";
+    canvas.style.opacity = "1";
     showWaveSummaryOverlay();
   } else if (model.phase === "combat") {
     canvas.style.opacity = "1";
@@ -5091,10 +5287,14 @@ function render(): void {
   applyCombatOverlays();
   view.setCameraInputEnabled(model.phase === "combat");
 
+  /** Run ativa: manter música da arena (evita cair no tema do menu entre waves / loja). */
   const arenaMusicPhase =
     model.phase === "combat" ||
     model.phase === "level_up_pick" ||
-    model.phase === "ultimate_pick";
+    model.phase === "ultimate_pick" ||
+    model.phase === "wave_summary" ||
+    model.phase === "shop_initial" ||
+    model.phase === "shop_wave";
 
   if (arenaMusicPhase) {
     pauseMenuTheme();
@@ -5144,7 +5344,9 @@ model.subscribe(() => {
 function loop(): void {
   if (model.phase === "combat") {
     model.tickCombatSchedule();
-    applyCombatVfxHint(model.takeCombatVfxHint());
+    for (const vfxHint of model.takeCombatVfxHints()) {
+      applyCombatVfxHint(vfxHint);
+    }
     const vh = lolViewedHero(model);
     view.setCombatSelectionUnitId(
       vh && vh.isPlayer && vh.hp > 0 ? vh.id : null,
@@ -5164,8 +5366,10 @@ function loop(): void {
         playKnifeCut();
       } else if (p.kind === "damage") {
         view.triggerUnitHitFlash(p.unitId, p.targetIsPlayer ?? false);
-        if (!model.duel && p.sourceClass === "gladiador") {
-          playSwordHit();
+        if (!model.duel && p.sourceClass && !p.suppressSourceHitSfx) {
+          if (p.sourceClass === "gladiador") playSwordHit();
+          else if (p.sourceClass === "pistoleiro") playGunshot();
+          else if (p.sourceClass === "sacerdotisa") playMagicWhoosh();
         }
       } else {
         view.triggerUnitHitFlash(p.unitId, p.targetIsPlayer ?? false);

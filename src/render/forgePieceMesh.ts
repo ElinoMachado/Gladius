@@ -222,15 +222,22 @@ export function buildCapeForgeDetail(
   }
   capeGeo.computeVertexNormals();
   const cape = new THREE.Mesh(capeGeo, cloth);
-  cape.position.set(0, 0.15, -0.08);
-  cape.rotation.x = 0.08;
+  /**
+   * PlaneGeometry fica no plano XY com normal +Z: visto de lado (eixo X) vira linha;
+   * de frente (+Z) cobre o peito. Rotação Y = π volta a face para −Z (costas do herói
+   * quando o modelo olha para +Z).
+   */
+  cape.position.set(0, 0.12, -0.02);
+  cape.rotation.y = Math.PI;
+  cape.rotation.x = 0.1;
   root.add(cape);
 
   const innerPlane = new THREE.Mesh(
     new THREE.PlaneGeometry(0.88, 1.08, 8, 8),
     inner,
   );
-  innerPlane.position.set(0, 0.14, -0.11);
+  innerPlane.position.set(0, 0.11, -0.025);
+  innerPlane.rotation.y = Math.PI;
   innerPlane.rotation.x = 0.1;
   root.add(innerPlane);
 
@@ -247,7 +254,7 @@ export function buildCapeForgeDetail(
     clasp,
   );
   claspRing.rotation.y = Math.PI / 2;
-  claspRing.position.set(0, 0.58, 0.14);
+  claspRing.position.set(0, 0.58, 0.08);
   root.add(claspRing);
 
   const gem = new THREE.Mesh(
@@ -258,15 +265,16 @@ export function buildCapeForgeDetail(
       metalness: 0.3,
     }),
   );
-  gem.position.set(0, 0.58, 0.16);
+  gem.position.set(0, 0.58, 0.095);
   root.add(gem);
 
+  /* Franjas decorativas atrás do pescoço (evita listras à frente do torso). */
   for (let i = 0; i < 6; i++) {
     const ch = new THREE.Mesh(
       new THREE.CylinderGeometry(0.012, 0.012, 0.14, 6),
       trim,
     );
-    ch.position.set(-0.35 + i * 0.14, 0.05, 0.02);
+    ch.position.set(-0.35 + i * 0.14, 0.05, -0.09);
     ch.rotation.z = 0.15 + i * 0.05;
     root.add(ch);
   }
@@ -277,7 +285,7 @@ export function buildCapeForgeDetail(
       cloth,
     );
     pauld.scale.set(1.2, 0.55, 0.9);
-    pauld.position.set(-0.42, 0.48, 0.06);
+    pauld.position.set(-0.38, 0.48, -0.06);
     pauld.rotation.z = 0.4;
     root.add(pauld);
     const pauldR = pauld.clone();
@@ -292,7 +300,7 @@ export function buildCapeForgeDetail(
       clasp,
     );
     chain.rotation.x = Math.PI / 2;
-    chain.position.set(0, -0.35, -0.02);
+    chain.position.set(0, -0.35, -0.06);
     chain.scale.set(1, 1, 0.85);
     root.add(chain);
   }

@@ -15,3 +15,17 @@ export const BASIC_MAGIC_FLIGHT_MS = 280;
 /** Ondas das Minas terrestres (VFX + dano por anel). */
 export const BUNKER_MINAS_RING_STAGGER_MS = 160;
 export const BUNKER_TIRO_FLIGHT_MS = 520;
+
+/** Furacão de balas (ultimate da arma do pistoleiro): dano e projéteis alinhados ao main/renderer. */
+export const FURACAO_ULT_FIRST_DAMAGE_MS = 150;
+export const FURACAO_ULT_STAGGER_MS = 68;
+export const FURACAO_ULT_PROJECTILE_SEC = 0.09;
+/** Após o último impacto: tempo para POW + floats antes de level-up / fim de wave. */
+export const FURACAO_ULT_TAIL_BUFFER_MS = 480;
+/** Duração do salto 3D do herói durante a ultimate. */
+export const FURACAO_ULT_JUMP_MS = 520;
+
+/** Pisotear: golpes visíveis por alvo (evita tudo no mesmo frame). */
+export const PISOTEAR_FIRST_DAMAGE_MS = 110;
+export const PISOTEAR_STAGGER_MS = 88;
+export const PISOTEAR_TAIL_BUFFER_MS = 220;

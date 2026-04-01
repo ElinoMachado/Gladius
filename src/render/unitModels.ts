@@ -65,27 +65,64 @@ function stdMat(color: number, opts: Partial<THREE.MeshStandardMaterialParameter
   });
 }
 
+/**
+ * Elmo centrado na cabeça, capa para trás (-Z), manoplas à esquerda/direita (já no mesh da peça).
+ * Valores alinhados ao torso/cabeça de cada classe em `buildHeroBody`.
+ */
+const FORGE_ATTACH: Record<
+  HeroClassId,
+  {
+    helmet: { y: number; scale: number };
+    cape: { x: number; y: number; z: number; rotX: number; scale: number };
+    manoplas: { y: number; z: number; scale: number };
+  }
+> = {
+  pistoleiro: {
+    helmet: { y: 1.28, scale: 0.5 },
+    /* Topo da capa ~ombros (caixa torso ~1,18); z atrás da caixa. */
+    cape: { x: 0, y: 0.87, z: -0.125, rotX: 0.06, scale: 0.5 },
+    manoplas: { y: 1.02, z: 0.09, scale: 0.48 },
+  },
+  gladiador: {
+    helmet: { y: 1.38, scale: 0.58 },
+    /* Topo da capa ~ombros; z mais negativo evita clipping com o torso largo. */
+    cape: { x: 0, y: 0.88, z: -0.24, rotX: 0.05, scale: 0.58 },
+    manoplas: { y: 1.14, z: 0.16, scale: 0.7 },
+  },
+  sacerdotisa: {
+    helmet: { y: 1.24, scale: 0.47 },
+    /* Topo da capa ~ombros; z atrás do cilindro (~raio 0,22–0,28) para não cruzar a malha. */
+    cape: { x: 0, y: 0.78, z: -0.27, rotX: 0.04, scale: 0.48 },
+    manoplas: { y: 1.05, z: 0.14, scale: 0.58 },
+  },
+};
+
 function addForgeMeshes(
   root: THREE.Group,
+  heroClass: HeroClassId,
   loadout: ForgeHeroLoadout | undefined,
   _mat: (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => THREE.MeshStandardMaterial,
 ): void {
   if (!loadout) return;
   const R = resolveEquippedForgeLoadout(loadout);
   const b = (id: string) => id as ForgeEssenceId;
+  const A = FORGE_ATTACH[heroClass];
   if (R.helmo) {
     const h = buildHelmetForgeDetail(b(R.helmo.biome), R.helmo.level);
-    h.scale.setScalar(0.36);
-    h.position.set(0, 1.38, 0);
+    h.scale.setScalar(A.helmet.scale);
+    h.position.set(0, A.helmet.y, 0);
     h.userData.role = "forge";
     root.add(h);
   }
   if (R.capa) {
     const c = buildCapeForgeDetail(b(R.capa.biome), R.capa.level);
-    c.scale.setScalar(0.42);
-    c.position.set(0, 0.88, -0.2);
-    c.rotation.x = -0.32;
+    c.scale.setScalar(A.cape.scale);
+    c.position.set(A.cape.x, A.cape.y, A.cape.z);
+    c.rotation.x = A.cape.rotX;
     c.userData.role = "forge";
+    c.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.renderOrder = 1;
+    });
     root.add(c);
   }
   if (R.manoplas) {
@@ -93,9 +130,12 @@ function addForgeMeshes(
       b(R.manoplas.biome),
       R.manoplas.level,
     );
-    m.scale.setScalar(0.34);
-    m.position.set(0, 0.96, 0.06);
+    m.scale.setScalar(A.manoplas.scale);
+    m.position.set(0, A.manoplas.y, A.manoplas.z);
     m.userData.role = "forge";
+    m.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.renderOrder = 2;
+    });
     root.add(m);
   }
 }
@@ -112,6 +152,9 @@ export function buildHeroBody(
   const leather = 0x3d2818;
 
   if (heroClass === "pistoleiro") {
+    const forgeResolved = resolveEquippedForgeLoadout(forgeLoadout ?? {});
+    const hideHeadAdorn = !!forgeResolved.helmo;
+
     const leg = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.14, 0.35, 4, 8),
       stdMat(0x2a2a32),
@@ -127,12 +170,14 @@ export function buildHeroBody(
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), stdMat(skin));
     head.position.y = 1.28;
     root.add(head);
-    const brim = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.2, 0.18, 0.04, 10),
-      stdMat(0x1a1510),
-    );
-    brim.position.y = 1.36;
-    root.add(brim);
+    if (!hideHeadAdorn) {
+      const brim = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.18, 0.04, 10),
+        stdMat(0x1a1510),
+      );
+      brim.position.y = 1.36;
+      root.add(brim);
+    }
     const gun = new THREE.Group();
     const barrel = new THREE.Mesh(
       new THREE.BoxGeometry(0.42, 0.06, 0.06),
@@ -147,11 +192,14 @@ export function buildHeroBody(
     grip.position.set(0.08, 0.94, 0.12);
     gun.add(grip);
     root.add(gun);
-    addForgeMeshes(root, forgeLoadout, stdMat);
+    addForgeMeshes(root, heroClass, forgeLoadout, stdMat);
     return root;
   }
 
   if (heroClass === "gladiador") {
+    const forgeResolved = resolveEquippedForgeLoadout(forgeLoadout ?? {});
+    const hideHeadAdorn = !!forgeResolved.helmo;
+
     const leg = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.18, 0.32, 4, 8),
       stdMat(0x4a3728),
@@ -167,12 +215,14 @@ export function buildHeroBody(
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 8), stdMat(skin));
     head.position.y = 1.38;
     root.add(head);
-    const helm = new THREE.Mesh(
-      new THREE.BoxGeometry(0.34, 0.12, 0.34),
-      stdMat(0x6a5a4a, { metalness: 0.35 }),
-    );
-    helm.position.y = 1.45;
-    root.add(helm);
+    if (!hideHeadAdorn) {
+      const helm = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.12, 0.34),
+        stdMat(0x6a5a4a, { metalness: 0.35 }),
+      );
+      helm.position.y = 1.45;
+      root.add(helm);
+    }
     const shield = new THREE.Mesh(
       new THREE.CylinderGeometry(0.28, 0.28, 0.06, 8),
       stdMat(0x8b7355, { metalness: 0.25 }),
@@ -186,11 +236,14 @@ export function buildHeroBody(
     );
     sword.position.set(0.4, 1.12, 0.08);
     root.add(sword);
-    addForgeMeshes(root, forgeLoadout, stdMat);
+    addForgeMeshes(root, heroClass, forgeLoadout, stdMat);
     return root;
   }
 
   /* sacerdotisa */
+  const forgeResolved = resolveEquippedForgeLoadout(forgeLoadout ?? {});
+  const hideHeadAdorn = !!forgeResolved.helmo;
+
   const skirt = new THREE.Mesh(
     new THREE.ConeGeometry(0.42, 0.55, 12),
     stdMat(accent, { roughness: 0.55 }),
@@ -206,12 +259,14 @@ export function buildHeroBody(
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), stdMat(skin));
   head.position.y = 1.22;
   root.add(head);
-  const hood = new THREE.Mesh(
-    new THREE.SphereGeometry(0.2, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    stdMat(0xf0e6d8, { roughness: 0.65 }),
-  );
-  hood.position.y = 1.28;
-  root.add(hood);
+  if (!hideHeadAdorn) {
+    const hood = new THREE.Mesh(
+      new THREE.SphereGeometry(0.2, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      stdMat(0xf0e6d8, { roughness: 0.65 }),
+    );
+    hood.position.y = 1.28;
+    root.add(hood);
+  }
   const staff = new THREE.Mesh(
     new THREE.CylinderGeometry(0.035, 0.04, 1.15, 6),
     stdMat(leather),
@@ -224,7 +279,7 @@ export function buildHeroBody(
   );
   orb.position.set(0.32, 1.38, 0.1);
   root.add(orb);
-  addForgeMeshes(root, forgeLoadout, stdMat);
+  addForgeMeshes(root, heroClass, forgeLoadout, stdMat);
   return root;
 }
 
