@@ -129,7 +129,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Ruler",
     rarity: "uncommon",
     description:
-      "Ignora penalidades de bioma (pântano, floresta, monte, deserto, rochoso e vulcânico: defesa, alcance, regen, movimento no pântano e dano ambiental); +1 movimento por acúmulo.",
+      "Ignore os efeitos dos biomas e receba + 1 de movimento.",
   },
   {
     id: "curandeiro_batalha",

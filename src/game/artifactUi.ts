@@ -149,7 +149,7 @@ export function describeArtifactAtStack(
     case "duro_pedra":
       return `Sem mover no turno: +${n} defesa; +${2 * n}% dano crítico ao receber exatamente 1 de dano.`;
     case "ruler":
-      return `Ignora penalidades de bioma (defesa, alcance, regen, movimento pantano) e dano ambiental do vulcânico; +${n} movimento.`;
+      return `Ignore os efeitos dos biomas e receba + ${n} de movimento.`;
     case "braco_forte": {
       const eff = Math.min(n, 3);
       return `+${eff} uso(s) extra de básico por turno (máx. 3 com efeito).`;
