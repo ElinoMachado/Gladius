@@ -2377,7 +2377,6 @@ function showGoldShop(isInitial: boolean): void {
     panel.innerHTML = `
       <div class="shop-panel-inner">
         <h1 class="shop-title hero-setup-main-title">Loja do coliseu</h1>
-        <h2 class="shop-hero-name">${escapeHtml(h.name)}</h2>
         <div class="shop-hero-gold-bags" role="group" aria-label="Ouro por herói — cada um tem a sua bolsa">
           ${goldBagsHtml}
         </div>
