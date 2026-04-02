@@ -4423,12 +4423,13 @@ body.enemy-inspect--dragging-body {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: flex-start;
+  /* Mesma altura de cartão: ambos esticam até à coluna mais alta */
+  align-items: stretch;
   gap: 1.25rem 1.75rem;
   margin-bottom: 0.75rem;
 }
 
-/* Mesmo padding vertical nos dois cartões: alinha o topo dos viewports 3D herói/bunker */
+/* Mesmo padding nos dois cartões; largura equilibrada lado a lado */
 .shop-screen__panel--gold .shop-hero-bunker-pair > .shop-hero-viz {
   margin-top: 0;
   margin-bottom: 0;
@@ -4437,8 +4438,58 @@ body.enemy-inspect--dragging-body {
 
 .shop-hero-bunker-pair > .shop-hero-viz,
 .shop-hero-bunker-pair > .shop-bunker-viz {
-  flex: 1 1 min(100%, 400px);
-  min-width: 0;
+  flex: 1 1 0;
+  min-width: min(100%, 280px);
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Cartão bunker: coluna flex para o layout interior preencher a altura do cartão */
+.shop-screen__panel--gold .shop-hero-bunker-pair > .shop-bunker-viz.shop-hero-viz {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+.shop-screen__panel--gold
+  .shop-hero-bunker-pair
+  > .shop-bunker-viz
+  .shop-bunker-viz-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.shop-screen__panel--gold
+  .shop-hero-bunker-pair
+  .shop-bunker-viz-layout__col {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.shop-screen__panel--gold
+  .shop-hero-bunker-pair
+  .shop-bunker-viz-layout__actions {
+  margin-top: auto;
+}
+
+/* Viewports 3D com o mesmo tamanho (herói já usa 220×260 na loja) */
+.shop-screen__panel--gold .shop-hero-bunker-pair .gold-shop-hero-3d-host,
+.shop-screen__panel--gold .shop-hero-bunker-pair .shop-bunker-viz-layout__3d-host {
+  width: 220px;
+  height: 260px;
+  min-height: 260px;
+  max-height: 260px;
+  box-sizing: border-box;
+}
+
+.shop-screen__panel--gold .shop-hero-bunker-pair .shop-bunker-viz-layout__preview {
+  width: 220px;
+  flex: 0 0 220px;
+  max-width: 220px;
+  align-self: flex-start;
 }
 
 .shop-bunker-viz {
@@ -4710,6 +4761,20 @@ body.enemy-inspect--dragging-body {
 
   .shop-bunker-viz-layout__col {
     padding: 0.4rem 0.25rem 0.45rem;
+  }
+
+  .shop-screen__panel--gold .shop-hero-bunker-pair .shop-bunker-viz-layout__preview {
+    width: 100%;
+    max-width: 280px;
+    flex: 0 0 auto;
+  }
+
+  .shop-screen__panel--gold .shop-hero-bunker-pair .gold-shop-hero-3d-host,
+  .shop-screen__panel--gold .shop-hero-bunker-pair .shop-bunker-viz-layout__3d-host {
+    width: 100%;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 
