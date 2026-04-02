@@ -1603,7 +1603,6 @@ export class GameModel {
             kind: "heal",
             amount: g1,
           });
-          this.applySedaVampiraSplash(priest, g1);
         }
         this.flushCombatLevelUp(priest);
         return;
@@ -1618,7 +1617,6 @@ export class GameModel {
         kind: "heal",
         amount: pg,
       });
-      this.applySedaVampiraSplash(priest, pg);
     }
     this.flushCombatLevelUp(priest);
     if (this.phase === "combat") {
@@ -2743,7 +2741,11 @@ export class GameModel {
     crit: boolean,
     canProc: boolean,
     fromBasicAttack: boolean,
-    opts?: { suppressSourceHitSfx?: boolean },
+    opts?: {
+      suppressSourceHitSfx?: boolean;
+      /** Dano secundário (ex.: Seda vampira): nunca dispara roubo de vida. */
+      suppressLifesteal?: boolean;
+    },
   ): number {
     if (tgt.hp <= 0) return 0;
     let rawUse = raw;
@@ -2900,7 +2902,7 @@ export class GameModel {
         }
       }
     }
-    if (canProc && src.lifesteal > 0) {
+    if (canProc && !opts?.suppressLifesteal && src.lifesteal > 0) {
       const ls = roundToCombatDecimals((dmg * src.lifesteal) / 100);
       if (ls > 0) {
         const h0 = src.hp;
@@ -3015,7 +3017,6 @@ export class GameModel {
               kind: "heal",
               amount: g,
             });
-            this.applySedaVampiraSplash(src, g);
           }
         }
       }
@@ -3042,7 +3043,6 @@ export class GameModel {
             kind: "heal",
             amount: add,
           });
-          this.applySedaVampiraSplash(killer, add);
         }
       }
     }
@@ -3115,7 +3115,6 @@ export class GameModel {
               kind: "heal",
               amount: g,
             });
-            this.applySedaVampiraSplash(ally, g);
           }
         }
       }
@@ -3252,7 +3251,10 @@ export class GameModel {
     tgt.poison = { instances: [...cur, ...add] };
   }
 
-  /** Seda vampira: % da cura em HP vira dano bruto em inimigos do mesmo bioma (20% por acúmulo, máx. 10). */
+  /**
+   * Seda vampira: só em cura por roubo de vida. % da cura em HP vira dano bruto em inimigos do mesmo bioma
+   * (20% × acúmulos, máx. 10). O dano usa `suppressLifesteal` para não gerar novo roubo de vida.
+   */
   private applySedaVampiraSplash(hero: Unit, healHp: number): void {
     if (!hero.isPlayer || healHp <= 0) return;
     const s = Math.min(10, hero.artifacts["seda_vampira"] ?? 0);
@@ -3264,7 +3266,9 @@ export class GameModel {
       if (e.hp <= 0) continue;
       const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
       if (eb !== bio) continue;
-      this.dealDamage(hero, e, rawSplash, false, false, false);
+      this.dealDamage(hero, e, rawSplash, false, false, false, {
+        suppressLifesteal: true,
+      });
     }
   }
 
@@ -3296,7 +3300,6 @@ export class GameModel {
           kind: "heal",
           amount: toHp,
         });
-        this.applySedaVampiraSplash(target, toHp);
         this.addWeaponUltHealCharge(src, toHp, opts?.skipWeaponUltMeter);
       }
       const over = amt - toHp;
@@ -3327,7 +3330,6 @@ export class GameModel {
           kind: "heal",
           amount: g,
         });
-        this.applySedaVampiraSplash(target, g);
         this.addWeaponUltHealCharge(src, g, opts?.skipWeaponUltMeter);
       }
     }
@@ -3565,7 +3567,6 @@ export class GameModel {
             amount: g,
             floatHex: { q: u.q, r: u.r },
           });
-          this.applySedaVampiraSplash(u, g);
         }
       }
       if (u.hot.instances.length === 0) u.hot = undefined;

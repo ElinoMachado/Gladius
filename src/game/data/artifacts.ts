@@ -108,7 +108,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Seda vampira",
     rarity: "common",
     description:
-      "Cura recebida em HP causa dano bruto igual a 20% dessa cura × acúmulos em todos os inimigos no seu bioma (máx. 10).",
+      "Sempre que se curar com roubo de vida, cause 20% da sua cura como dano a todos inimigos no bioma.",
   },
 
   /* ——— Incomuns (12) ——— */

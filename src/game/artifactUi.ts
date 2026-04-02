@@ -177,7 +177,7 @@ export function describeArtifactAtStack(
     case "pulso_verde":
       return `Ao matar: cura +${5 * n} em você e em cada aliado.`;
     case "seda_vampira":
-      return `Cura em HP: ${20 * n}% desse valor como dano bruto a inimigos no seu bioma.`;
+      return `Sempre que se curar com roubo de vida, cause ${20 * n}% da sua cura como dano a todos inimigos no bioma.`;
     case "fio_cruel":
       return `+${3 * n}% chance de cristal ao eliminar inimigos.`;
     case "crystal_extra":
