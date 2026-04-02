@@ -4396,8 +4396,8 @@ body.enemy-inspect--dragging-body {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: stretch;
-  gap: 1rem 1.15rem;
-  margin-bottom: 0.55rem;
+  gap: 1.25rem 1.75rem;
+  margin-bottom: 0.75rem;
 }
 
 .shop-hero-bunker-pair > .shop-hero-viz,
@@ -4412,7 +4412,7 @@ body.enemy-inspect--dragging-body {
 
 /* Mais respiro dentro da moldura dourada do bunker */
 .shop-screen__panel--gold .shop-bunker-viz.shop-hero-viz {
-  padding: 0.9rem 1rem 1.05rem;
+  padding: 1.15rem 1.2rem 1.25rem;
 }
 
 .shop-bunker-viz-layout {
@@ -4420,17 +4420,17 @@ body.enemy-inspect--dragging-body {
   flex-direction: row;
   flex-wrap: wrap;
   align-items: stretch;
-  gap: 0.9rem 1.15rem;
+  gap: 1.15rem 1.85rem;
   height: 100%;
   box-sizing: border-box;
-  padding: 0.2rem 0.15rem 0.15rem;
+  padding: 0.35rem 0.25rem 0.35rem;
 }
 
 .shop-bunker-viz-layout__preview {
   flex: 0 0 auto;
   width: 200px;
   max-width: 100%;
-  padding: 0.2rem;
+  padding: 0.35rem 0.45rem 0.35rem 0.15rem;
   box-sizing: border-box;
 }
 
@@ -4444,17 +4444,35 @@ body.enemy-inspect--dragging-body {
 .shop-bunker-viz-layout__col {
   flex: 1 1 200px;
   min-width: 0;
-  padding: 0.15rem 0.05rem 0.25rem;
+  padding: 0.25rem 0.15rem 0.35rem 0.35rem;
   box-sizing: border-box;
+}
+
+.shop-bunker-viz-layout__col > .shop-hero-stats-head {
+  margin-bottom: 0.5rem;
+}
+
+.shop-bunker-viz-layout__col .gold-shop-hero-stats-grid.lol-stats-list {
+  margin-top: 0.15rem;
+  margin-bottom: 0.45rem;
+}
+
+.shop-bunker-viz-layout__col .lol-stats-col {
+  gap: 0.38rem;
+}
+
+.shop-bunker-viz-layout__col .lol-stat-cell {
+  padding: 0.18rem 0.2rem;
+  margin: 0;
 }
 
 .shop-bunker-level-row {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.35rem 0.6rem;
-  margin-bottom: 0.38rem;
-  padding: 0.32rem 0.45rem;
+  gap: 0.45rem 0.75rem;
+  margin-bottom: 0.55rem;
+  padding: 0.42rem 0.55rem;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.22);
   border: 1px solid rgba(201, 162, 39, 0.22);
@@ -4476,13 +4494,18 @@ body.enemy-inspect--dragging-body {
 }
 
 .shop-bunker-skills-block {
-  margin-top: 0.25rem;
-  padding-top: 0.42rem;
+  margin-top: 0.45rem;
+  padding-top: 0.65rem;
   border-top: 1px solid rgba(201, 162, 39, 0.38);
 }
 
 .shop-bunker-skills-block__head {
-  margin-bottom: 0.32rem !important;
+  margin-bottom: 0.48rem !important;
+}
+
+.shop-bunker-skills-block .gold-shop-hero-skills-row {
+  gap: 0.55rem;
+  margin-bottom: 0.35rem;
 }
 
 .shop-screen__panel--gold .gold-shop-bunker-skill--locked {
@@ -4496,9 +4519,10 @@ body.enemy-inspect--dragging-body {
 }
 
 .shop-bunker-viz-layout__hint {
-  margin: 0.4rem 0 0.32rem;
+  margin: 0.65rem 0 0.5rem;
+  padding: 0.35rem 0.2rem 0;
   font-size: 0.72rem;
-  line-height: 1.38;
+  line-height: 1.45;
   color: rgba(200, 190, 170, 0.9);
 }
 
@@ -4508,10 +4532,11 @@ body.enemy-inspect--dragging-body {
   flex-wrap: nowrap;
   justify-content: center;
   align-items: stretch;
-  gap: 0.55rem 0.75rem;
+  gap: 0.65rem 0.95rem;
   width: 100%;
   box-sizing: border-box;
-  padding: 0.45rem 0.25rem 0.2rem;
+  padding: 0.65rem 0.35rem 0.15rem;
+  margin-top: 0.15rem;
 }
 
 .shop-screen__panel--gold .shop-bunker-viz-layout__actions .shop-bunker-action-btn {
@@ -4638,12 +4663,18 @@ body.enemy-inspect--dragging-body {
 @media (max-width: 640px) {
   .shop-bunker-viz-layout {
     flex-direction: column;
+    gap: 1.05rem;
   }
 
   .shop-bunker-viz-layout__preview {
     width: 100%;
     max-width: 280px;
     margin: 0 auto;
+    padding: 0.35rem 0.25rem;
+  }
+
+  .shop-bunker-viz-layout__col {
+    padding: 0.4rem 0.25rem 0.45rem;
   }
 }
 
