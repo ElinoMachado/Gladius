@@ -4555,6 +4555,11 @@ body.enemy-inspect--dragging-body {
   backdrop-filter: blur(2px);
 }
 
+/* `display: flex` acima ganha à folha de estilo do `[hidden]`; sem isto o modal fica sempre visível. */
+.shop-modal-overlay[hidden] {
+  display: none !important;
+}
+
 .shop-modal {
   max-width: 26rem;
   width: 100%;
