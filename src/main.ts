@@ -3817,6 +3817,33 @@ function tooltipBunkerTiroCombat(h: Unit, _m: GameModel): string {
   );
 }
 
+/** Tooltip ao pairar o mapa no hex do bunker (combate); não depende do alcance de movimento. */
+function combatBunkerWorldTooltipHtml(
+  b: BunkerState,
+  occupant: Unit | undefined,
+): string {
+  const nv = bunkerDisplayLevel(b.tier);
+  const parts: string[] = [
+    `<div class="game-ui-tooltip-inner">`,
+    `<div class="game-ui-tooltip-title">Bunker nv. ${nv}</div>`,
+    `<p class="game-ui-tooltip-passive"><span class="tt-lbl">PV da estrutura:</span> ${formatTooltipNumber(b.hp)} / ${formatTooltipNumber(b.maxHp)}</p>`,
+    `<p class="game-ui-tooltip-passive"><span class="tt-lbl">Defesa:</span> ${formatTooltipNumber(b.defesa)}</p>`,
+  ];
+  if (occupant && occupant.isPlayer && occupant.hp > 0) {
+    parts.push(
+      `<p class="game-ui-tooltip-subhead">${escapeHtml(occupant.name)} no bunker</p>`,
+      `<p class="game-ui-tooltip-passive"><span class="tt-lbl">PV do herói:</span> ${formatTooltipNumber(occupant.hp)} / ${formatTooltipNumber(occupant.maxHp)} · <span class="tt-lbl">Mana:</span> ${formatTooltipNumber(occupant.mana)} / ${formatTooltipNumber(occupant.maxMana)}</p>`,
+      `<p class="game-ui-tooltip-passive game-ui-tooltip-passive--tight-top">Inimigos reduzem primeiro a vida do bunker enquanto estiveres dentro.</p>`,
+    );
+  } else {
+    parts.push(
+      `<p class="game-ui-tooltip-passive game-ui-tooltip-passive--tight-top">Move o herói até este hex (com movimento disponível) para entrar e proteger-te.</p>`,
+    );
+  }
+  parts.push(`</div>`);
+  return parts.join("");
+}
+
 function tooltipSkillSentenca(h: Unit, m: GameModel, sk: SkillDef): string {
   const w = h.weaponLevel;
   const bio = biomeAt(m.grid, h.q, h.r) as BiomeId;
@@ -5372,7 +5399,7 @@ function showCombatHUD(): void {
       const B = bunkHere;
       const hpR = B.maxHp > 0 ? Math.max(0, Math.min(1, B.hp / B.maxHp)) : 0;
       lolHpFill.style.transform = `scaleX(${hpR})`;
-      lolHpTxt.textContent = `${B.hp} / ${B.maxHp}`;
+      lolHpTxt.textContent = `Herói ${formatTooltipNumber(h.hp)}/${formatTooltipNumber(h.maxHp)} · Bunker ${formatTooltipNumber(B.hp)}/${formatTooltipNumber(B.maxHp)}`;
     } else {
       const hpR =
         h.maxHp > 0 ? Math.max(0, Math.min(1, h.hp / h.maxHp)) : 0;
@@ -5418,7 +5445,7 @@ function showCombatHUD(): void {
       tooltipPassiveHtml(
         bunkHud ? "bunker" : tmpl.name,
         bunkHud
-          ? `${tmpl.name} dentro do bunker — a barra verde mostra a vida da estrutura.`
+          ? `${tmpl.name} dentro do bunker — a barra verde é a vida da estrutura; ao lado lê-se PV do herói e do bunker. A mana do herói continua na barra azul.`
           : isViewingActive
             ? "Herói ativo na ordem de jogada."
             : "Apenas visualização — não é o turno deste herói.",
@@ -5876,6 +5903,25 @@ function showCombatHUD(): void {
         positionGameTooltip(tip, ev.clientX, ev.clientY);
         tip.classList.add("game-ui-tooltip--visible");
         clearBunkerHoverHint();
+        return;
+      }
+      const r = canvas.getBoundingClientRect();
+      const ndcX = ((ev.clientX - r.left) / r.width) * 2 - 1;
+      const ndcY = -((ev.clientY - r.top) / r.height) * 2 + 1;
+      const hex = view.pickHex(ndcX, ndcY, model.grid);
+      const b =
+        hex != null ? model.bunkerAtHex(hex.q, hex.r) : undefined;
+      if (b && b.hp > 0) {
+        const occ =
+          b.occupantId != null
+            ? model.units.find((u) => u.id === b.occupantId)
+            : undefined;
+        const tip = getOrCreateGameTooltip();
+        tip.innerHTML = combatBunkerWorldTooltipHtml(b, occ);
+        tip.hidden = false;
+        positionGameTooltip(tip, ev.clientX, ev.clientY);
+        tip.classList.add("game-ui-tooltip--visible");
+        updateBunkerHoverHint(ev);
         return;
       }
       hideGameTooltip();
