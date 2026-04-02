@@ -4410,20 +4410,28 @@ body.enemy-inspect--dragging-body {
   box-sizing: border-box;
 }
 
+/* Mais respiro dentro da moldura dourada do bunker */
+.shop-screen__panel--gold .shop-bunker-viz.shop-hero-viz {
+  padding: 0.9rem 1rem 1.05rem;
+}
+
 .shop-bunker-viz-layout {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   align-items: stretch;
-  gap: 0.75rem 1rem;
+  gap: 0.9rem 1.15rem;
   height: 100%;
   box-sizing: border-box;
+  padding: 0.2rem 0.15rem 0.15rem;
 }
 
 .shop-bunker-viz-layout__preview {
   flex: 0 0 auto;
   width: 200px;
   max-width: 100%;
+  padding: 0.2rem;
+  box-sizing: border-box;
 }
 
 .shop-bunker-viz-layout__3d-host {
@@ -4436,6 +4444,8 @@ body.enemy-inspect--dragging-body {
 .shop-bunker-viz-layout__col {
   flex: 1 1 200px;
   min-width: 0;
+  padding: 0.15rem 0.05rem 0.25rem;
+  box-sizing: border-box;
 }
 
 .shop-bunker-level-row {
@@ -4480,6 +4490,11 @@ body.enemy-inspect--dragging-body {
   filter: grayscale(0.2);
 }
 
+/* Skills do painel bunker: só ícone (sem canto “0” de mana) */
+.shop-screen__panel--gold .gold-shop-skill-chip--no-mana.lol-skill-btn--square {
+  justify-content: center;
+}
+
 .shop-bunker-viz-layout__hint {
   margin: 0.4rem 0 0.32rem;
   font-size: 0.72rem;
@@ -4490,10 +4505,23 @@ body.enemy-inspect--dragging-body {
 .shop-bunker-viz-layout__actions {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
-  align-items: center;
-  gap: 0.5rem 0.65rem;
+  align-items: stretch;
+  gap: 0.55rem 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.25rem 0.2rem;
+}
+
+.shop-screen__panel--gold .shop-bunker-viz-layout__actions .shop-bunker-action-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 12.5rem;
+  width: auto;
+  white-space: nowrap;
+  padding: 0.52rem 0.65rem;
+  font-size: 0.86rem;
 }
 
 .shop-bunker-action-btn {
@@ -4506,7 +4534,8 @@ body.enemy-inspect--dragging-body {
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  max-width: 100%;
 }
 
 .shop-bunker-action-btn__inner--solo {

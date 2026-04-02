@@ -2628,6 +2628,8 @@ function goldShopSkillChipHtml(opts: {
   extraClass?: string;
   extraStyle?: string;
   ultFill?: boolean;
+  /** Sem badge de mana (ex.: skills do bunker na loja, só ícone como no pedido). */
+  omitManaBadge?: boolean;
 }): string {
   const parts = [
     "btn",
@@ -2636,6 +2638,7 @@ function goldShopSkillChipHtml(opts: {
     "gold-shop-skill-chip",
   ];
   if (opts.extraClass) parts.push(opts.extraClass);
+  if (opts.omitManaBadge) parts.push("gold-shop-skill-chip--no-mana");
   const cls = parts.join(" ");
   const st = opts.extraStyle ? ` style="${opts.extraStyle}"` : "";
   const fill = opts.ultFill
@@ -2645,7 +2648,10 @@ function goldShopSkillChipHtml(opts: {
     opts.cdTurns != null && opts.cdTurns > 0
       ? `<span class="lol-skill-cd-badge" aria-hidden="true">${String(opts.cdTurns)}</span>`
       : "";
-  return `<button type="button" class="${cls}" tabindex="0"${st} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${fill}${opts.iconHtml}<span class="lol-mana-badge" aria-hidden="true">${escapeHtml(opts.manaBadge)}</span></button>`;
+  const manaSpan = opts.omitManaBadge
+    ? ""
+    : `<span class="lol-mana-badge" aria-hidden="true">${escapeHtml(opts.manaBadge)}</span>`;
+  return `<button type="button" class="${cls}" tabindex="0"${st} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${fill}${opts.iconHtml}${manaSpan}</button>`;
 }
 
 /** Preenche a fila de skills na loja com os mesmos tooltips que no combate. */
@@ -2658,6 +2664,8 @@ function mountGoldShopHeroSkillsRow(
   if (!h.heroClass) return;
   const tmpl = HEROES[h.heroClass];
   const cdEff = (cd: number) => (m.devSandboxMode ? 0 : cd);
+  const inGoldShop =
+    m.phase === "shop_initial" || m.phase === "shop_wave";
   const append = (html: string, tip: () => string): void => {
     const b = el(html);
     b.addEventListener("click", (e) => e.preventDefault());
@@ -2682,10 +2690,17 @@ function mountGoldShopHeroSkillsRow(
       goldShopSkillChipHtml({
         iconHtml: skillButtonIconHtml("bunker_minas"),
         manaBadge: manaCostBadgeText(0),
-        ariaLabel: ariaSkillLabel("Minas terrestres", cdM),
-        cdTurns: cdM > 0 ? cdM : undefined,
+        ariaLabel: inGoldShop
+          ? "Minas terrestres"
+          : ariaSkillLabel("Minas terrestres", cdM),
+        cdTurns:
+          inGoldShop || cdM <= 0 ? undefined : cdM,
+        omitManaBadge: inGoldShop,
       }),
-      () => tooltipBunkerMinasCombat(h, m),
+      () =>
+        inGoldShop
+          ? bunkerMinasShopTooltipHtml(bunk.tier)
+          : tooltipBunkerMinasCombat(h, m),
     );
     if (bunk.tier >= 2) {
       const cdT = cdEff(h.skillCd["bunker_tiro_preciso"] ?? 0);
@@ -2693,10 +2708,17 @@ function mountGoldShopHeroSkillsRow(
         goldShopSkillChipHtml({
           iconHtml: skillButtonIconHtml("bunker_tiro_preciso"),
           manaBadge: manaCostBadgeText(0),
-          ariaLabel: ariaSkillLabel("Tiro preciso", cdT),
-          cdTurns: cdT > 0 ? cdT : undefined,
+          ariaLabel: inGoldShop
+            ? "Tiro preciso"
+            : ariaSkillLabel("Tiro preciso", cdT),
+          cdTurns:
+            inGoldShop || cdT <= 0 ? undefined : cdT,
+          omitManaBadge: inGoldShop,
         }),
-        () => tooltipBunkerTiroCombat(h, m),
+        () =>
+          inGoldShop
+            ? bunkerTiroShopTooltipHtml(bunk.tier)
+            : tooltipBunkerTiroCombat(h, m),
       );
     }
   } else {
@@ -3259,6 +3281,8 @@ function mountGoldShopBunkerSkillsRow(row: HTMLElement, bunk: BunkerState): void
       iconHtml: skillButtonIconHtml("bunker_minas"),
       manaBadge: manaCostBadgeText(0),
       ariaLabel: "Minas terrestres",
+      omitManaBadge: true,
+      extraClass: "gold-shop-skill-chip--bunker-panel",
     }),
     () => bunkerMinasShopTooltipHtml(t),
   );
@@ -3267,7 +3291,13 @@ function mountGoldShopBunkerSkillsRow(row: HTMLElement, bunk: BunkerState): void
       iconHtml: skillButtonIconHtml("bunker_tiro_preciso"),
       manaBadge: manaCostBadgeText(0),
       ariaLabel: "Tiro preciso",
-      extraClass: tiroOk ? undefined : "gold-shop-bunker-skill--locked",
+      omitManaBadge: true,
+      extraClass: [
+        "gold-shop-skill-chip--bunker-panel",
+        tiroOk ? "" : "gold-shop-bunker-skill--locked",
+      ]
+        .filter(Boolean)
+        .join(" "),
     }),
     () => bunkerTiroShopTooltipHtml(t),
   );
