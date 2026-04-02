@@ -235,7 +235,7 @@ export function createEnemyUnit(
   const mult = wm * pm;
   const hp = Math.round(arch.baseHp * mult);
   const dano = Math.round(arch.baseDano * mult);
-  const def = Math.round(arch.baseDefesa * mult);
+  const def = Math.round(arch.baseDefesa * mult * 0.75);
   const guaranteeCrystal = arch.tier === "elite";
   return {
     id: nid("enemy"),

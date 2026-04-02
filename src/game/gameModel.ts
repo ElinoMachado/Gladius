@@ -990,6 +990,7 @@ export class GameModel {
       if (u.ultimateId === "fada_cura") {
         u.flying = true;
         for (const ally of this.getParty()) {
+          if (ally.hp <= 0) continue;
           const shield = Math.floor(ally.maxHp * 0.5);
           ally.shieldGGBlue += shield;
         }
@@ -3255,6 +3256,7 @@ export class GameModel {
       effectiveHealIncludesPotencial?: boolean;
     },
   ): void {
+    if (target.hp <= 0) return;
     const pct = 1 + src.potencialCuraEscudo / 100;
     const amt = opts?.effectiveHealIncludesPotencial
       ? roundToCombatDecimals(base)
@@ -3555,6 +3557,7 @@ export class GameModel {
   }
 
   private applyEndTurnEffects(u: Unit): void {
+    if (u.hp <= 0) return;
     const bio = biomeAt(this.grid, u.q, u.r) as BiomeId;
     const mana0 = u.mana;
     const hp0 = u.hp;
@@ -4214,6 +4217,23 @@ export class GameModel {
     const w = Math.max(1, Math.min(FINAL_VICTORY_WAVE, Math.floor(n)));
     this.startWave(w);
     this.releaseEnemyPhaseAfterWaveIntro();
+  }
+
+  /** Modo sandbox: matar herói (remove da arena como morte normal). */
+  sandboxKillHero(heroId: string): void {
+    if (!this.devSandboxMode || this.phase !== "combat") return;
+    const u = this.units.find((x) => x.id === heroId);
+    if (!u?.isPlayer || u.hp <= 0) return;
+    u.hp = 0;
+    this.log(`[Sandbox] ${u.name} eliminado(a).`);
+    this.onDeaths();
+    if (!this.units.some((x) => x.isPlayer)) {
+      this.phase = "defeat";
+      this.meta.crystals += this.crystalsRun;
+      this.saveMeta();
+      this.log("Derrota.");
+    }
+    this.emit();
   }
 
   pickArtifact(artifactId: string): void {

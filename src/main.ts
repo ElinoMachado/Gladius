@@ -1170,11 +1170,11 @@ function showEnemyCompendium(): void {
     const mult = pm * wm;
     const hpS = Math.round(def.baseHp * mult);
     const danoS = Math.round(def.baseDano * mult);
-    const defS = Math.round(def.baseDefesa * mult);
+    const defS = Math.round(def.baseDefesa * mult * 0.75);
     const movGame = def.movimento + 2;
     detailEl.innerHTML = `<h2 class="enemy-codex-name">${escapeHtml(def.name)}</h2>
       <p class="enemy-codex-meta">${escapeHtml(enemyTierLabelPt(def.tier))} · ${escapeHtml(enemyWaveRangeLabel(def))}${tag}</p>
-      <p class="enemy-codex-scale-hint">Atributos abaixo: onda 1 · <strong>${partyN}</strong> herói(s) · movimento como no combate (+2).</p>
+      <p class="enemy-codex-scale-hint">Atributos abaixo: onda 1 · <strong>${partyN}</strong> herói(s) · movimento como no combate (+2). Defesa: valor já com −25% global no combate (face à base × escala).</p>
       <dl class="enemy-codex-stats">
         <dt>HP</dt><dd>${hpS} <span class="enemy-codex-base-stat">(base ${def.baseHp})</span></dd>
         <dt>Dano</dt><dd>${danoS} <span class="enemy-codex-base-stat">(base ${def.baseDano})</span></dd>
@@ -2276,6 +2276,17 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
   }).join("");
   const gridInner = hero ? sandboxArtifactTilesHtml(hero) : "";
   const heroLabelText = hero ? escapeHtml(hero.name) : "—";
+  const partyKillRows = model
+    .getParty()
+    .filter((p) => p.hp > 0)
+    .map(
+      (p) =>
+        `<div class="combat-sandbox-hero-row">
+      <span class="combat-sandbox-hero-row__name">${escapeHtml(p.name)}</span>
+      <button type="button" class="btn combat-sandbox-kill-btn" data-sandbox-kill-hero="${escapeHtml(p.id)}">Matar</button>
+    </div>`,
+    )
+    .join("");
   const panel = el(`<aside class="combat-sandbox-panel" id="combat-sandbox-panel" aria-label="Ferramentas de teste sandbox">
     <div class="combat-sandbox-panel__head combat-sandbox-panel__drag-handle" title="Arrastar · tecla A mostrar/ocultar">Sandbox</div>
     <p class="combat-sandbox-panel__pill">Ouro/cristais/essências amplos · sem CDR · ultimate pronta</p>
@@ -2284,6 +2295,15 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
       <select id="combat-sandbox-wave-sel" class="combat-sandbox-panel__wave-sel" aria-label="Recomeçar combate nesta wave">${waveOpts}</select>
     </div>
     <p class="combat-sandbox-panel__hero-hint">Herói: <strong>${heroLabelText}</strong> (turno ou primeiro vivo)</p>
+    <section class="combat-sandbox-heroes" aria-label="Heróis sandbox">
+      <h3 class="shop-sandbox-artifacts__title">Heróis</h3>
+      <p class="shop-sandbox-artifacts__hint">Matar remove o herói do combate (como morte).</p>
+      ${
+        partyKillRows
+          ? `<div class="combat-sandbox-heroes__list" role="group">${partyKillRows}</div>`
+          : `<p class="combat-sandbox-panel__muted">Nenhum herói vivo.</p>`
+      }
+    </section>
     <section class="shop-sandbox-artifacts combat-sandbox-artifacts" aria-label="Artefatos sandbox">
       <h3 class="shop-sandbox-artifacts__title">Artefatos</h3>
       <p class="shop-sandbox-artifacts__hint">Esquerdo +1 · direito −1 · pairar para níveis.</p>
@@ -2356,6 +2376,20 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
       window.addEventListener("pointermove", onSandboxDragMove, { signal });
       window.addEventListener("pointerup", onSandboxDragEnd, { signal });
       window.addEventListener("pointercancel", onSandboxDragEnd, { signal });
+    },
+    { signal },
+  );
+
+  panel.addEventListener(
+    "click",
+    (e) => {
+      const btn = (e.target as HTMLElement).closest(
+        "[data-sandbox-kill-hero]",
+      ) as HTMLButtonElement | null;
+      if (!btn || !panel.contains(btn)) return;
+      const hid = btn.dataset.sandboxKillHero;
+      if (!hid) return;
+      model.sandboxKillHero(hid);
     },
     { signal },
   );

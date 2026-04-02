@@ -7755,6 +7755,53 @@ select.forge-biome-sel option:disabled {
   -webkit-overflow-scrolling: touch;
 }
 
+.combat-sandbox-heroes {
+  margin: 0.35rem 0 0.5rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid rgba(100, 160, 220, 0.22);
+}
+
+.combat-sandbox-heroes__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.combat-sandbox-hero-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.5rem;
+  padding: 0.28rem 0.35rem;
+  border-radius: 6px;
+  background: rgba(18, 40, 58, 0.55);
+  border: 1px solid rgba(120, 170, 210, 0.25);
+}
+
+.combat-sandbox-hero-row__name {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #d8e8f8;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.combat-sandbox-kill-btn {
+  flex: 0 0 auto;
+  font-size: 0.68rem !important;
+  padding: 0.2rem 0.45rem !important;
+  border-color: rgba(220, 100, 90, 0.55) !important;
+  color: #ffb0a8 !important;
+  background: rgba(50, 22, 22, 0.75) !important;
+}
+
+.combat-sandbox-kill-btn:hover:not(:disabled) {
+  border-color: #e87060 !important;
+  color: #fff !important;
+  background: rgba(90, 32, 28, 0.9) !important;
+}
+
 .wave-loot-toast {
   position: fixed;
   left: 50%;
