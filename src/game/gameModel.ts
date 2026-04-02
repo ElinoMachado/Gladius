@@ -3242,12 +3242,12 @@ export class GameModel {
     return best;
   }
 
-  /** Mãos venenosas: adiciona 4 instâncias de dano (3×acúmulos cada); soma à fila existente. */
+  /** Mãos venenosas: adiciona 2 instâncias de dano (3×acúmulos cada); soma à fila existente. */
   private applyPoison(att: Unit, tgt: Unit): void {
     const s = att.artifacts["maos_venenosas"] ?? 0;
     if (s <= 0) return;
     const dmg = 3 * s;
-    const add = Array.from({ length: 4 }, () => dmg);
+    const add = Array.from({ length: 2 }, () => dmg);
     const cur = tgt.poison?.instances ?? [];
     tgt.poison = { instances: [...cur, ...add] };
   }

@@ -39,7 +39,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Mãos venenosas",
     rarity: "common",
     description:
-      "Ao causar dano: +4 instâncias de veneno. Causa 3 de dano. Este efeito é acumulável e ignora a defesa.",
+      "Ao causar dano: +2 instâncias de veneno. Causa 3 de dano. Este efeito é acumulável e ignora a defesa.",
   },
   {
     id: "ronin",
