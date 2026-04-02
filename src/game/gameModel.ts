@@ -113,6 +113,8 @@ import {
   FURACAO_ULT_TAIL_BUFFER_MS,
   GOLPE_RELAMPAGO_MOVE_MS,
   GOLPE_RELAMPAGO_WINDUP_MS,
+  POST_COMBAT_FLOAT_UI_DELAY_MS,
+  POST_COMBAT_FLOAT_WAVE_STAGGER_AFTER_MS,
   PISOTEAR_FIRST_DAMAGE_MS,
   PISOTEAR_STAGGER_MS,
   PISOTEAR_TAIL_BUFFER_MS,
@@ -1776,12 +1778,15 @@ export class GameModel {
     });
   }
 
-  private finishEnemyPhaseAfterAllMoves(): void {
+  /** Fecha fase inimiga; `skipFloatDelay` evita espera pós-floats (ex.: retorno do level-up). */
+  private finishEnemyPhaseAfterAllMoves(skipFloatDelay = false): void {
     this.inEnemyPhase = false;
     this.lastEnemyActedId = null;
     this.enemyTurnQueue = [];
     this.currentHeroIndex = 0;
     if (this.enemies().every((x) => x.hp <= 0)) {
+      const waveDelay =
+        POST_COMBAT_FLOAT_UI_DELAY_MS + POST_COMBAT_FLOAT_WAVE_STAGGER_AFTER_MS;
       const runWaveClear = (): void => {
         if (this.hasLivingEnemies()) return;
         if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") {
@@ -1792,7 +1797,23 @@ export class GameModel {
           );
           return;
         }
-        if (this.phase === "combat") this.onWaveCleared();
+        if (this.phase !== "combat") return;
+        if (skipFloatDelay) {
+          this.onWaveCleared();
+          return;
+        }
+        this.queueCombat(waveDelay, () => {
+          if (this.hasLivingEnemies()) return;
+          if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") {
+            enqueueCombatOutcome(
+              combatOutcomePriority.waveClear,
+              "wave-clear",
+              () => this.attemptWaveClearAfterLevelUi(),
+            );
+            return;
+          }
+          if (this.phase === "combat") this.onWaveCleared();
+        });
       };
       if (this.hasPendingCombatSchedule()) {
         enqueueCombatOutcome(
@@ -1931,7 +1952,12 @@ export class GameModel {
    * Todos os inimigos morreram durante ação de herói: aplica o mesmo fecho que o fim da fase inimiga
    * (vitória/loja). Chamado após Sentença/AoE ou ao voltar do level-up com arena limpa.
    */
-  private tryResolveWaveClearAfterCombatResume(): void {
+  /**
+   * @param skipFloatDelay — `true` ao voltar do level-up/ultimate (sem floats de kill recentes).
+   */
+  private tryResolveWaveClearAfterCombatResume(
+    skipFloatDelay = false,
+  ): void {
     if (this.hasLivingEnemies()) return;
     if (
       this.phase !== "combat" &&
@@ -1940,7 +1966,23 @@ export class GameModel {
     ) {
       return;
     }
-    this.finishEnemyPhaseAfterAllMoves();
+    this.finishEnemyPhaseAfterAllMoves(skipFloatDelay);
+  }
+
+  /**
+   * Após esperar floats: se o level-up abriu entretanto, retoma o fecho de wave sem novo atraso.
+   */
+  private attemptWaveClearAfterLevelUi(): void {
+    if (this.hasLivingEnemies()) return;
+    if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") {
+      enqueueCombatOutcome(
+        combatOutcomePriority.waveClear,
+        "wave-clear",
+        () => this.attemptWaveClearAfterLevelUi(),
+      );
+      return;
+    }
+    if (this.phase === "combat") this.onWaveCleared();
   }
 
   private onWaveCleared(): void {
@@ -4273,10 +4315,13 @@ export class GameModel {
     u.xp += gained;
   }
 
-  /** Sobe de nível só após fechar o lote de dano/mortes (evita menu no meio de multi-hit). */
+  /** Sobe de nível após os números flutuantes de combate (evita menu a tapar o dano). */
   private flushCombatLevelUp(hero: Unit): void {
     if (this.phase !== "combat" || !hero.isPlayer || hero.hp <= 0) return;
-    this.checkLevelUp(hero);
+    this.queueCombat(POST_COMBAT_FLOAT_UI_DELAY_MS, () => {
+      if (this.phase !== "combat" || !hero.isPlayer || hero.hp <= 0) return;
+      this.checkLevelUp(hero);
+    });
   }
 
   checkLevelUp(u: Unit): void {
@@ -4507,7 +4552,7 @@ export class GameModel {
     }
     this.checkLevelUp(u);
     if (this.phase === "combat") {
-      this.tryResolveWaveClearAfterCombatResume();
+      this.tryResolveWaveClearAfterCombatResume(true);
     }
     flushCombatOutcomeQueue({
       hasPendingCombatSchedule: () => this.hasPendingCombatSchedule(),
@@ -4529,7 +4574,7 @@ export class GameModel {
     this.phase = "combat";
     this.checkLevelUp(u);
     if (this.phase === "combat") {
-      this.tryResolveWaveClearAfterCombatResume();
+      this.tryResolveWaveClearAfterCombatResume(true);
     }
     flushCombatOutcomeQueue({
       hasPendingCombatSchedule: () => this.hasPendingCombatSchedule(),

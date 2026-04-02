@@ -34,3 +34,13 @@ export const PISOTEAR_TAIL_BUFFER_MS = 220;
 export const GOLPE_RELAMPAGO_MOVE_MS = 340;
 /** Sem deslocamento no mapa: pausa antes do impacto para ler o golpe. */
 export const GOLPE_RELAMPAGO_WINDUP_MS = 240;
+
+/**
+ * Após dano/cura em números flutuantes (CSS `.combat-float` ~0,92s + margem) antes de abrir level-up.
+ * Ver também `spawnCombatFloat` remove @ 950ms em main.ts.
+ */
+export const POST_COMBAT_FLOAT_UI_DELAY_MS = 1050;
+/**
+ * Fim de wave após o slot do level-up (ms a mais que o delay acima) para `checkLevelUp` correr primeiro.
+ */
+export const POST_COMBAT_FLOAT_WAVE_STAGGER_AFTER_MS = 80;
