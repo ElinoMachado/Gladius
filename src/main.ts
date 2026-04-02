@@ -658,6 +658,12 @@ function combatGoldCoinSvgHtml(extraSvgClass = ""): string {
   return `<svg class="${svgCl}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" focusable="false" aria-hidden="true"><circle cx="24" cy="24" r="14.5" fill="#e8b923" stroke="#7a5a10" stroke-width="1.4"/><ellipse cx="19" cy="18" rx="5" ry="3" fill="#fff8c4" opacity="0.42"/><path fill="#c9a010" d="M24 33.2a9.2 9.2 0 01-1.2-18.3 9.2 9.2 0 011.2 18.3z" opacity="0.22"/></svg>`;
 }
 
+/** Cristal meta (mesmo desenho que o HUD de combate). */
+function metaCrystalIconSvgHtml(extraSvgClass = ""): string {
+  const svgCl = ["shop-meta-crystal-svg", extraSvgClass].filter(Boolean).join(" ");
+  return `<svg class="${svgCl}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" focusable="false" aria-hidden="true"><path fill="#7ecbff" stroke="#1a5a8a" stroke-width="1.2" d="M24 6l14 12-14 26L10 18z"/><path fill="#b8e8ff" stroke="#2a7099" stroke-width="0.8" d="M24 12l9 8-9 18-9-18z" opacity="0.95"/></svg>`;
+}
+
 const COMBAT_LOG_VISIBLE_LS = "gladiadores-combat-log-visible";
 
 /** Não perguntar de novo se o jogador sai da 1.ª loja sem gastar ouro. */
@@ -2320,16 +2326,20 @@ function showGoldShop(isInitial: boolean): void {
         it.id === "xp_pct" && (h.artifacts["_xp_shop"] ?? 0) >= 60;
       const cant = h.ouro < it.cost || xpFull;
       const ico = statIconWrap(goldShopStatIcon(it.id), si);
-      return `<div class="shop-item">
-        <div class="shop-item__row">
+      const ariaBuy = cant
+        ? xpFull
+          ? `${it.label}: limite de melhoria atingido`
+          : `${it.label}: ouro insuficiente (${it.cost} ouro)`
+        : `Comprar ${it.label} por ${it.cost} ouro`;
+      return `<button type="button" class="shop-item shop-item--gold-buy" data-gold-shop-item="${escapeHtml(it.id)}" ${cant ? "disabled" : ""} aria-label="${escapeHtml(ariaBuy)}">
+        <span class="shop-item__row">
           <span class="shop-item__ico">${ico}</span>
-          <div class="shop-item__meta">
-            <div class="shop-item__label">${escapeHtml(it.label)}</div>
-            <div class="shop-item__cost">${it.cost} ouro</div>
-          </div>
-          <button type="button" class="btn shop-item__buy" data-item="${it.id}" ${cant ? "disabled" : ""}>Comprar</button>
-        </div>
-      </div>`;
+          <span class="shop-item__meta">
+            <span class="shop-item__label">${escapeHtml(it.label)}</span>
+            <span class="shop-item__cost">${it.cost} ouro</span>
+          </span>
+        </span>
+      </button>`;
     }).join("");
     const goldMultiHint =
       party.length > 1
@@ -2340,11 +2350,12 @@ function showGoldShop(isInitial: boolean): void {
     const canRefund =
       hasShopChanges &&
       (refundCost === 0 || model.meta.crystals >= refundCost);
-    const refundBtnLabel = !hasShopChanges
-      ? "Reembolsar"
+    const refundAria = !hasShopChanges
+      ? "Nada para reembolsar — o estado já é o da abertura da loja"
       : refundCost === 0
-        ? "Reembolsar (grátis)"
-        : `Reembolsar (${refundCost} cristais)`;
+        ? "Reembolsar alterações da loja (custo: 0 cristais meta)"
+        : `Reembolsar alterações da loja por ${refundCost} cristais meta`;
+    const refundBtnInner = `<span class="shop-refund-btn__inner"><span class="shop-refund-btn__label">Reembolsar</span><span class="shop-refund-btn__crystal-line" aria-hidden="true">${metaCrystalIconSvgHtml()}<span class="shop-refund-btn__crystal-num">${refundCost}</span><span class="shop-refund-btn__crystal-suffix"> cristais</span></span></span>`;
     const startBtnLabel = isInitial ? "Começar wave 1" : "Próxima wave";
     const goldBagsHtml = party
       .map((ph, i) => {
@@ -2403,9 +2414,9 @@ function showGoldShop(isInitial: boolean): void {
         </div>
         <div class="shop-footer">
           <p id="shop-footer-msg" class="shop-footer-msg" role="status" hidden></p>
-          <p class="shop-footer-crystals" aria-live="polite">Cristais meta: <strong>${model.meta.crystals}</strong>${refundCost > 0 ? ` · próximo reembolso: ${refundCost}` : ""}</p>
+          <p class="shop-footer-crystals" aria-live="polite">Cristais meta: <strong>${model.meta.crystals}</strong></p>
           <div class="shop-footer__actions">
-            <button type="button" class="btn" id="shop-refund" ${!canRefund ? "disabled" : ""} aria-label="${escapeHtml(refundBtnLabel)}">${escapeHtml(refundBtnLabel)}</button>
+            <button type="button" class="btn shop-refund-btn" id="shop-refund" ${!canRefund ? "disabled" : ""} aria-label="${escapeHtml(refundAria)}">${refundBtnInner}</button>
             <button type="button" class="btn btn-primary" id="shop-start">${escapeHtml(startBtnLabel)}</button>
           </div>
         </div>
@@ -2422,9 +2433,9 @@ function showGoldShop(isInitial: boolean): void {
       if (bunkerSkillsRow)
         mountGoldShopBunkerSkillsRow(bunkerSkillsRow, bunkerShop, h, model);
     }
-    panel.querySelectorAll("[data-item]").forEach((b) => {
+    panel.querySelectorAll("[data-gold-shop-item]").forEach((b) => {
       b.addEventListener("click", () => {
-        const id = (b as HTMLElement).dataset.item!;
+        const id = (b as HTMLElement).dataset.goldShopItem!;
         model.buyGoldItem(h.id, id);
         /* `emit` → `render` → `refreshGoldShop`; evitar segundo `renderShop` aqui (WebGL). */
       });

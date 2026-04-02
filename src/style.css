@@ -4732,8 +4732,94 @@ body.enemy-inspect--dragging-body {
     0 2px 12px rgba(0, 0, 0, 0.4);
 }
 
-.shop-screen__panel--gold .shop-item__buy:not(:disabled) {
-  border-color: rgba(201, 162, 39, 0.55);
+.shop-screen__panel--gold .shop-mid-cell--gold .shop-grid {
+  overflow: visible;
+}
+
+.shop-screen__panel--gold .shop-item.shop-item--gold-buy {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.5rem;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+  box-sizing: border-box;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.shop-screen__panel--gold .shop-item.shop-item--gold-buy:not(:disabled):hover {
+  transform: scale(1.15);
+  z-index: 2;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.35),
+    0 0 22px rgba(255, 255, 255, 0.22),
+    inset 0 0 14px rgba(255, 255, 255, 0.07),
+    0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+.shop-screen__panel--gold .shop-item.shop-item--gold-buy:not(:disabled):focus-visible {
+  outline: 2px solid rgba(255, 248, 220, 0.85);
+  outline-offset: 2px;
+}
+
+.shop-screen__panel--gold .shop-item.shop-item--gold-buy:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.shop-refund-btn.shop-refund-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  min-width: 0;
+}
+
+.shop-refund-btn__inner {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+}
+
+.shop-refund-btn__label {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.shop-refund-btn__crystal-line {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: #a8d4f8;
+}
+
+.shop-meta-crystal-svg {
+  width: 1.1em;
+  height: 1.1em;
+  flex-shrink: 0;
+  display: block;
+}
+
+.shop-refund-btn__crystal-num {
+  font-weight: 800;
+  color: #d4e8ff;
 }
 
 .shop-screen__panel--gold .shop-nav,
