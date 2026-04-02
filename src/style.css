@@ -2102,8 +2102,8 @@ h1 {
   align-items: center;
   justify-content: center;
   gap: 0.12rem;
-  padding: 0.35rem 0.7rem 0.42rem;
-  min-width: 4.25rem;
+  padding: 0.32rem 0.48rem 0.38rem;
+  min-width: 3.85rem;
   border-right: 1px solid #4a4038;
   background: linear-gradient(
     180deg,
@@ -3000,7 +3000,7 @@ body.enemy-inspect--dragging-body {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 0.4rem 0.65rem 0.5rem;
+  padding: 0.4rem 0.38rem 0.5rem;
   overflow: hidden;
 }
 
@@ -3015,11 +3015,11 @@ body.enemy-inspect--dragging-body {
 
 .lol-loadout {
   display: grid;
-  grid-template-columns: minmax(0, 212px) minmax(0, 1.35fr) minmax(0, 1.2fr) minmax(
+  grid-template-columns: minmax(0, 188px) minmax(0, 1.22fr) minmax(0, 1.12fr) minmax(
       0,
-      1fr
+      1.18fr
     );
-  gap: 0.45rem 0.55rem;
+  gap: 0.32rem 0.34rem;
   align-items: center;
   width: 100%;
   min-height: 0;
@@ -3151,7 +3151,7 @@ body.enemy-inspect--dragging-body {
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 0.82rem;
+  gap: 0.42rem;
   min-width: 0;
 }
 
@@ -3163,6 +3163,101 @@ body.enemy-inspect--dragging-body {
 .lol-bars-stack {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* PV herói + bunker: duas barras sobrepostas; botões escolhem qual fica opaca. */
+.lol-hp-slot {
+  width: 100%;
+}
+
+.lol-hp-single-wrap .lol-bar.lol-bar--hp {
+  margin-bottom: 0.3rem;
+}
+
+.lol-hp-dual-wrap {
+  margin-bottom: 0.3rem;
+}
+
+.lol-hp-dual-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.28rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.lol-hp-dual-stack {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 18px;
+  pointer-events: none;
+}
+
+.lol-hp-layer.lol-bar.lol-bar--hp {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  margin-bottom: 0;
+  width: 100%;
+  transition: opacity 0.22s ease;
+}
+
+.lol-hp-dual-stack[data-focus="bunker"] .lol-hp-layer--hero {
+  opacity: 0.38;
+  z-index: 0;
+}
+
+.lol-hp-dual-stack[data-focus="bunker"] .lol-hp-layer--bunker {
+  opacity: 1;
+  z-index: 1;
+}
+
+.lol-hp-dual-stack[data-focus="hero"] .lol-hp-layer--bunker {
+  opacity: 0.38;
+  z-index: 0;
+}
+
+.lol-hp-dual-stack[data-focus="hero"] .lol-hp-layer--hero {
+  opacity: 1;
+  z-index: 1;
+}
+
+.lol-hp-focus-toggle {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.15rem;
+}
+
+.lol-hp-focus-btn {
+  margin: 0;
+  padding: 0.1rem 0.26rem;
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+  border-radius: 4px;
+  border: 1px solid rgba(201, 162, 39, 0.38);
+  background: linear-gradient(180deg, rgba(44, 40, 52, 0.96), rgba(18, 16, 26, 0.98));
+  color: #c4bcb0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.lol-hp-focus-btn:hover {
+  border-color: rgba(228, 196, 100, 0.55);
+  color: #f2ebe0;
+}
+
+.lol-hp-focus-btn[aria-pressed="true"] {
+  border-color: rgba(100, 200, 120, 0.55);
+  background: linear-gradient(180deg, rgba(28, 72, 42, 0.95), rgba(14, 38, 24, 0.98));
+  color: #d8f5dc;
+  box-shadow: inset 0 0 0 1px rgba(80, 200, 100, 0.18);
 }
 
 .lol-loadout--inactive {
@@ -3327,7 +3422,7 @@ body.enemy-inspect--dragging-body {
 .lol-stats-cols {
   display: grid;
   grid-template-columns: repeat(var(--stats-cols, 3), minmax(0, 1fr));
-  gap: 0.2rem 0.45rem;
+  gap: 0.18rem 0.34rem;
   align-items: start;
 }
 
@@ -4860,9 +4955,15 @@ body.enemy-inspect--dragging-body {
 .shop-footer__actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   gap: 0.65rem 1rem;
+}
+
+.shop-screen__panel--gold .shop-footer__actions > .btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .shop-screen__panel--gold .shop-nav .btn,
@@ -5857,9 +5958,9 @@ body.enemy-inspect--dragging-body {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  gap: 0.28rem;
-  padding: 0.28rem 0.4rem;
-  max-width: min(52px, 14vw);
+  gap: 0.22rem;
+  padding: 0.24rem 0.32rem;
+  max-width: min(46px, 12vw);
   background: linear-gradient(
     180deg,
     rgba(28, 24, 40, 0.9),
@@ -7895,7 +7996,7 @@ select.forge-biome-sel option:disabled {
   .lol-loadout {
     grid-template-columns: minmax(0, 7.5rem) minmax(0, 1fr);
     grid-template-rows: auto auto auto;
-    gap: 0.32rem 0.42rem;
+    gap: 0.28rem 0.32rem;
   }
 
   .lol-col-passive {

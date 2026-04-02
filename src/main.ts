@@ -580,6 +580,9 @@ let combatInspectEnemyId: string | null = null;
 /** Herói cujo loadout LOL está em foco (pode ≠ turno atual). */
 let combatLolInspectHeroId: string | null = null;
 
+/** No bunker: qual barra de PV fica opaca em primeiro plano (a outra fica atrás, mais transparente). */
+let combatBunkerHpHudFocus: "hero" | "bunker" = "bunker";
+
 function lolViewedHero(m: GameModel): Unit | null {
   const cur = m.currentHero();
   if (combatLolInspectHeroId) {
@@ -688,7 +691,7 @@ function writeSkipInitialShopEmptyConfirm(on: boolean): void {
 
 function readCombatLogVisible(): boolean {
   const s = localStorage.getItem(COMBAT_LOG_VISIBLE_LS);
-  if (s === null) return true;
+  if (s === null) return false;
   return s === "1";
 }
 
@@ -4787,10 +4790,36 @@ function showCombatHUD(): void {
                   <span class="lol-champ-name" id="lol-name">—</span>
                   <span class="lol-biome-pill" id="lol-biome-pill"></span>
                 </div>
-                <div class="lol-bar lol-bar--hp" aria-hidden="true">
-                  <div class="lol-bar-track">
-                    <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill"></div>
-                    <span class="lol-bar-label" id="lol-hp-txt"></span>
+                <div class="lol-hp-slot">
+                  <div class="lol-hp-single-wrap" id="lol-hp-single-wrap">
+                    <div class="lol-bar lol-bar--hp" aria-hidden="true">
+                      <div class="lol-bar-track">
+                        <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill"></div>
+                        <span class="lol-bar-label" id="lol-hp-txt"></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="lol-hp-dual-wrap" id="lol-hp-dual-wrap" hidden>
+                    <div class="lol-hp-dual-row">
+                      <div class="lol-hp-dual-stack" id="lol-hp-dual-stack" data-focus="bunker">
+                        <div class="lol-bar lol-bar--hp lol-hp-layer lol-hp-layer--hero" aria-hidden="true">
+                          <div class="lol-bar-track">
+                            <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill-hero"></div>
+                            <span class="lol-bar-label" id="lol-hp-txt-hero"></span>
+                          </div>
+                        </div>
+                        <div class="lol-bar lol-bar--hp lol-hp-layer lol-hp-layer--bunker" aria-hidden="true">
+                          <div class="lol-bar-track">
+                            <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill-bunker"></div>
+                            <span class="lol-bar-label" id="lol-hp-txt-bunker"></span>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="lol-hp-focus-toggle" role="group" aria-label="Primeiro plano — barras de vida">
+                        <button type="button" class="lol-hp-focus-btn" data-lol-hp-focus="hero" id="lol-hp-btn-hero" title="Herói em primeiro plano" aria-pressed="false">Herói</button>
+                        <button type="button" class="lol-hp-focus-btn" data-lol-hp-focus="bunker" id="lol-hp-btn-bunker" title="Bunker em primeiro plano" aria-pressed="true">Bunker</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="lol-bar lol-bar--mana" aria-hidden="true">
@@ -4845,8 +4874,17 @@ function showCombatHUD(): void {
   const lolBiomePill = bottom.querySelector("#lol-biome-pill") as HTMLElement;
   const lolShieldFill = bottom.querySelector("#lol-shield-fill") as HTMLElement;
   const lolShieldTxt = bottom.querySelector("#lol-shield-txt") as HTMLElement;
+  const lolHpSingleWrap = bottom.querySelector("#lol-hp-single-wrap") as HTMLElement;
+  const lolHpDualWrap = bottom.querySelector("#lol-hp-dual-wrap") as HTMLElement;
+  const lolHpDualStack = bottom.querySelector("#lol-hp-dual-stack") as HTMLElement;
   const lolHpFill = bottom.querySelector("#lol-hp-fill") as HTMLElement;
   const lolHpTxt = bottom.querySelector("#lol-hp-txt") as HTMLElement;
+  const lolHpFillHero = bottom.querySelector("#lol-hp-fill-hero") as HTMLElement | null;
+  const lolHpTxtHero = bottom.querySelector("#lol-hp-txt-hero") as HTMLElement | null;
+  const lolHpFillBunker = bottom.querySelector("#lol-hp-fill-bunker") as HTMLElement | null;
+  const lolHpTxtBunker = bottom.querySelector("#lol-hp-txt-bunker") as HTMLElement | null;
+  const lolHpBtnHero = bottom.querySelector("#lol-hp-btn-hero") as HTMLButtonElement | null;
+  const lolHpBtnBunker = bottom.querySelector("#lol-hp-btn-bunker") as HTMLButtonElement | null;
   const lolManaFill = bottom.querySelector("#lol-mana-fill") as HTMLElement;
   const lolManaTxt = bottom.querySelector("#lol-mana-txt") as HTMLElement;
   const lolXpFill = bottom.querySelector("#lol-xp-fill") as HTMLElement;
@@ -4868,6 +4906,25 @@ function showCombatHUD(): void {
   btnLogRail.addEventListener("click", () => {
     setLogDockOpen(!combatLogExpanded);
   });
+
+  bottom.addEventListener(
+    "click",
+    (ev) => {
+      const t = (ev.target as HTMLElement).closest(
+        "[data-lol-hp-focus]",
+      ) as HTMLButtonElement | null;
+      if (!t || !bottom.contains(t)) return;
+      const f = t.getAttribute("data-lol-hp-focus");
+      if (f !== "hero" && f !== "bunker") return;
+      combatBunkerHpHudFocus = f;
+      lolHpDualStack?.setAttribute("data-focus", f);
+      if (lolHpBtnHero)
+        lolHpBtnHero.setAttribute("aria-pressed", f === "hero" ? "true" : "false");
+      if (lolHpBtnBunker)
+        lolHpBtnBunker.setAttribute("aria-pressed", f === "bunker" ? "true" : "false");
+    },
+    { signal: combatInputSignal },
+  );
 
   const refreshOverlays = (): void => {
     applyCombatOverlays();
@@ -5353,8 +5410,14 @@ function showCombatHUD(): void {
       lolLevel.textContent = "—";
       lolShieldFill.style.transform = "scaleX(0)";
       lolShieldTxt.textContent = "";
+      lolHpSingleWrap.hidden = false;
+      lolHpDualWrap.hidden = true;
       lolHpFill.style.transform = "scaleX(0)";
       lolHpTxt.textContent = "";
+      if (lolHpFillHero) lolHpFillHero.style.transform = "scaleX(0)";
+      if (lolHpTxtHero) lolHpTxtHero.textContent = "";
+      if (lolHpFillBunker) lolHpFillBunker.style.transform = "scaleX(0)";
+      if (lolHpTxtBunker) lolHpTxtBunker.textContent = "";
       lolManaFill.style.transform = "scaleX(0)";
       lolManaTxt.textContent = "";
       lolXpFill.style.transform = "scaleX(0)";
@@ -5395,12 +5458,33 @@ function showCombatHUD(): void {
     lolShieldFill.style.transform = `scaleX(${shR})`;
     lolShieldTxt.textContent =
       h.shieldGGBlue > 0 ? String(h.shieldGGBlue) : "0";
-    if (bunkHud && bunkHere) {
+    if (bunkHud && bunkHere && lolHpFillHero && lolHpTxtHero && lolHpFillBunker && lolHpTxtBunker) {
       const B = bunkHere;
-      const hpR = B.maxHp > 0 ? Math.max(0, Math.min(1, B.hp / B.maxHp)) : 0;
-      lolHpFill.style.transform = `scaleX(${hpR})`;
-      lolHpTxt.textContent = `Herói ${formatTooltipNumber(h.hp)}/${formatTooltipNumber(h.maxHp)} · Bunker ${formatTooltipNumber(B.hp)}/${formatTooltipNumber(B.maxHp)}`;
+      lolHpSingleWrap.hidden = true;
+      lolHpDualWrap.hidden = false;
+      lolHpDualStack.setAttribute("data-focus", combatBunkerHpHudFocus);
+      if (lolHpBtnHero)
+        lolHpBtnHero.setAttribute(
+          "aria-pressed",
+          combatBunkerHpHudFocus === "hero" ? "true" : "false",
+        );
+      if (lolHpBtnBunker)
+        lolHpBtnBunker.setAttribute(
+          "aria-pressed",
+          combatBunkerHpHudFocus === "bunker" ? "true" : "false",
+        );
+      const heroR =
+        h.maxHp > 0 ? Math.max(0, Math.min(1, h.hp / h.maxHp)) : 0;
+      const bunkR =
+        B.maxHp > 0 ? Math.max(0, Math.min(1, B.hp / B.maxHp)) : 0;
+      lolHpFillHero.style.transform = `scaleX(${heroR})`;
+      lolHpTxtHero.textContent = `${formatTooltipNumber(h.hp)} / ${formatTooltipNumber(h.maxHp)}`;
+      lolHpFillBunker.style.transform = `scaleX(${bunkR})`;
+      lolHpTxtBunker.textContent = `${formatTooltipNumber(B.hp)} / ${formatTooltipNumber(B.maxHp)}`;
     } else {
+      combatBunkerHpHudFocus = "bunker";
+      lolHpSingleWrap.hidden = false;
+      lolHpDualWrap.hidden = true;
       const hpR =
         h.maxHp > 0 ? Math.max(0, Math.min(1, h.hp / h.maxHp)) : 0;
       lolHpFill.style.transform = `scaleX(${hpR})`;
@@ -5445,7 +5529,7 @@ function showCombatHUD(): void {
       tooltipPassiveHtml(
         bunkHud ? "bunker" : tmpl.name,
         bunkHud
-          ? `${tmpl.name} dentro do bunker — a barra verde é a vida da estrutura; ao lado lê-se PV do herói e do bunker. A mana do herói continua na barra azul.`
+          ? `${tmpl.name} dentro do bunker — duas barras de PV sobrepostas: usa os botões Herói/Bunker para escolher qual fica em primeiro plano. A mana do herói está na barra azul.`
           : isViewingActive
             ? "Herói ativo na ordem de jogada."
             : "Apenas visualização — não é o turno deste herói.",
