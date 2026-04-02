@@ -4792,15 +4792,33 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       value: "Sim",
       statCategory: "utility",
     });
-  if (m.currentHero()?.id === h.id) {
+  if (h.isPlayer && h.heroClass) {
+    const cap = m.maxBasicAttacksForHero(h);
+    const theirTurn =
+      m.phase === "combat" &&
+      !m.inEnemyPhase &&
+      !m.duel &&
+      m.currentHero()?.id === h.id;
+    const dispNum = theirTurn ? m.basicLeft : cap;
+    const dispStr = formatTooltipNumber(dispNum);
+    let detailPlain: string | undefined;
+    if (!theirTurn) {
+      if (m.phase === "combat" && m.inEnemyPhase)
+        detailPlain = `Máximo ${formatTooltipNumber(cap)} por turno de herói. No turno deste herói, o valor mostra quantos restam.`;
+      else if (m.phase === "combat")
+        detailPlain = `Máximo ${formatTooltipNumber(cap)} por turno. No turno deste herói, este valor passa a mostrar os restantes.`;
+      else
+        detailPlain = `Máximo ${formatTooltipNumber(cap)} por turno no combate (braço forte, helmo rochoso). No teu turno, mostra os que ainda podes usar.`;
+    }
     cells.push({
       icon: "basic",
       label: "Ataque Extra",
-      value: formatTooltipNumber(m.basicLeft),
+      value: dispStr,
       statCategory: "offense",
       tooltipHtml: combatHeroStatTooltip({
         stat: "basic",
-        display: formatTooltipNumber(m.basicLeft),
+        display: dispStr,
+        ...(detailPlain ? { detailPlain } : {}),
       }),
     });
   }

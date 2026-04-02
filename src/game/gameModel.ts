@@ -2180,7 +2180,8 @@ export class GameModel {
     );
   }
 
-  private maxBasicAttacksForHero(h: Unit): number {
+  /** Ataques básicos permitidos por turno (base 1 + braço forte + helmo rochoso). */
+  maxBasicAttacksForHero(h: Unit): number {
     let cap = 1 + (h.artifacts["braco_forte"] ?? 0);
     const rh = getForgeLevel(h.forgeLoadout, "helmo", "rochoso");
     if (rh === 1 || rh === 2 || rh === 3) cap += rh;
