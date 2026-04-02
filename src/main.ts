@@ -2353,8 +2353,8 @@ function showGoldShop(isInitial: boolean): void {
     const refundAria = !hasShopChanges
       ? "Nada para reembolsar — o estado já é o da abertura da loja"
       : refundCost === 0
-        ? "Reembolsar alterações da loja (custo: 0 cristais meta)"
-        : `Reembolsar alterações da loja por ${refundCost} cristais meta`;
+        ? "Reembolsar alterações da loja (custo: 0 Cristais)"
+        : `Reembolsar alterações da loja por ${refundCost} Cristais`;
     const refundBtnInner = `<span class="shop-refund-btn__inner"><span class="shop-refund-btn__label">Reembolsar</span><span class="shop-refund-btn__crystal-line" aria-hidden="true">${metaCrystalIconSvgHtml()}<span class="shop-refund-btn__crystal-num">${refundCost}</span><span class="shop-refund-btn__crystal-suffix"> cristais</span></span></span>`;
     const startBtnLabel = isInitial ? "Começar wave 1" : "Próxima wave";
     const goldBagsHtml = party
@@ -2414,7 +2414,7 @@ function showGoldShop(isInitial: boolean): void {
         </div>
         <div class="shop-footer">
           <p id="shop-footer-msg" class="shop-footer-msg" role="status" hidden></p>
-          <p class="shop-footer-crystals" aria-live="polite">Cristais meta: <strong>${model.meta.crystals}</strong></p>
+          <p class="shop-footer-crystals" aria-live="polite">Cristais: <strong>${model.meta.crystals}</strong></p>
           <div class="shop-footer__actions">
             <button type="button" class="btn shop-refund-btn" id="shop-refund" ${!canRefund ? "disabled" : ""} aria-label="${escapeHtml(refundAria)}">${refundBtnInner}</button>
             <button type="button" class="btn btn-primary" id="shop-start">${escapeHtml(startBtnLabel)}</button>
@@ -2554,7 +2554,7 @@ function showGoldShop(isInitial: boolean): void {
         footMsg.textContent = "Nada para reembolsar — o estado já é o da abertura da loja.";
       else if (r === "no_crystals")
         footMsg.textContent =
-          "Cristais insuficientes: o próximo reembolso custa 5 cristais meta.";
+          "Cristais insuficientes: o próximo reembolso custa 5 Cristais.";
       else footMsg.textContent = "Não foi possível reembolsar.";
     });
   };

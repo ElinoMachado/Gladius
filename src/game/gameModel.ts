@@ -417,7 +417,7 @@ export class GameModel {
   /** Estado da loja ao abrir (ouro, stats, bunker) para reembolso. */
   private shopRestoreSnapshot: ShopRestoreSnapshot | null = null;
   /**
-   * Reembolsos de loja já usados nesta run: o primeiro é grátis; os seguintes custam cristais meta.
+   * Reembolsos de loja já usados nesta run: o primeiro é grátis; os seguintes custam Cristais.
    */
   runShopRefundUses = 0;
 
@@ -4319,7 +4319,7 @@ export class GameModel {
     return true;
   }
 
-  /** Cristais meta cobrados no próximo reembolso de loja (0 no primeiro uso da run). */
+  /** Cristais cobrados no próximo reembolso de loja (0 no primeiro uso da run). */
   nextShopRefundCrystalCost(): number {
     return this.runShopRefundUses === 0 ? 0 : 5;
   }
@@ -4372,7 +4372,7 @@ export class GameModel {
 
   /**
    * Reverte ouro, atributos e bunkers ao estado da abertura da loja.
-   * 1.º reembolso na run: grátis; seguintes: 5 cristais meta.
+   * 1.º reembolso na run: grátis; seguintes: 5 Cristais.
    */
   tryShopRefund():
     | "ok"
