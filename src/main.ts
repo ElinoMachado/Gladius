@@ -2833,7 +2833,7 @@ function heroSetupWeaponAbilitiesTooltipHtml(
   if (cls === "pistoleiro") {
     const cd = atirarCooldownWaves(w);
     const mul = atirarDamageMult(w);
-    const approx = Math.floor(baseDano * mul);
+    const approx = baseDano * mul;
     skillBlock = tipLines(sk.name, [
       { label: "Nível arma:", value: tipInt(w), kind: "fx" },
       { label: "CDR:", value: `${tipInt(cd)} onda(s)`, kind: "cdr" },
@@ -2848,7 +2848,7 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const cd = ateMorteCooldownWaves(w);
     const mul = ateMorteDamageMult(w);
     const mc = ateMorteManaCost(w);
-    const approx = Math.floor(baseDano * mul);
+    const approx = baseDano * mul;
     skillBlock = tipLines(sk.name, [
       { label: "Nível arma:", value: tipInt(w), kind: "fx" },
       { label: "CDR:", value: `${tipInt(cd)} onda(s)`, kind: "cdr" },
@@ -2865,11 +2865,11 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const dm = sentencaDamageMult(w);
     const hm = sentencaHealMult(w);
     const sh = sentencaShieldOverflowRatio(w);
-    const approx = Math.floor(baseDano * dm);
-    const healBase = Math.floor(baseDano * hm);
+    const approx = baseDano * dm;
+    const healBase = baseDano * hm;
     const potPts = priestPassivePotencialPoints(1);
-    const healEff = Math.floor(healBase * (1 + potPts / 100));
-    const escudoExcesso = Math.floor(healEff * sh);
+    const healEff = healBase * (1 + potPts / 100);
+    const escudoExcesso = healEff * sh;
     skillBlock = tipLines(sk.name, [
       { label: "Nível arma:", value: tipInt(w), kind: "fx" },
       { label: "CDR:", value: `${tipInt(cd)} onda(s)`, kind: "cdr" },
@@ -2900,10 +2900,8 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const regT = paraisoRegenTurns(w);
     const potMult = 1 + priestPassivePotencialPoints(1) / 100;
     const refMana = HEROES.sacerdotisa.maxMana;
-    const shieldTotal = Math.floor(
-      (flat + Math.floor(refMana * mm)) * potMult,
-    );
-    const effReg = Math.floor(reg * potMult);
+    const shieldTotal = (flat + refMana * mm) * potMult;
+    const effReg = reg * potMult;
     ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
       { label: "Nível arma:", value: tipInt(w), kind: "fx" },
       {
@@ -2924,9 +2922,9 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     ]);
   } else if (cls === "pistoleiro") {
     const mul = furacaoDamageMult(w);
-    const approx = Math.floor(baseDano * mul);
+    const approx = baseDano * mul;
     const bleTurns = furacaoBleedTurns(w);
-    const bleedPerTurn = Math.floor(approx * furacaoBleedPct(w));
+    const bleedPerTurn = approx * furacaoBleedPct(w);
     ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
       { label: "Nível arma:", value: tipInt(w), kind: "fx" },
       {
@@ -2947,9 +2945,9 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     ]);
   } else {
     const maxHpRef = HEROES.gladiador.maxHp;
-    const pvBuff = Math.floor(maxHpRef * 0.5);
-    const danoTurn = Math.floor(maxHpRef * 0.1);
-    const pisoDmg = Math.floor(baseDano * pisotearDamageMult(w));
+    const pvBuff = maxHpRef * 0.5;
+    const danoTurn = maxHpRef * 0.1;
+    const pisoDmg = baseDano * pisotearDamageMult(w);
     ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
       { label: "Nível arma:", value: tipInt(w), kind: "fx" },
       {
@@ -3037,10 +3035,8 @@ function tooltipWeaponUltimate(h: Unit): string {
     const reg = paraisoRegenBonus(w);
     const regT = paraisoRegenTurns(w);
     const potMult = 1 + h.potencialCuraEscudo / 100;
-    const effReg = Math.floor(reg * potMult);
-    const shieldTotalSelf = Math.floor(
-      (flat + Math.floor(h.maxMana * mm)) * potMult,
-    );
+    const effReg = reg * potMult;
+    const shieldTotalSelf = (flat + h.maxMana * mm) * potMult;
     return tooltipAbilityHtml(weaponUltNamePt(cls), [
       { label: "Nível da arma:", value: tipInt(w), kind: "fx" },
       {
@@ -3065,9 +3061,9 @@ function tooltipWeaponUltimate(h: Unit): string {
       heroDanoPlusRoninOverflow(h) +
       h.pistoleiroBonusDanoWave +
       h.curandeiroDanoWave;
-    const rawF = Math.floor(base * furacaoDamageMult(w));
+    const rawF = base * furacaoDamageMult(w);
     const bleTurns = furacaoBleedTurns(w);
-    const bleedPerTurn = Math.floor(rawF * furacaoBleedPct(w));
+    const bleedPerTurn = rawF * furacaoBleedPct(w);
     return tooltipAbilityHtml(weaponUltNamePt(cls), [
       { label: "Nível da arma:", value: tipInt(w), kind: "fx" },
       {
@@ -3087,8 +3083,8 @@ function tooltipWeaponUltimate(h: Unit): string {
       },
     ]);
   }
-  const danoFuria = Math.floor(h.maxHp * 0.1);
-  const pvBuff = Math.floor(h.maxHp * 0.5);
+  const danoFuria = h.maxHp * 0.1;
+  const pvBuff = h.maxHp * 0.5;
   return tooltipAbilityHtml(weaponUltNamePt(cls), [
     { label: "Nível da arma:", value: tipInt(w), kind: "fx" },
     {
@@ -3362,7 +3358,7 @@ function clearGameTooltipHandlers(el: HTMLElement): void {
 
 function tooltipBasicAttack(h: Unit, m: GameModel): string {
   const alc = m.effectiveAlcanceForHero(h);
-  const raw = m.computeBasicAttackRawDamage(h);
+  const raw = m.tooltipPreviewBasicAttackRawDamage(h);
   const arauto =
     h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos";
   const dmgLine = arauto
@@ -3391,7 +3387,7 @@ function cdrSkillValue(h: Unit, sk: SkillDef): string {
 function tooltipSkillAtirar(h: Unit, m: GameModel, sk: SkillDef): string {
   const w = h.weaponLevel;
   const alc = m.effectiveAlcanceForHero(h);
-  const per = m.computeAtirarTodoLadoDamagePerHit(h);
+  const per = m.tooltipPreviewAtirarDamagePerHit(h);
   const cdv = h.skillCd[sk.id] ?? 0;
   const cdB = atirarCooldownWaves(w);
   const cdrStr =
@@ -3422,7 +3418,7 @@ function tooltipSkillAtirar(h: Unit, m: GameModel, sk: SkillDef): string {
 
 function tooltipSkillAteMorte(h: Unit, m: GameModel, sk: SkillDef): string {
   const w = h.weaponLevel;
-  const gDmg = m.computeDuelGladiatorHitDamage(h);
+  const gDmg = m.tooltipPreviewDuelGladiatorHitDamage(h);
   const cdv = h.skillCd[sk.id] ?? 0;
   const cdB = ateMorteCooldownWaves(w);
   const cdrStr =
@@ -3456,9 +3452,8 @@ function tooltipSkillAteMorte(h: Unit, m: GameModel, sk: SkillDef): string {
 
 function tooltipSkillPisotear(h: Unit, _m: GameModel): string {
   const w = h.weaponLevel;
-  const dmgApprox = Math.floor(
-    heroDanoPlusRoninOverflow(h) * pisotearDamageMult(w),
-  );
+  const dmgApprox =
+    heroDanoPlusRoninOverflow(h) * pisotearDamageMult(w);
   const cdv = h.skillCd["pisotear"] ?? 0;
   const cdB = pisotearCooldownWaves(w);
   const cdrStr =
@@ -3507,7 +3502,7 @@ function tooltipBunkerMinasCombat(h: Unit, m: GameModel): string {
     heroDanoPlusRoninOverflow(h) +
     h.pistoleiroBonusDanoWave +
     h.curandeiroDanoWave;
-  const per = Math.floor(baseDano * mult);
+  const per = baseDano * mult;
   const cdv = h.skillCd["bunker_minas"] ?? 0;
   const cdrStr =
     cdv > 0
@@ -3542,7 +3537,7 @@ function tooltipBunkerTiroCombat(h: Unit, _m: GameModel): string {
     heroDanoPlusRoninOverflow(h) +
     h.pistoleiroBonusDanoWave +
     h.curandeiroDanoWave;
-  const raw = Math.floor(baseDano * 10);
+  const raw = baseDano * 10;
   const cdrStr =
     cdv > 0
       ? `${tipInt(cdv)} onda(s) até disponível`
@@ -3563,10 +3558,8 @@ function tooltipBunkerTiroCombat(h: Unit, _m: GameModel): string {
 function tooltipSkillSentenca(h: Unit, m: GameModel, sk: SkillDef): string {
   const w = h.weaponLevel;
   const bio = biomeAt(m.grid, h.q, h.r) as BiomeId;
-  const dPv = m.computeSentencaDamagePerEnemy(h);
-  const healBase = m.computeSentencaHealParty(h);
-  const potMult = 1 + h.potencialCuraEscudo / 100;
-  const healEff = Math.floor(healBase * potMult);
+  const dPv = m.tooltipPreviewSentencaDamagePerEnemy(h);
+  const healEff = m.tooltipPreviewSentencaHealEffective(h);
   const cdv = h.skillCd[sk.id] ?? 0;
   const cdB = sentencaCooldownWaves(w);
   const cdrStr =
@@ -3576,8 +3569,7 @@ function tooltipSkillSentenca(h: Unit, m: GameModel, sk: SkillDef): string {
         ? "—"
         : `${tipInt(cdB)} onda(s)`;
   const mc = sentencaManaCost(w);
-  const shRatio = sentencaShieldOverflowRatio(w);
-  const escudoExcessoMax = Math.floor(healEff * shRatio);
+  const escudoExcessoMax = m.tooltipPreviewSentencaShieldOverflowMax(h);
   return tooltipAbilityHtml(sk.name, [
     { label: "Nível arma:", value: tipInt(w), kind: "fx" },
     {
@@ -3629,7 +3621,7 @@ function tooltipSkillById(h: Unit, m: GameModel, sk: SkillDef): string {
 
 function tooltipEspecialista(h: Unit, m: GameModel): string {
   const alc = m.effectiveAlcanceForHero(h);
-  const raw = m.computeEspecialistaDestruicaoRaw(h);
+  const raw = m.tooltipPreviewEspecialistaDestruicaoRaw(h);
   return tooltipAbilityHtml("Especialista da destruição", [
     { label: "Custo de mana:", value: tipInt(0), kind: "mana" },
     { label: "CDR:", value: "—", kind: "cdr" },

@@ -2031,6 +2031,14 @@ export class GameModel {
     return Math.floor(u.defesa * 0.3 * s);
   }
 
+  /** Mesma fórmula da Garra, sem `floor` — só para tooltips (arredondar no UI a 2 casas). */
+  tooltipGarraFerroRawPreview(u: Unit): number {
+    if (!u.isPlayer) return 0;
+    const s = Math.min(6, u.artifacts["garra_ferro"] ?? 0);
+    if (s <= 0) return 0;
+    return u.defesa * 0.3 * s;
+  }
+
   computeBasicAttackRawDamage(h: Unit): number {
     let raw =
       heroDanoPlusRoninOverflow(h) +
@@ -2083,6 +2091,69 @@ export class GameModel {
     return (
       Math.floor(heroDanoPlusRoninOverflow(h) * 7) +
       this.artifactGarraFerroRawBonus(h)
+    );
+  }
+
+  /** Cadeia contínua (sem `floor` intermédios) para tooltips — combate continua a usar `compute*`. */
+  tooltipPreviewBasicAttackRawDamage(h: Unit): number {
+    let raw =
+      heroDanoPlusRoninOverflow(h) +
+      h.pistoleiroBonusDanoWave +
+      h.curandeiroDanoWave;
+    if (h.heroClass === "gladiador" && h.ultimateId === "campeao") {
+      raw *= 1 + 0.05 * h.gladiadorKills;
+    }
+    if (h.ultimateId === "estrategista_nato") {
+      const ouroTotal = h.ouro + h.ouroWave;
+      raw *= 1 + Math.min(2, ouroTotal * 0.005);
+    }
+    if (h.motorMorteNextBasicPct > 0) {
+      raw *= 1 + h.motorMorteNextBasicPct / 100;
+    }
+    return raw + this.tooltipGarraFerroRawPreview(h);
+  }
+
+  tooltipPreviewAtirarDamagePerHit(h: Unit): number {
+    const mult = atirarDamageMult(h.weaponLevel);
+    return (
+      (heroDanoPlusRoninOverflow(h) + h.pistoleiroBonusDanoWave) * mult +
+      this.tooltipGarraFerroRawPreview(h)
+    );
+  }
+
+  tooltipPreviewDuelGladiatorHitDamage(h: Unit): number {
+    const mult = ateMorteDamageMult(h.weaponLevel);
+    return (
+      heroDanoPlusRoninOverflow(h) * mult +
+      this.tooltipGarraFerroRawPreview(h)
+    );
+  }
+
+  tooltipPreviewSentencaDamagePerEnemy(h: Unit): number {
+    const mult = sentencaDamageMult(h.weaponLevel);
+    return (
+      heroDanoPlusRoninOverflow(h) * mult +
+      this.tooltipGarraFerroRawPreview(h)
+    );
+  }
+
+  tooltipPreviewSentencaHealEffective(h: Unit): number {
+    const mult = sentencaHealMult(h.weaponLevel);
+    const potMult = 1 + h.potencialCuraEscudo / 100;
+    return heroDanoPlusRoninOverflow(h) * mult * potMult;
+  }
+
+  tooltipPreviewSentencaShieldOverflowMax(h: Unit): number {
+    return (
+      this.tooltipPreviewSentencaHealEffective(h) *
+      sentencaShieldOverflowRatio(h.weaponLevel)
+    );
+  }
+
+  tooltipPreviewEspecialistaDestruicaoRaw(h: Unit): number {
+    return (
+      heroDanoPlusRoninOverflow(h) * 7 +
+      this.tooltipGarraFerroRawPreview(h)
     );
   }
 
