@@ -41,8 +41,9 @@ const HEX_SIZE = 2.18;
 const HERO_FLY_BASE_Y = 1.2;
 /** Oscilação vertical (flutuar) em torno da base. */
 const HERO_FLY_BOB_AMP = 0.26;
-/** Sombra no chão sob herói a voar: ~apotema do hex, ligeiramente menor. */
-const FLYING_HERO_SHADOW_R = HEX_SIZE * (Math.sqrt(3) / 2) * 0.86;
+/** Sombra no chão (voo): ~metade do apotema; suavização nas bordas via textura radial. */
+const FLYING_HERO_SHADOW_R =
+  HEX_SIZE * (Math.sqrt(3) / 2) * 0.86 * 0.5;
 const ARENA_HEX_RADIUS = 25;
 /** Borda do pan: extensão do grid + folga (sem o anel decorativo removido). */
 const COLISEUM_XZ_MAX = HEX_SIZE * Math.sqrt(3) * ARENA_HEX_RADIUS + 10;
@@ -63,6 +64,28 @@ function createHexShape(size: number): THREE.Shape {
   }
   sh.closePath();
   return sh;
+}
+
+/** Textura circular com alpha em gradiente (sombra “desfocada” sem shader). */
+function createFlyingHeroShadowRadialTexture(): THREE.CanvasTexture {
+  const size = 256;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d")!;
+  const cx = size / 2;
+  const g = ctx.createRadialGradient(cx, cx, 0, cx, cx, cx);
+  g.addColorStop(0, "rgba(0,0,0,0.4)");
+  g.addColorStop(0.38, "rgba(0,0,0,0.22)");
+  g.addColorStop(0.68, "rgba(0,0,0,0.08)");
+  g.addColorStop(0.9, "rgba(0,0,0,0.02)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
 }
 
 function isTypingTarget(t: EventTarget | null): boolean {
@@ -146,7 +169,7 @@ export class GameRenderer {
   private readonly enemyDeathMeshRemoveAt = new Map<string, number>();
   /** Sombra circular no hex (herói com `flying`). */
   private readonly flyingHeroGroundShadows = new Map<string, THREE.Mesh>();
-  private flyingHeroShadowSharedGeo: THREE.CircleGeometry | null = null;
+  private flyingHeroShadowSharedGeo: THREE.PlaneGeometry | null = null;
   private flyingHeroShadowSharedMat: THREE.MeshBasicMaterial | null = null;
   private readonly meleeSlashFx: { mesh: THREE.Mesh; until: number }[] = [];
   private readonly mortarShots: {
@@ -595,19 +618,19 @@ export class GameRenderer {
   }
 
   private ensureFlyingShadowTemplate(): {
-    geo: THREE.CircleGeometry;
+    geo: THREE.PlaneGeometry;
     mat: THREE.MeshBasicMaterial;
   } {
     if (!this.flyingHeroShadowSharedGeo) {
-      this.flyingHeroShadowSharedGeo = new THREE.CircleGeometry(
-        FLYING_HERO_SHADOW_R,
-        48,
-      );
+      const d = FLYING_HERO_SHADOW_R * 2;
+      this.flyingHeroShadowSharedGeo = new THREE.PlaneGeometry(d, d);
+      const map = createFlyingHeroShadowRadialTexture();
       this.flyingHeroShadowSharedMat = new THREE.MeshBasicMaterial({
-        color: 0x000000,
+        map,
         transparent: true,
-        opacity: 0.38,
+        opacity: 1,
         depthWrite: false,
+        toneMapped: false,
       });
     }
     return {
