@@ -2523,7 +2523,11 @@ function showGoldShop(isInitial: boolean): void {
         h.forgeLoadout,
       );
       goldShopHeroPreview3d.start();
-      renderHeroStatsGrid(heroStatsEl, heroStatCells(h, model));
+      renderHeroStatsGridWithTabs(
+        heroStatsEl,
+        heroStatCells(h, model),
+        goldShopHeroStatsTabRef,
+      );
       if (skillsRow) mountGoldShopHeroSkillsRow(skillsRow, h, model);
     } else {
       if (skillsWrap) {
@@ -3409,6 +3413,8 @@ function goldShopBunkerSectionHtml(bunk: BunkerState, h: Unit): string {
   </div>`;
 }
 
+type HeroStatCategory = "offense" | "defense" | "utility";
+
 interface HeroStatCell {
   icon: StatIconId;
   label: string;
@@ -3417,6 +3423,8 @@ interface HeroStatCell {
   tooltipValue?: string;
   /** Tooltip rico (pairar); se omitido, usa `tooltipStatCell` com label/valor. */
   tooltipHtml?: string;
+  /** Só herói (loja + HUD combate): agrupa em abas Ofensivos / Defensivos / Utilidade. */
+  statCategory?: HeroStatCategory;
 }
 
 function bunkerShopStatCells(bunk: BunkerState): HeroStatCell[] {
@@ -3506,6 +3514,7 @@ function pushStat(
   delta: number,
   kind: StatDeltaKind,
   tooltipHtml?: string | ((plain: string) => string),
+  statCategory: HeroStatCategory = "utility",
 ): void {
   const { html, plain } = valWithDelta(display, delta, kind);
   const th =
@@ -3517,6 +3526,7 @@ function pushStat(
     valueHtml: html,
     tooltipValue: plain,
     tooltipHtml: th,
+    statCategory,
   });
 }
 
@@ -3530,10 +3540,41 @@ function splitStatsIntoColumns<T>(items: T[], perColumn: number): T[][] {
   return cols;
 }
 
-function renderHeroStatsGrid(grid: HTMLElement, cells: HeroStatCell[]): void {
+const HERO_STAT_TAB_LABELS: Record<HeroStatCategory, string> = {
+  offense: "Ofensivos",
+  defense: "Defensivos",
+  utility: "Utilidade",
+};
+
+const HERO_STAT_TAB_ORDER: HeroStatCategory[] = [
+  "offense",
+  "defense",
+  "utility",
+];
+
+function groupHeroStatCellsByCategory(
+  cells: HeroStatCell[],
+): Record<HeroStatCategory, HeroStatCell[]> {
+  const buckets: Record<HeroStatCategory, HeroStatCell[]> = {
+    offense: [],
+    defense: [],
+    utility: [],
+  };
+  for (const c of cells) {
+    buckets[c.statCategory ?? "utility"].push(c);
+  }
+  return buckets;
+}
+
+function buildHeroStatsColumnsHtml(
+  cells: HeroStatCell[],
+  idxRef: { n: number },
+): string {
+  if (cells.length === 0) {
+    return `<p class="hero-stats-panel-empty" role="status">Sem atributos nesta categoria.</p>`;
+  }
   const split = splitStatsIntoColumns(cells, 5);
   const cols = split.length > 0 ? split : [[]];
-  let idx = 0;
   const nCols = cols.length;
   const parts: string[] = [
     `<div class="lol-stats-cols" style="--stats-cols:${nCols}">`,
@@ -3541,31 +3582,128 @@ function renderHeroStatsGrid(grid: HTMLElement, cells: HeroStatCell[]): void {
   for (const col of cols) {
     parts.push('<div class="lol-stats-col">');
     for (const c of col) {
+      const ix = idxRef.n++;
       const ariaVal = escapeHtml(c.tooltipValue ?? c.value);
       const valInner = c.valueHtml ?? escapeHtml(c.value);
       parts.push(
-        `<div class="lol-stat-cell" data-stat-i="${idx}" tabindex="0" role="img" aria-label="${escapeHtml(c.label)}: ${ariaVal}">` +
-          statIconWrap(c.icon, idx) +
+        `<div class="lol-stat-cell" data-stat-i="${ix}" tabindex="0" role="img" aria-label="${escapeHtml(c.label)}: ${ariaVal}">` +
+          statIconWrap(c.icon, ix) +
           `<span class="lol-stat-val">${valInner}</span>` +
           `</div>`,
       );
-      idx++;
     }
     parts.push("</div>");
   }
   parts.push("</div>");
-  grid.innerHTML = parts.join("");
-  grid.querySelectorAll(".lol-stat-cell").forEach((node) => {
-    const el = node as HTMLElement;
-    const i = Number(el.dataset.statI);
+  return parts.join("");
+}
+
+function bindHeroStatCellTooltips(
+  container: HTMLElement,
+  cells: HeroStatCell[],
+): void {
+  const nodes = container.querySelectorAll(".lol-stat-cell");
+  nodes.forEach((node, i) => {
     const cell = cells[i];
     if (!cell) return;
-    bindGameTooltip(el, () =>
+    bindGameTooltip(node as HTMLElement, () =>
       cell.tooltipHtml ??
       tooltipStatCell(cell.label, cell.tooltipValue ?? cell.value),
     );
   });
 }
+
+/** Bunker na loja (poucos atributos): grelha simples. */
+function renderHeroStatsGrid(grid: HTMLElement, cells: HeroStatCell[]): void {
+  const idxRef = { n: 0 };
+  grid.innerHTML = buildHeroStatsColumnsHtml(cells, idxRef);
+  bindHeroStatCellTooltips(grid, cells);
+}
+
+function renderHeroStatsGridWithTabs(
+  grid: HTMLElement,
+  cells: HeroStatCell[],
+  tabFocus: { current: HeroStatCategory },
+): void {
+  const buckets = groupHeroStatCellsByCategory(cells);
+  const uid =
+    grid.id && grid.id.length > 0
+      ? grid.id.replace(/[^a-zA-Z0-9_-]/g, "-")
+      : "hero-stats";
+
+  let active = tabFocus.current;
+  if (buckets[active].length === 0) {
+    active =
+      HERO_STAT_TAB_ORDER.find((c) => buckets[c].length > 0) ?? "utility";
+    tabFocus.current = active;
+  }
+
+  const parts: string[] = [
+    `<div class="hero-stats-tabbed" data-hero-stats-root="1">`,
+    `<div class="hero-stats-tabbed__tabs" role="tablist" aria-label="Categorias de atributos">`,
+  ];
+
+  for (const cat of HERO_STAT_TAB_ORDER) {
+    const has = buckets[cat].length > 0;
+    const sel = has && cat === active;
+    parts.push(
+      `<button type="button" role="tab" class="hero-stats-tab hero-stats-tab--${cat}${sel ? " hero-stats-tab--active" : ""}" id="${uid}-tab-${cat}" aria-selected="${sel ? "true" : "false"}" aria-controls="${uid}-panel-${cat}" data-stat-tab="${cat}"${has ? "" : " hidden"}>${escapeHtml(HERO_STAT_TAB_LABELS[cat])}</button>`,
+    );
+  }
+  parts.push(`</div><div class="hero-stats-tabbed__panels">`);
+
+  const idxRef = { n: 0 };
+  for (const cat of HERO_STAT_TAB_ORDER) {
+    const panelCells = buckets[cat];
+    const has = panelCells.length > 0;
+    const show = has && cat === active;
+    const inner = buildHeroStatsColumnsHtml(panelCells, idxRef);
+    parts.push(
+      `<div class="hero-stats-tabbed__panel${show ? " hero-stats-tabbed__panel--active" : ""}" role="tabpanel" id="${uid}-panel-${cat}" aria-labelledby="${uid}-tab-${cat}" data-stat-panel="${cat}"${show ? "" : " hidden"}>${inner}</div>`,
+    );
+  }
+  parts.push(`</div></div>`);
+  grid.innerHTML = parts.join("");
+
+  const root = grid.querySelector("[data-hero-stats-root]") as HTMLElement | null;
+  if (!root) return;
+
+  for (const cat of HERO_STAT_TAB_ORDER) {
+    const panel = root.querySelector(
+      `[data-stat-panel="${cat}"]`,
+    ) as HTMLElement | null;
+    if (panel) bindHeroStatCellTooltips(panel, buckets[cat]);
+  }
+
+  root.addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement).closest(
+      "[data-stat-tab]",
+    ) as HTMLButtonElement | null;
+    if (!btn || !root.contains(btn) || btn.hidden) return;
+    const cat = btn.getAttribute("data-stat-tab") as HeroStatCategory | null;
+    if (!cat || buckets[cat].length === 0) return;
+    tabFocus.current = cat;
+    root.querySelectorAll<HTMLButtonElement>("[data-stat-tab]").forEach((b) => {
+      const c = b.getAttribute("data-stat-tab") as HeroStatCategory;
+      const on = c === cat && !b.hidden;
+      b.classList.toggle("hero-stats-tab--active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    root.querySelectorAll<HTMLElement>("[data-stat-panel]").forEach((p) => {
+      const c = p.getAttribute("data-stat-panel") as HeroStatCategory;
+      const show = c === cat && buckets[c].length > 0;
+      p.hidden = !show;
+      p.classList.toggle("hero-stats-tabbed__panel--active", show);
+    });
+  });
+}
+
+const goldShopHeroStatsTabRef: { current: HeroStatCategory } = {
+  current: "offense",
+};
+const combatHeroStatsTabRef: { current: HeroStatCategory } = {
+  current: "offense",
+};
 
 function bindGameTooltip(el: HTMLElement, getHtml: () => string): void {
   const tip = getOrCreateGameTooltip();
@@ -4056,6 +4194,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         value: hpDisp,
         valueHtml: hpPair.html,
         tooltipValue: hpPair.plain,
+        statCategory: "defense",
         tooltipHtml: combatHeroStatTooltip({
           stat: "max_hp",
           display: hpDisp,
@@ -4072,6 +4211,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         value: mpDisp,
         valueHtml: mpPair.html,
         tooltipValue: mpPair.plain,
+        statCategory: "defense",
         tooltipHtml: combatHeroStatTooltip({
           stat: "max_mana",
           display: mpDisp,
@@ -4092,6 +4232,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           display: formatTooltipNumber(effRegV),
           detailPlain: plain,
         }),
+      "defense",
     );
     pushStat(
       cells,
@@ -4106,6 +4247,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           display: formatTooltipNumber(effRegM),
           detailPlain: plain,
         }),
+      "defense",
     );
     {
       const effDmg = heroDanoPlusRoninOverflow(h);
@@ -4124,6 +4266,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         value: dmgDisp,
         valueHtml: dmgPair.html,
         tooltipValue: dmgPlain,
+        statCategory: "offense",
         tooltipHtml: combatHeroStatTooltip({
           stat: "dmg",
           display: dmgDisp,
@@ -4150,6 +4293,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         value: critDispStr,
         valueHtml: critPair.html,
         tooltipValue: critPlain,
+        statCategory: "offense",
         tooltipHtml: combatHeroStatTooltip({
           stat: "crit_hit",
           display: critDispStr,
@@ -4170,6 +4314,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           display: `${formatTooltipNumber(Math.round(critMultCur * 100))}%`,
           detailPlain: plain,
         }),
+      "offense",
     );
     {
       const { html } = valWithDelta(
@@ -4183,6 +4328,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
         value: formatTooltipNumber(effDef),
         valueHtml: html,
         tooltipValue: defenseReductionTooltipText(effDef),
+        statCategory: "defense",
         tooltipHtml: combatHeroStatTooltip({
           stat: "def",
           display: formatTooltipNumber(effDef),
@@ -4209,6 +4355,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       tooltipValue:
         movPair.plain +
         (pantHexSlow ? " — hexes no pântano custam 2 pontos" : ""),
+      statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "mov",
         display: movDisp,
@@ -4229,6 +4376,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           display: formatTooltipNumber(effAlc),
           detailPlain: plain,
         }),
+      "utility",
     );
     pushStat(
       cells,
@@ -4244,6 +4392,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           potencialNumeric: h.potencialCuraEscudo,
           detailPlain: plain,
         }),
+      "utility",
     );
     {
       const xpCur = m.xpGainBonusPercentForHero(h);
@@ -4270,6 +4419,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
             display: xpDisp,
             detailPlain: plain,
           }),
+        "utility",
       );
     }
     pushStat(
@@ -4285,6 +4435,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           display: formatTooltipNumber(h.penetracao),
           detailPlain: plain,
         }),
+      "offense",
     );
     pushStat(
       cells,
@@ -4299,6 +4450,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           display: formatTooltipNumber(h.penetracaoEscudo),
           detailPlain: plain,
         }),
+      "utility",
     );
     pushStat(
       cells,
@@ -4313,6 +4465,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           display: `${formatTooltipNumber(h.lifesteal)}%`,
           detailPlain: plain,
         }),
+      "utility",
     );
     pushStat(
       cells,
@@ -4327,6 +4480,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           display: formatTooltipNumber(m.effectiveSorte(h)),
           detailPlain: plain,
         }),
+      "utility",
     );
 
     const flyStr = h.flying ? "Sim" : "Não";
@@ -4345,6 +4499,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       value: flyStr,
       valueHtml: flyHtml,
       tooltipValue: flyPlain,
+      statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "fly",
         display: flyStr,
@@ -4358,6 +4513,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "max_hp",
       label: "Vida",
       value: hpDE,
+      statCategory: "defense",
       tooltipHtml: combatHeroStatTooltip({ stat: "max_hp", display: hpDE }),
     });
     const mpDE = `${formatTooltipNumber(h.mana)}/${formatTooltipNumber(h.maxMana)}`;
@@ -4365,12 +4521,14 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "max_mana",
       label: "Mana",
       value: mpDE,
+      statCategory: "defense",
       tooltipHtml: combatHeroStatTooltip({ stat: "max_mana", display: mpDE }),
     });
     cells.push({
       icon: "regen_hp",
       label: "Regen. vida",
       value: formatTooltipNumber(effRegV),
+      statCategory: "defense",
       tooltipHtml: combatHeroStatTooltip({
         stat: "regen_hp",
         display: formatTooltipNumber(effRegV),
@@ -4380,6 +4538,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "regen_mp",
       label: "Regen. mana",
       value: formatTooltipNumber(effRegM),
+      statCategory: "defense",
       tooltipHtml: combatHeroStatTooltip({
         stat: "regen_mp",
         display: formatTooltipNumber(effRegM),
@@ -4401,6 +4560,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
           ? `${base} — +${formatTooltipNumber(flat)} do Ronin (crítico >100%)`
           : base;
       })(),
+      statCategory: "offense",
       tooltipHtml: combatHeroStatTooltip({
         stat: "dmg",
         display: formatTooltipNumber(heroDanoPlusRoninOverflow(h)),
@@ -4432,6 +4592,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       label: "Acerto crítico",
       value: critDE,
       tooltipValue: critTv,
+      statCategory: "offense",
       tooltipHtml: combatHeroStatTooltip({
         stat: "crit_hit",
         display: critDE,
@@ -4443,6 +4604,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "crit_dmg",
       label: "Dano critico",
       value: critDmgDE,
+      statCategory: "offense",
       tooltipHtml: combatHeroStatTooltip({
         stat: "crit_dmg",
         display: critDmgDE,
@@ -4453,6 +4615,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       label: ign ? "Defesa (ruler ignora bioma)" : "Defesa",
       value: formatTooltipNumber(effDef),
       tooltipValue: defenseReductionTooltipText(effDef),
+      statCategory: "defense",
       tooltipHtml: combatHeroStatTooltip({
         stat: "def",
         display: formatTooltipNumber(effDef),
@@ -4476,6 +4639,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       tooltipValue:
         movElseDisp +
         (pantHexSlowElse ? " — hexes no pântano custam 2 pontos" : ""),
+      statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "mov",
         display: movElseDisp,
@@ -4486,6 +4650,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "range",
       label: ign ? "Alcance (ruler ignora bioma)" : "Alcance",
       value: formatTooltipNumber(effAlc),
+      statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "range",
         display: formatTooltipNumber(effAlc),
@@ -4495,6 +4660,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "pot",
       label: "Potencial de cura e escudo",
       value: formatTooltipNumber(h.potencialCuraEscudo),
+      statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "pot",
         display: formatTooltipNumber(h.potencialCuraEscudo),
@@ -4507,6 +4673,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       label: "Bônus XP",
       value: xpDE,
       tooltipValue: xpDE,
+      statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "xp_bonus",
         display: xpDE,
@@ -4516,6 +4683,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "pen",
       label: "Penetração",
       value: formatTooltipNumber(h.penetracao),
+      statCategory: "offense",
       tooltipHtml: combatHeroStatTooltip({
         stat: "pen",
         display: formatTooltipNumber(h.penetracao),
@@ -4525,6 +4693,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "pen_escudo",
       label: "Penetração de escudo",
       value: formatTooltipNumber(h.penetracaoEscudo),
+      statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "pen_escudo",
         display: formatTooltipNumber(h.penetracaoEscudo),
@@ -4534,6 +4703,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "lifesteal",
       label: "Roubo de vida",
       value: `${formatTooltipNumber(h.lifesteal)}%`,
+      statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "lifesteal",
         display: `${formatTooltipNumber(h.lifesteal)}%`,
@@ -4543,6 +4713,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "luck",
       label: "Sorte",
       value: formatTooltipNumber(h.sorte),
+      statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "luck",
         display: formatTooltipNumber(h.sorte),
@@ -4553,6 +4724,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       icon: "fly",
       label: "Voo",
       value: flyDE,
+      statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({ stat: "fly", display: flyDE }),
     });
   }
@@ -4565,6 +4737,8 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       formatTooltipNumber(h.gladiadorKills),
       h.gladiadorKills,
       "int",
+      undefined,
+      "utility",
     );
   if (h.duroPedraDefStacks)
     pushStat(
@@ -4574,6 +4748,8 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       formatTooltipNumber(h.duroPedraDefStacks),
       h.duroPedraDefStacks,
       "int",
+      undefined,
+      "utility",
     );
   if (h.motorMorteNextBasicPct)
     pushStat(
@@ -4583,6 +4759,8 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       `${formatTooltipNumber(h.motorMorteNextBasicPct)}%`,
       h.motorMorteNextBasicPct,
       "pct",
+      undefined,
+      "utility",
     );
   if (h.poison)
     cells.push({
@@ -4590,6 +4768,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       label: "Veneno",
       value: `${h.poison.perTurn}/turno · ${h.poison.turns} turno(s)`,
       tooltipValue: `${h.poison.perTurn}/turno · ${h.poison.turns} turno(s)`,
+      statCategory: "utility",
     });
   if (h.hot)
     cells.push({
@@ -4597,20 +4776,28 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       label: "Cura contínua",
       value: `${h.hot.perTurn}/turno · ${h.hot.turns} turno(s)`,
       tooltipValue: `${h.hot.perTurn}/turno · ${h.hot.turns} turno(s)`,
+      statCategory: "utility",
     });
   if (h.ultimateId)
     cells.push({
       icon: "ult",
       label: "Ultimate escolhida",
       value: h.ultimateId,
+      statCategory: "utility",
     });
   if (h.formaFinal)
-    cells.push({ icon: "forma", label: "Forma final", value: "Sim" });
+    cells.push({
+      icon: "forma",
+      label: "Forma final",
+      value: "Sim",
+      statCategory: "utility",
+    });
   if (m.currentHero()?.id === h.id) {
     cells.push({
       icon: "basic",
       label: "Ataque Extra",
       value: formatTooltipNumber(m.basicLeft),
+      statCategory: "offense",
       tooltipHtml: combatHeroStatTooltip({
         stat: "basic",
         display: formatTooltipNumber(m.basicLeft),
@@ -4627,6 +4814,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       label: "Bunker (estrutura)",
       value: `${B.hp}/${B.maxHp} · def ${B.defesa}`,
       tooltipValue: `PV e defesa do bunker; inimigos reduzem esta vida antes da sua.`,
+      statCategory: "defense",
     });
   }
   return cells;
@@ -5502,7 +5690,11 @@ function showCombatHUD(): void {
       !Number.isFinite(h.xpToNext) || h.xpToNext <= 0
         ? "XP —"
         : `${h.xp} / ${h.xpToNext} XP`;
-    renderHeroStatsGrid(lolStatsGrid, heroStatCells(h, model));
+    renderHeroStatsGridWithTabs(
+      lolStatsGrid,
+      heroStatCells(h, model),
+      combatHeroStatsTabRef,
+    );
     if (h.heroClass) {
       lolWeaponSlot.innerHTML = `<span class="lol-weapon-lvl-badge" aria-label="Nível da arma">${h.weaponLevel}</span>${hudWeaponIconSvg(h.heroClass)}`;
       lolWeaponSlot.style.display = "";
