@@ -4423,7 +4423,8 @@ body.enemy-inspect--dragging-body {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: flex-start;
+  /* Mesma altura dos dois cartões na mesma linha (fica espaço vazio no mais baixo) */
+  align-items: stretch;
   gap: 1.25rem 1.75rem;
   margin-bottom: 0.75rem;
 }
@@ -4439,6 +4440,8 @@ body.enemy-inspect--dragging-body {
 .shop-hero-bunker-pair > .shop-bunker-viz {
   flex: 1 1 min(100%, 400px);
   min-width: 0;
+  align-self: stretch;
+  box-sizing: border-box;
 }
 
 .shop-bunker-viz {
