@@ -12,27 +12,56 @@
       <div id="damage-float-layer" aria-hidden="true"></div>
       <div id="ui-root"></div>
       <div id="global-top-corner" class="global-top-corner">
-        <div class="music-volume-wrap" title="Volume da música de fundo">
-          <span
-            id="music-volume-icon"
-            class="music-volume-icon"
-            aria-hidden="true"
+        <div class="global-volume-stack">
+          <div class="music-volume-wrap" title="Volume da música de fundo">
+            <span
+              id="music-volume-icon"
+              class="music-volume-icon"
+              aria-hidden="true"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M3 10v4h4l5 5V5L7 10H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 5.08v2.02A7.001 7.001 0 0119 12a7 7 0 01-5 6.9v2.02c3.95-.49 7-3.85 7-7.92s-3.05-7.43-7-7.92z"
+                />
+              </svg>
+            </span>
+            <input
+              id="music-volume-range"
+              class="global-volume-range"
+              type="range"
+              min="0"
+              max="100"
+              value="28"
+              aria-label="Volume da música"
+            />
+          </div>
+          <div
+            class="music-volume-wrap sfx-volume-wrap"
+            title="Volume dos efeitos sonoros (combate e interface)"
           >
-            <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-              <path
-                fill="currentColor"
-                d="M3 10v4h4l5 5V5L7 10H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 5.08v2.02A7.001 7.001 0 0119 12a7 7 0 01-5 6.9v2.02c3.95-.49 7-3.85 7-7.92s-3.05-7.43-7-7.92z"
-              />
-            </svg>
-          </span>
-          <input
-            id="music-volume-range"
-            type="range"
-            min="0"
-            max="100"
-            value="28"
-            aria-label="Volume da música"
-          />
+            <span
+              id="sfx-volume-icon"
+              class="music-volume-icon sfx-volume-icon"
+              aria-hidden="true"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M4 10v4h3l4 4V6L7 10H4zm13.5 2a4.5 4.5 0 00-2.5-4.03v8.05A4.5 4.5 0 0017.5 12zM16 5.38v2.02A7 7 0 0121 12a7 7 0 01-5 6.62v2.02A9 9 0 0023 12a9 9 0 00-7-6.62z"
+                />
+              </svg>
+            </span>
+            <input
+              id="sfx-volume-range"
+              class="global-volume-range"
+              type="range"
+              min="0"
+              max="100"
+              value="88"
+              aria-label="Volume dos efeitos sonoros"
+            />
+          </div>
         </div>
         <div id="global-synergy-slot" class="global-synergy-slot" hidden></div>
       </div>

@@ -1,4 +1,32 @@
+import { getSfxVolumeFactor } from "../game/sfxVolumePref";
+
 let audioCtx: AudioContext | null = null;
+
+/** Um `GainNode` por contexto: toda a cadeia SFX liga aqui (volume separado da música). */
+const sfxMasterByCtx = new WeakMap<AudioContext, GainNode>();
+
+function sfxMaster(c: AudioContext): GainNode {
+  let g = sfxMasterByCtx.get(c);
+  if (!g) {
+    g = c.createGain();
+    g.connect(c.destination);
+    sfxMasterByCtx.set(c, g);
+  }
+  g.gain.value = getSfxVolumeFactor();
+  return g;
+}
+
+export function connectToSfxOut(c: AudioContext, tail: AudioNode): void {
+  tail.connect(sfxMaster(c));
+}
+
+/** Chamar quando o slider de SFX mudar (actualiza ganho já ligado ao destino). */
+export function refreshSfxVolume(): void {
+  const c = audioCtx;
+  if (!c) return;
+  const g = sfxMasterByCtx.get(c);
+  if (g) g.gain.value = getSfxVolumeFactor();
+}
 
 function ctx(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -35,7 +63,7 @@ export function playUiClick(): void {
   g.gain.setValueAtTime(0.085, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.065);
   o.connect(g);
-  g.connect(c.destination);
+  connectToSfxOut(c, g);
   o.start(t);
   o.stop(t + 0.08);
 }
@@ -60,7 +88,7 @@ export function playGunshot(): void {
   g.gain.exponentialRampToValueAtTime(0.01, t + 0.07);
   noise.connect(bp);
   bp.connect(g);
-  g.connect(c.destination);
+  connectToSfxOut(c, g);
   noise.start(t);
   noise.stop(t + 0.08);
 }
@@ -85,7 +113,7 @@ export function playSwordHit(): void {
   g.gain.setValueAtTime(0.12, t);
   g.gain.exponentialRampToValueAtTime(0.01, t + 0.14);
   o.connect(g);
-  g.connect(c.destination);
+  connectToSfxOut(c, g);
   o.start(t);
   o.stop(t + 0.15);
 }
@@ -104,7 +132,7 @@ export function playMagicWhoosh(): void {
   g.gain.setValueAtTime(0.08, t);
   g.gain.exponentialRampToValueAtTime(0.01, t + 0.12);
   o.connect(g);
-  g.connect(c.destination);
+  connectToSfxOut(c, g);
   o.start(t);
   o.stop(t + 0.13);
 }
@@ -124,7 +152,7 @@ export function playMagicBarrage(hits: number, staggerMs: number): void {
       g.gain.setValueAtTime(0.1, t);
       g.gain.exponentialRampToValueAtTime(0.01, t + 0.09);
       o.connect(g);
-      g.connect(c.destination);
+      connectToSfxOut(c, g);
       o.start(t);
       o.stop(t + 0.1);
     }, i * staggerMs);
@@ -152,7 +180,7 @@ export function playKnifeCut(): void {
   g.gain.exponentialRampToValueAtTime(0.01, t + 0.13);
   noise.connect(f);
   f.connect(g);
-  g.connect(c.destination);
+  connectToSfxOut(c, g);
   noise.start(t);
   noise.stop(t + 0.15);
 }
@@ -179,7 +207,7 @@ export function playLandmineExplosion(): void {
   g.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
   noise.connect(hp);
   hp.connect(g);
-  g.connect(c.destination);
+  connectToSfxOut(c, g);
   noise.start(t);
   noise.stop(t + 0.2);
 }
@@ -198,7 +226,7 @@ export function playMortarLaunch(): void {
   g.gain.setValueAtTime(0.14, t);
   g.gain.exponentialRampToValueAtTime(0.01, t + 0.38);
   o.connect(g);
-  g.connect(c.destination);
+  connectToSfxOut(c, g);
   o.start(t);
   o.stop(t + 0.4);
 }
@@ -225,7 +253,7 @@ export function playEscravoChainSlash(): void {
   g1.gain.exponentialRampToValueAtTime(0.01, t + 0.11);
   n1.connect(hp1);
   hp1.connect(g1);
-  g1.connect(c.destination);
+  connectToSfxOut(c, g1);
   n1.start(t);
   n1.stop(t + 0.12);
   const n2 = c.createBufferSource();
@@ -243,7 +271,7 @@ export function playEscravoChainSlash(): void {
   g2.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
   n2.connect(hp2);
   hp2.connect(g2);
-  g2.connect(c.destination);
+  connectToSfxOut(c, g2);
   n2.start(t + 0.02);
   n2.stop(t + 0.11);
   const o = c.createOscillator();
@@ -254,7 +282,7 @@ export function playEscravoChainSlash(): void {
   go.gain.setValueAtTime(0.1, t + 0.04);
   go.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
   o.connect(go);
-  go.connect(c.destination);
+  connectToSfxOut(c, go);
   o.start(t + 0.04);
   o.stop(t + 0.11);
 }
@@ -273,7 +301,7 @@ export function playMortarImpact(): void {
   g.gain.setValueAtTime(0.2, t);
   g.gain.exponentialRampToValueAtTime(0.01, t + 0.28);
   o.connect(g);
-  g.connect(c.destination);
+  connectToSfxOut(c, g);
   o.start(t);
   o.stop(t + 0.3);
   playLandmineExplosion();
@@ -293,7 +321,7 @@ export function playInputError(): void {
   g.gain.setValueAtTime(0.12, t);
   g.gain.exponentialRampToValueAtTime(0.01, t + 0.16);
   o.connect(g);
-  g.connect(c.destination);
+  connectToSfxOut(c, g);
   o.start(t);
   o.stop(t + 0.18);
 }
@@ -323,7 +351,7 @@ export function playWeaponsCock(): void {
     g.gain.exponentialRampToValueAtTime(0.01, at + 0.08);
     noise.connect(bp);
     bp.connect(g);
-    g.connect(c.destination);
+    connectToSfxOut(c, g);
     noise.start(at);
     noise.stop(at + 0.09);
   };
@@ -339,7 +367,7 @@ export function playWeaponsCock(): void {
   g2.gain.setValueAtTime(0.18, t + 0.03);
   g2.gain.exponentialRampToValueAtTime(0.01, t + 0.18);
   o.connect(g2);
-  g2.connect(c.destination);
+  connectToSfxOut(c, g2);
   o.start(t + 0.03);
   o.stop(t + 0.19);
 }

@@ -248,6 +248,7 @@ export function clearAllLocalProgressForFreshStart(): void {
     KEY,
     FORGE_STATE_KEY,
     "gladiadores-music-volume-percent",
+    "gladiadores-sfx-volume-percent",
     "gladiadores-skip-enemy-move",
     "gladiadores-combat-log-visible",
     "gladiadores-enemy-inspect-pos",

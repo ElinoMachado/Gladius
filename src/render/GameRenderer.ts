@@ -17,6 +17,11 @@ import {
   createBunkerStructureGroup,
   type BunkerRenderTier,
 } from "./bunkerMesh";
+import {
+  connectToSfxOut,
+  ensureAudioContext,
+  resume as resumeWebAudio,
+} from "../audio/combatSounds";
 
 const BIOME_HEX_COLOR: Record<BiomeId, number> = {
   hub: 0x6b5a4a,
@@ -36,6 +41,8 @@ const HEX_SIZE = 2.18;
 const HERO_FLY_BASE_Y = 1.2;
 /** Oscilação vertical (flutuar) em torno da base. */
 const HERO_FLY_BOB_AMP = 0.26;
+/** Sombra no chão sob herói a voar: ~apotema do hex, ligeiramente menor. */
+const FLYING_HERO_SHADOW_R = HEX_SIZE * (Math.sqrt(3) / 2) * 0.86;
 const ARENA_HEX_RADIUS = 25;
 /** Borda do pan: extensão do grid + folga (sem o anel decorativo removido). */
 const COLISEUM_XZ_MAX = HEX_SIZE * Math.sqrt(3) * ARENA_HEX_RADIUS + 10;
@@ -137,6 +144,10 @@ export class GameRenderer {
   private readonly bunkerHideAtByHeroId = new Map<string, number>();
   /** Inimigo já removido do modelo: `perf.now` alvo para apagar a mesh (até lá fica invisível). */
   private readonly enemyDeathMeshRemoveAt = new Map<string, number>();
+  /** Sombra circular no hex (herói com `flying`). */
+  private readonly flyingHeroGroundShadows = new Map<string, THREE.Mesh>();
+  private flyingHeroShadowSharedGeo: THREE.CircleGeometry | null = null;
+  private flyingHeroShadowSharedMat: THREE.MeshBasicMaterial | null = null;
   private readonly meleeSlashFx: { mesh: THREE.Mesh; until: number }[] = [];
   private readonly mortarShots: {
     mesh: THREE.Mesh;
@@ -576,9 +587,67 @@ export class GameRenderer {
     this.clearStatusVisuals(group);
     this.unitMoveAnims.delete(id);
     this.hitFlashState.delete(id);
+    this.heroUltJumpById.delete(id);
     this.enemyDeathMeshRemoveAt.delete(id);
+    this.removeFlyingHeroGroundShadow(id);
     this.arenaRoot.remove(group);
     this.unitMeshes.delete(id);
+  }
+
+  private ensureFlyingShadowTemplate(): {
+    geo: THREE.CircleGeometry;
+    mat: THREE.MeshBasicMaterial;
+  } {
+    if (!this.flyingHeroShadowSharedGeo) {
+      this.flyingHeroShadowSharedGeo = new THREE.CircleGeometry(
+        FLYING_HERO_SHADOW_R,
+        48,
+      );
+      this.flyingHeroShadowSharedMat = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        transparent: true,
+        opacity: 0.38,
+        depthWrite: false,
+      });
+    }
+    return {
+      geo: this.flyingHeroShadowSharedGeo,
+      mat: this.flyingHeroShadowSharedMat!,
+    };
+  }
+
+  private removeFlyingHeroGroundShadow(unitId: string): void {
+    const sh = this.flyingHeroGroundShadows.get(unitId);
+    if (!sh) return;
+    this.arenaRoot.remove(sh);
+    this.flyingHeroGroundShadows.delete(unitId);
+  }
+
+  /** Projecta no chão a posição XZ do herói em voo (hex de apoio). */
+  private updateFlyingHeroGroundShadows(): void {
+    for (const [id, g] of this.unitMeshes) {
+      const baseY = Number(g.userData.heroFlyBaseY) || 0;
+      if (baseY <= 0) {
+        this.removeFlyingHeroGroundShadow(id);
+        continue;
+      }
+      const { geo, mat } = this.ensureFlyingShadowTemplate();
+      let sh = this.flyingHeroGroundShadows.get(id);
+      if (!sh) {
+        sh = new THREE.Mesh(geo, mat);
+        sh.rotation.x = -Math.PI / 2;
+        sh.renderOrder = -2;
+        sh.userData.role = "flyingHeroGroundShadow";
+        this.arenaRoot.add(sh);
+        this.flyingHeroGroundShadows.set(id, sh);
+      }
+      sh.position.set(g.position.x, 0.02, g.position.z);
+    }
+    for (const sid of [...this.flyingHeroGroundShadows.keys()]) {
+      if (!this.unitMeshes.has(sid)) {
+        this.removeFlyingHeroGroundShadow(sid);
+      }
+    }
   }
 
   private disposeStatusBadge(mesh: THREE.Mesh): void {
@@ -2713,18 +2782,20 @@ export class GameRenderer {
     this.scene.add(this.roseParticles);
     this.animRose = 90;
     try {
-      const ctx = new AudioContext();
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.connect(g);
-      g.connect(ctx.destination);
-      o.frequency.value = 440;
-      g.gain.value = 0.04;
-      o.start();
-      setTimeout(() => {
-        o.stop();
-        ctx.close();
-      }, 120);
+      const c = ensureAudioContext();
+      if (c) {
+        resumeWebAudio();
+        const o = c.createOscillator();
+        const g = c.createGain();
+        o.connect(g);
+        connectToSfxOut(c, g);
+        o.frequency.value = 440;
+        g.gain.value = 0.04;
+        o.start();
+        setTimeout(() => {
+          o.stop();
+        }, 120);
+      }
     } catch {
       /* ignore */
     }
@@ -2734,6 +2805,7 @@ export class GameRenderer {
     const dt = this.clock.getDelta();
     this.updateUnitMoveAnims(dt);
     this.updateFlyingHeroPerFrameMotion(performance.now());
+    this.updateFlyingHeroGroundShadows();
     this.updateShieldBubblePulse(dt);
     this.updateFocusLerp(dt);
     if (!this.panDragMoved) {

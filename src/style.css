@@ -2019,6 +2019,14 @@ h1 {
   pointer-events: auto;
 }
 
+.global-volume-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  align-items: stretch;
+  flex: 0 0 auto;
+}
+
 .music-volume-wrap {
   display: flex;
   flex-direction: row;
@@ -2040,13 +2048,21 @@ h1 {
   opacity: 0.35;
 }
 
-#music-volume-range {
+.global-volume-range {
   width: min(26vw, 5.85rem);
   min-width: 4.25rem;
   height: 1.05rem;
   cursor: pointer;
   accent-color: #c9a24a;
   vertical-align: middle;
+}
+
+.sfx-volume-wrap .global-volume-range {
+  accent-color: #8ab4c9;
+}
+
+.sfx-volume-icon--muted {
+  opacity: 0.35;
 }
 
 .global-synergy-slot {
@@ -8571,7 +8587,7 @@ select.forge-biome-sel option:disabled {
     padding: 0.15rem 0.28rem;
   }
 
-  #music-volume-range {
+  .global-volume-range {
     width: min(22vw, 4.5rem);
     min-width: 3.5rem;
   }

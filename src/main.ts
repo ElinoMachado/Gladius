@@ -54,6 +54,7 @@ import {
   teamColorCss,
 } from "./ui/colorTriangle";
 import { initMusicVolumeControl } from "./ui/musicVolumeControl";
+import { initSfxVolumeControl } from "./ui/sfxVolumeControl";
 import { mountCrystalSelect } from "./ui/crystalSelect";
 import { biomeCrestWrap } from "./ui/biomeCrests";
 import { axialKey, hexDistance } from "./game/hex";
@@ -7616,6 +7617,7 @@ document.addEventListener(
 );
 
 initMusicVolumeControl();
+initSfxVolumeControl();
 
 loop();
 
