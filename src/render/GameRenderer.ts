@@ -6,6 +6,15 @@ import {
 import { axialToWorld, axialKey, hexDistance, type Axial } from "../game/hex";
 import type { HexCell } from "../game/grid";
 import type { Unit } from "../game/types";
+import {
+  bleedInstanceCount,
+  dotTickConsumeCount,
+  hotInstanceCount,
+  poisonInstanceCount,
+  sumNextBleedTickDamage,
+  sumNextHotTickHeal,
+  sumNextPoisonTickDamage,
+} from "../game/dotInstances";
 
 export type HitFlashTone = "normal" | "blood" | "heal_swirl";
 import { BIOME_LABELS } from "../game/data/biomes";
@@ -788,6 +797,13 @@ export class GameRenderer {
       (pg.material as THREE.Material).dispose();
       g.userData.poisonGlowRing = undefined;
     }
+    const bg = g.userData.bleedGlowRing as THREE.Mesh | undefined;
+    if (bg) {
+      g.remove(bg);
+      bg.geometry.dispose();
+      (bg.material as THREE.Material).dispose();
+      g.userData.bleedGlowRing = undefined;
+    }
   }
 
   private makeStatusGlowRing(color: number, inner: number, outer: number): THREE.Mesh {
@@ -847,9 +863,10 @@ export class GameRenderer {
       this.clearStatusVisuals(g);
       return;
     }
-    const wantHot = !!(u.hot && u.hot.turns > 0);
-    const wantPoison = !!(u.poison && u.poison.turns > 0);
-    const sig = `${wantHot ? 1 : 0}-${u.hot?.turns ?? 0}-${u.hot?.perTurn ?? 0}-${wantPoison ? 1 : 0}-${u.poison?.turns ?? 0}-${u.poison?.perTurn ?? 0}`;
+    const wantHot = !!(u.hot && u.hot.instances.length > 0);
+    const wantPoison = !!(u.poison && u.poison.instances.length > 0);
+    const wantBleed = !!(u.bleed && u.bleed.instances.length > 0);
+    const sig = `${wantHot ? 1 : 0}-${hotInstanceCount(u)}-${sumNextHotTickHeal(u)}-${wantPoison ? 1 : 0}-${poisonInstanceCount(u)}-${sumNextPoisonTickDamage(u)}-${wantBleed ? 1 : 0}-${bleedInstanceCount(u)}-${sumNextBleedTickDamage(u)}-${dotTickConsumeCount(u)}`;
     if (barRoot.userData.statusSig === sig) return;
     barRoot.userData.statusSig = sig;
     this.clearStatusVisuals(g);
@@ -866,6 +883,12 @@ export class GameRenderer {
       g.add(ring);
       g.userData.poisonGlowRing = ring;
     }
+    if (wantBleed) {
+      const ring = this.makeStatusGlowRing(0xc62828, 0.52, 0.66);
+      ring.position.y = 0.024;
+      g.add(ring);
+      g.userData.bleedGlowRing = ring;
+    }
 
     let stack = barRoot.userData.statusStack as THREE.Group | undefined;
     if (!stack) {
@@ -877,10 +900,13 @@ export class GameRenderer {
     }
     let ix = 0;
     if (wantHot && u.hot) {
-      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Cura contínua</div><p class="game-ui-tooltip-passive">+${u.hot.perTurn} PV por turno · ${u.hot.turns} turno(s) restante(s).</p></div>`;
+      const hi = hotInstanceCount(u);
+      const hn = sumNextHotTickHeal(u);
+      const hr = dotTickConsumeCount(u);
+      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Cura contínua</div><p class="game-ui-tooltip-passive">${hi} instância(s) na fila. Próximo tick: +${hn} PV (consome ${hr}).</p></div>`;
       const m = this.makeStatusBadgeMesh(
         "♥",
-        u.hot.turns,
+        hi,
         "#143020",
         "#7dffb0",
         tip,
@@ -890,12 +916,31 @@ export class GameRenderer {
       ix++;
     }
     if (wantPoison && u.poison) {
-      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Veneno</div><p class="game-ui-tooltip-passive">${u.poison.perTurn} de dano por turno · ${u.poison.turns} turno(s) restante(s). Ignora defesa.</p></div>`;
+      const pi = poisonInstanceCount(u);
+      const pn = sumNextPoisonTickDamage(u);
+      const pr = dotTickConsumeCount(u);
+      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Veneno</div><p class="game-ui-tooltip-passive">${pi} instância(s) na fila. Próximo tick: ${pn} dano (consome ${pr}). Ignora defesa.</p></div>`;
       const m = this.makeStatusBadgeMesh(
         "☠",
-        u.poison.turns,
+        pi,
         "#2a1030",
         "#e8aaff",
+        tip,
+      );
+      m.position.set(-0.2 + ix * 0.42, 0, 0.02);
+      stack.add(m);
+      ix++;
+    }
+    if (wantBleed && u.bleed) {
+      const bi = bleedInstanceCount(u);
+      const bn = sumNextBleedTickDamage(u);
+      const br = dotTickConsumeCount(u);
+      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Sangramento</div><p class="game-ui-tooltip-passive">${bi} instância(s) na fila. Próximo tick: ${bn} dano (consome ${br}).</p></div>`;
+      const m = this.makeStatusBadgeMesh(
+        "†",
+        bi,
+        "#301010",
+        "#ff8a80",
         tip,
       );
       m.position.set(-0.2 + ix * 0.42, 0, 0.02);

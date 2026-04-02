@@ -39,7 +39,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Mãos venenosas",
     rarity: "common",
     description:
-      "Ao causar dano a um inimigo, aplica envenenamento: 3 por turno durante 4 turnos. Cada acúmulo adiciona +3 ao dano por turno. O dano do envenenamento não é reduzido pela defesa do alvo.",
+      "Ao causar dano a um inimigo, adiciona 4 instâncias de veneno à fila do alvo (cada uma causa 3 de dano no tick em que for consumida). Cada acúmulo aumenta esse dano por instância em +3. Novas aplicações somam-se à fila existente. Por turno consome-se 1 instância (salvo efeitos que alterem isso). O dano do veneno ignora a defesa do alvo.",
   },
   {
     id: "ronin",

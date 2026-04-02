@@ -140,12 +140,15 @@ export interface Unit extends CoreStats {
   motorMorteNextBasicPct: number;
   /** Saiu do bunker neste ciclo: não pode reentrar até ao próprio turno. */
   bunkerReentryBlocked?: boolean;
-  /** Envenenamento (Mãos venenosas): tick desconta HP direto, sem defesa. */
-  poison?: { turns: number; perTurn: number };
-  /** Cura contínua por turno (outras fontes). */
-  hot?: { turns: number; perTurn: number };
-  /** Sangramento (ex.: Furacão de balas). */
-  bleed?: { turns: number; perTurn: number };
+  /**
+   * DoTs como filas de instâncias: cada tick consome até `dotConsumePerTick` entradas
+   * (FIFO); cada número é dano/cura desse “tick de instância”.
+   */
+  poison?: { instances: number[] };
+  hot?: { instances: number[] };
+  bleed?: { instances: number[] };
+  /** Quantas instâncias de cada DoT são consumidas por turno (padrão 1). */
+  dotConsumePerTick?: number;
   /** Nível da arma principal (loja de cristais); escala skills e ultimate da arma. */
   weaponLevel: WeaponLevel;
   /** Progresso 0–1 para ultimate da arma (cura+escudo / golpes / dano sofrido). */

@@ -3242,13 +3242,14 @@ export class GameModel {
     return best;
   }
 
-  /** Mãos venenosas: dano fixo por turno (3×acúmulos), 4 turnos; tick em HP sem passar por defesa. */
+  /** Mãos venenosas: adiciona 4 instâncias de dano (3×acúmulos cada); soma à fila existente. */
   private applyPoison(att: Unit, tgt: Unit): void {
     const s = att.artifacts["maos_venenosas"] ?? 0;
     if (s <= 0) return;
-    const perTurn = 3 * s;
-    const turns = 4;
-    tgt.poison = { turns, perTurn };
+    const dmg = 3 * s;
+    const add = Array.from({ length: 4 }, () => dmg);
+    const cur = tgt.poison?.instances ?? [];
+    tgt.poison = { instances: [...cur, ...add] };
   }
 
   /** Seda vampira: % da cura em HP vira dano bruto em inimigos do mesmo bioma (20% por acúmulo, máx. 10). */
@@ -3437,7 +3438,9 @@ export class GameModel {
           const pct = furacaoBleedPct(att.weaponLevel);
           const total = Math.max(1, roundToCombatDecimals(dealt * pct));
           const per = Math.max(0.01, roundToCombatDecimals(total / T));
-          tg.bleed = { turns: T, perTurn: per };
+          const add = Array.from({ length: T }, () => per);
+          const cur = tg.bleed?.instances ?? [];
+          tg.bleed = { instances: [...cur, ...add] };
         }
         this.emit();
       });
@@ -3517,14 +3520,19 @@ export class GameModel {
   }
 
   /**
-   * Veneno e HoT: ticks no fim do turno do herói (via `applyEndTurnEffects`) ou,
-   * para cada inimigo, logo após o fim do turno daquele inimigo (`processNextEnemyTurn`).
-   * Dano de veneno não usa crítico de habilidades; aplica-se direto em HP (ignora defesa).
+   * Veneno, HoT e sangramento: filas de instâncias; cada tick consome até
+   * `dotConsumePerTick` (defeito 1). Veneno aplica dano direto em HP (ignora defesa).
    */
   private applyPoisonAndHotTick(u: Unit): void {
     if (u.hp <= 0) return;
-    if (u.poison && u.poison.turns > 0) {
-      const pd = u.poison.perTurn;
+    const rate = Math.max(1, Math.floor(u.dotConsumePerTick ?? 1));
+
+    if (u.poison && u.poison.instances.length > 0) {
+      let pd = 0;
+      const n = Math.min(rate, u.poison.instances.length);
+      for (let i = 0; i < n; i++) {
+        pd += u.poison.instances.shift()!;
+      }
       if (pd > 0) {
         this.pushCombatFloat({
           unitId: u.id,
@@ -3535,16 +3543,18 @@ export class GameModel {
           floatHex: { q: u.q, r: u.r },
           poisonDot: true,
         });
+        u.hp = Math.max(0, u.hp - pd);
       }
-      /* Veneno (Mãos venenosas): não passa por `dealDamage` / mitigação por defesa. */
-      u.hp = Math.max(0, u.hp - pd);
-      u.poison.turns--;
+      if (u.poison.instances.length === 0) u.poison = undefined;
     }
-    if (u.poison && u.poison.turns <= 0) u.poison = undefined;
 
-    if (u.hot && u.hot.turns > 0) {
-      const ht = u.hot.perTurn;
-      if (ht > 0 && u.hp > 0) {
+    if (u.hot && u.hot.instances.length > 0 && u.hp > 0) {
+      let ht = 0;
+      const n = Math.min(rate, u.hot.instances.length);
+      for (let i = 0; i < n; i++) {
+        ht += u.hot.instances.shift()!;
+      }
+      if (ht > 0) {
         const h0 = u.hp;
         u.hp = Math.min(u.maxHp, u.hp + ht);
         const g = u.hp - h0;
@@ -3558,12 +3568,15 @@ export class GameModel {
           this.applySedaVampiraSplash(u, g);
         }
       }
-      u.hot.turns--;
+      if (u.hot.instances.length === 0) u.hot = undefined;
     }
-    if (u.hot && u.hot.turns <= 0) u.hot = undefined;
 
-    if (u.bleed && u.bleed.turns > 0) {
-      const bd = u.bleed.perTurn;
+    if (u.bleed && u.bleed.instances.length > 0) {
+      let bd = 0;
+      const n = Math.min(rate, u.bleed.instances.length);
+      for (let i = 0; i < n; i++) {
+        bd += u.bleed.instances.shift()!;
+      }
       if (bd > 0) {
         this.pushCombatFloat({
           unitId: u.id,
@@ -3573,11 +3586,10 @@ export class GameModel {
           targetIsPlayer: u.isPlayer,
           floatHex: { q: u.q, r: u.r },
         });
+        u.hp = Math.max(0, u.hp - bd);
       }
-      u.hp = Math.max(0, u.hp - bd);
-      u.bleed.turns--;
+      if (u.bleed.instances.length === 0) u.bleed = undefined;
     }
-    if (u.bleed && u.bleed.turns <= 0) u.bleed = undefined;
   }
 
   private applyEndTurnEffects(u: Unit): void {

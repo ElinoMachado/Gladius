@@ -113,6 +113,15 @@ import type {
   ForgePiece,
   ForgeSlotKind,
 } from "./game/types";
+import {
+  bleedInstanceCount,
+  dotTickConsumeCount,
+  hotInstanceCount,
+  poisonInstanceCount,
+  sumNextBleedTickDamage,
+  sumNextHotTickHeal,
+  sumNextPoisonTickDamage,
+} from "./game/dotInstances";
 import { biomeAt } from "./game/unitFactory";
 import { HERO_STAT_TIP } from "./ui/heroStatRichText";
 import {
@@ -843,24 +852,43 @@ function enemyInspectRowsHtml(rows: [string, string][]): string {
 
 function enemyStatusTooltipHotHtml(u: Unit): string {
   if (!u.hot) return "";
-  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Cura contínua</div><p class="game-ui-tooltip-passive">+${u.hot.perTurn} PV por turno · ${u.hot.turns} turno(s) restante(s).</p></div>`;
+  const hi = hotInstanceCount(u);
+  const hn = sumNextHotTickHeal(u);
+  const hr = dotTickConsumeCount(u);
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Cura contínua</div><p class="game-ui-tooltip-passive">${hi} instância(s) na fila. Próximo tick: +${formatTooltipNumber(hn)} PV (consome ${hr}).</p></div>`;
 }
 
 function enemyStatusTooltipPoisonHtml(u: Unit): string {
   if (!u.poison) return "";
-  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Veneno</div><p class="game-ui-tooltip-passive">${u.poison.perTurn} de dano por turno · ${u.poison.turns} turno(s) restante(s). Ignora defesa.</p></div>`;
+  const pi = poisonInstanceCount(u);
+  const pn = sumNextPoisonTickDamage(u);
+  const pr = dotTickConsumeCount(u);
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Veneno</div><p class="game-ui-tooltip-passive">${pi} instância(s) na fila. Próximo tick: ${formatTooltipNumber(pn)} dano (consome ${pr}). Ignora defesa.</p></div>`;
+}
+
+function enemyStatusTooltipBleedHtml(u: Unit): string {
+  if (!u.bleed) return "";
+  const bi = bleedInstanceCount(u);
+  const bn = sumNextBleedTickDamage(u);
+  const br = dotTickConsumeCount(u);
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Sangramento</div><p class="game-ui-tooltip-passive">${bi} instância(s) na fila. Próximo tick: ${formatTooltipNumber(bn)} dano (consome ${br}).</p></div>`;
 }
 
 function fillEnemyInspectStatusRow(host: HTMLElement, u: Unit): void {
   const bits: string[] = [];
-  if (u.hot && u.hot.turns > 0) {
+  if (u.hot && u.hot.instances.length > 0) {
     bits.push(
-      `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--hot" role="img" aria-label="Cura contínua">♥&nbsp;${u.hot.turns}</span>`,
+      `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--hot" role="img" aria-label="Cura contínua">♥&nbsp;${hotInstanceCount(u)}</span>`,
     );
   }
-  if (u.poison && u.poison.turns > 0) {
+  if (u.poison && u.poison.instances.length > 0) {
     bits.push(
-      `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--poison" role="img" aria-label="Veneno">☠&nbsp;${u.poison.turns}</span>`,
+      `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--poison" role="img" aria-label="Veneno">☠&nbsp;${poisonInstanceCount(u)}</span>`,
+    );
+  }
+  if (u.bleed && u.bleed.instances.length > 0) {
+    bits.push(
+      `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--bleed" role="img" aria-label="Sangramento">†&nbsp;${bleedInstanceCount(u)}</span>`,
     );
   }
   host.innerHTML = bits.length
@@ -870,6 +898,8 @@ function fillEnemyInspectStatusRow(host: HTMLElement, u: Unit): void {
   if (h) bindGameTooltip(h as HTMLElement, () => enemyStatusTooltipHotHtml(u));
   const p = host.querySelector(".enemy-inspect-status-badge--poison");
   if (p) bindGameTooltip(p as HTMLElement, () => enemyStatusTooltipPoisonHtml(u));
+  const b = host.querySelector(".enemy-inspect-status-badge--bleed");
+  if (b) bindGameTooltip(b as HTMLElement, () => enemyStatusTooltipBleedHtml(u));
 }
 
 function enemyInspectPrimaryRows(u: Unit, m: GameModel): [string, string][] {
@@ -5196,22 +5226,30 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       undefined,
       "utility",
     );
-  if (h.poison)
+  if (h.poison && h.poison.instances.length > 0) {
+    const pi = poisonInstanceCount(h);
+    const pn = sumNextPoisonTickDamage(h);
+    const pr = dotTickConsumeCount(h);
     cells.push({
       icon: "poison",
       label: "Veneno",
-      value: `${h.poison.perTurn}/turno · ${h.poison.turns} turno(s)`,
-      tooltipValue: `${h.poison.perTurn}/turno · ${h.poison.turns} turno(s)`,
+      value: `${pi} inst. · próx. ${formatTooltipNumber(pn)} (${pr}/tick)`,
+      tooltipValue: `${pi} instância(s); próximo tick ${formatTooltipNumber(pn)} dano; consome ${pr} por turno. Ignora defesa.`,
       statCategory: "utility",
     });
-  if (h.hot)
+  }
+  if (h.hot && h.hot.instances.length > 0) {
+    const hi = hotInstanceCount(h);
+    const hn = sumNextHotTickHeal(h);
+    const hr = dotTickConsumeCount(h);
     cells.push({
       icon: "regen_hp",
       label: "Cura contínua",
-      value: `${h.hot.perTurn}/turno · ${h.hot.turns} turno(s)`,
-      tooltipValue: `${h.hot.perTurn}/turno · ${h.hot.turns} turno(s)`,
+      value: `${hi} inst. · próx. +${formatTooltipNumber(hn)} (${hr}/tick)`,
+      tooltipValue: `${hi} instância(s); próximo tick +${formatTooltipNumber(hn)} PV; consome ${hr} por turno.`,
       statCategory: "utility",
     });
+  }
   if (h.ultimateId)
     cells.push({
       icon: "ult",

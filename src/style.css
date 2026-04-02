@@ -2759,6 +2759,12 @@ h1 {
   border-color: #e8aaff;
 }
 
+.enemy-inspect-status-badge--bleed {
+  background: #301010;
+  color: #ff8a80;
+  border-color: #ff8a80;
+}
+
 .enemy-inspect-list--primary {
   flex: 0 1 auto;
   min-height: 0;
