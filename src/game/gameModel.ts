@@ -1603,6 +1603,7 @@ export class GameModel {
             kind: "heal",
             amount: g1,
           });
+          this.applyCurandeiroBatalhaFromHeal(priest);
         }
         this.flushCombatLevelUp(priest);
         return;
@@ -1617,6 +1618,7 @@ export class GameModel {
         kind: "heal",
         amount: pg,
       });
+      this.applyCurandeiroBatalhaFromHeal(priest);
     }
     this.flushCombatLevelUp(priest);
     if (this.phase === "combat") {
@@ -3017,6 +3019,7 @@ export class GameModel {
               kind: "heal",
               amount: g,
             });
+            this.applyCurandeiroBatalhaFromHeal(src);
           }
         }
       }
@@ -3043,6 +3046,7 @@ export class GameModel {
             kind: "heal",
             amount: add,
           });
+          this.applyCurandeiroBatalhaFromHeal(killer);
         }
       }
     }
@@ -3115,6 +3119,7 @@ export class GameModel {
               kind: "heal",
               amount: g,
             });
+            this.applyCurandeiroBatalhaFromHeal(killer);
           }
         }
       }
@@ -3273,6 +3278,17 @@ export class GameModel {
     }
   }
 
+  /**
+   * Curandeiro de batalha: +2 dano na wave por acúmulo quando o herói cura aliado ou a si.
+   * Usar em `healUnit` e em curas explícitas de artefatos (não roubo de vida).
+   */
+  private applyCurandeiroBatalhaFromHeal(healer: Unit): void {
+    if (!healer.isPlayer) return;
+    const cb = healer.artifacts["curandeiro_batalha"] ?? 0;
+    if (cb <= 0) return;
+    healer.curandeiroDanoWave += 2 * cb;
+  }
+
   private healUnit(
     target: Unit,
     base: number,
@@ -3334,8 +3350,7 @@ export class GameModel {
         this.addWeaponUltHealCharge(src, g, opts?.skipWeaponUltMeter);
       }
     }
-    const cb = src.artifacts["curandeiro_batalha"] ?? 0;
-    if (cb > 0) src.curandeiroDanoWave += 2 * cb;
+    this.applyCurandeiroBatalhaFromHeal(src);
   }
 
   /** Carga da ultimate da arma: PV curados e escudo aplicado por `healUnit` (ex. Sentença). */
