@@ -35,7 +35,7 @@ const HEX_SIZE = 2.18;
 /** Heróis com `flying`: altura base acima do hex (~4× a elevação inicial). */
 const HERO_FLY_BASE_Y = 1.2;
 /** Oscilação vertical (flutuar) em torno da base. */
-const HERO_FLY_BOB_AMP = 0.22;
+const HERO_FLY_BOB_AMP = 0.26;
 const ARENA_HEX_RADIUS = 25;
 /** Borda do pan: extensão do grid + folga (sem o anel decorativo removido). */
 const COLISEUM_XZ_MAX = HEX_SIZE * Math.sqrt(3) * ARENA_HEX_RADIUS + 10;
@@ -870,21 +870,35 @@ export class GameRenderer {
     return baseY + HERO_FLY_BOB_AMP * Math.sin(phase);
   }
 
+  /**
+   * Silhueta de asa (plano XY): raiz junto ao corpo (0,0), vão para +X.
+   * Cada asa usa geometria clonada para `dispose` seguro.
+   */
+  private createGoldenWingSilhouetteGeometry(): THREE.BufferGeometry {
+    const sh = new THREE.Shape();
+    sh.moveTo(0.02, 0.06);
+    sh.quadraticCurveTo(0.06, 0.52, 0.28, 0.88);
+    sh.quadraticCurveTo(0.52, 1.12, 0.88, 0.98);
+    sh.quadraticCurveTo(1.18, 0.72, 1.38, 0.28);
+    sh.quadraticCurveTo(1.52, -0.22, 1.28, -0.62);
+    sh.quadraticCurveTo(1.02, -0.95, 0.62, -0.82);
+    sh.quadraticCurveTo(0.32, -0.68, 0.14, -0.38);
+    sh.quadraticCurveTo(0.04, -0.14, 0.02, 0.06);
+    sh.closePath();
+    return new THREE.ShapeGeometry(sh, 20);
+  }
+
   private buildGoldenFlyingWingsGroup(): THREE.Group {
     const root = new THREE.Group();
     root.userData.role = "flyingWings";
     /** Desligado do torso: conjunto atrás e um pouco acima. */
     root.position.set(0, 0.34, -0.62);
 
-    const w = 1.14;
-    const h = 1.52;
-    const geoMain = new THREE.PlaneGeometry(w, h);
-
     const addWing = (side: -1 | 1): THREE.Group => {
       const pivot = new THREE.Group();
-      const spread = 0.58;
-      pivot.position.set(side * spread, 1.05, 0.06);
-      pivot.rotation.set(-0.1, side * -0.52, side * 0.07);
+      const spread = 0.52;
+      pivot.position.set(side * spread, 1.02, 0.05);
+      pivot.rotation.set(-0.12, side * -0.5, side * 0.06);
 
       const solidMat = new THREE.MeshStandardMaterial({
         color: 0xf5d24a,
@@ -894,11 +908,12 @@ export class GameRenderer {
         roughness: 0.12,
         side: THREE.DoubleSide,
       });
-      const solid = new THREE.Mesh(geoMain, solidMat);
-      solid.position.z = 0.03;
+      const solidGeo = this.createGoldenWingSilhouetteGeometry();
+      const solid = new THREE.Mesh(solidGeo, solidMat);
+      solid.scale.set(side * 1.12, 1.38, 1);
+      solid.position.set(side * 0.04, -0.06, 0.04);
       solid.userData.wingPulse = true;
 
-      const glowGeo = new THREE.PlaneGeometry(w * 1.18, h * 1.2);
       const glowMat = new THREE.MeshBasicMaterial({
         color: 0xfff2c8,
         transparent: true,
@@ -907,8 +922,10 @@ export class GameRenderer {
         depthWrite: false,
         side: THREE.DoubleSide,
       });
+      const glowGeo = this.createGoldenWingSilhouetteGeometry();
       const glow = new THREE.Mesh(glowGeo, glowMat);
-      glow.position.z = -0.06;
+      glow.scale.set(side * 1.24, 1.48, 1);
+      glow.position.set(side * 0.04, -0.06, -0.05);
       glow.userData.wingPulse = true;
 
       pivot.add(glow);
@@ -951,6 +968,10 @@ export class GameRenderer {
       g.add(wings);
     }
 
+    this.applyGoldenWingFlapAndPulse(wings, nowMs);
+  }
+
+  private applyGoldenWingFlapAndPulse(wings: THREE.Group, nowMs: number): void {
     const t = nowMs * 0.0011;
     const flap = 0.11 * Math.sin(t * 2.05);
     const pulse = 0.5 + 0.5 * Math.sin(t * 3.15);
@@ -969,6 +990,21 @@ export class GameRenderer {
         m.opacity = 0.26 + 0.36 * pulse;
       }
     });
+  }
+
+  /**
+   * Flutuar e batimento das asas rodam no `tick`; `syncUnits` só corre em mudanças de estado.
+   */
+  private updateFlyingHeroPerFrameMotion(nowMs: number): void {
+    for (const [id, g] of this.unitMeshes) {
+      if (this.unitMoveAnims.has(id) || this.heroUltJumpById.has(id)) continue;
+      const baseY = Number(g.userData.heroFlyBaseY) || 0;
+      if (baseY <= 0) continue;
+      const { x, z } = g.position;
+      g.position.set(x, this.heroFlyTotalY(nowMs, id, baseY), z);
+      const wings = g.userData.flyingWingsRoot as THREE.Group | undefined;
+      if (wings) this.applyGoldenWingFlapAndPulse(wings, nowMs);
+    }
   }
 
   private updateUnitMoveAnims(dt: number): void {
@@ -2674,6 +2710,7 @@ export class GameRenderer {
   tick(): void {
     const dt = this.clock.getDelta();
     this.updateUnitMoveAnims(dt);
+    this.updateFlyingHeroPerFrameMotion(performance.now());
     this.updateShieldBubblePulse(dt);
     this.updateFocusLerp(dt);
     if (!this.panDragMoved) {
