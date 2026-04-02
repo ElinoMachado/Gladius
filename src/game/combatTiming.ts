@@ -29,3 +29,8 @@ export const FURACAO_ULT_JUMP_MS = 520;
 export const PISOTEAR_FIRST_DAMAGE_MS = 110;
 export const PISOTEAR_STAGGER_MS = 88;
 export const PISOTEAR_TAIL_BUFFER_MS = 220;
+
+/** Golpe Relâmpago: salto hex-a-hex visível antes do básico bónus. */
+export const GOLPE_RELAMPAGO_MOVE_MS = 340;
+/** Sem deslocamento no mapa: pausa antes do impacto para ler o golpe. */
+export const GOLPE_RELAMPAGO_WINDUP_MS = 240;

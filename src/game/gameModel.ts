@@ -111,6 +111,8 @@ import {
   FURACAO_ULT_FIRST_DAMAGE_MS,
   FURACAO_ULT_STAGGER_MS,
   FURACAO_ULT_TAIL_BUFFER_MS,
+  GOLPE_RELAMPAGO_MOVE_MS,
+  GOLPE_RELAMPAGO_WINDUP_MS,
   PISOTEAR_FIRST_DAMAGE_MS,
   PISOTEAR_STAGGER_MS,
   PISOTEAR_TAIL_BUFFER_MS,
@@ -3274,8 +3276,8 @@ export class GameModel {
   }
 
   /**
-   * Golpe Relâmpago (motor_morte): após eliminar, salta ao vizinho do inimigo mais próximo
-   * no mesmo bioma e dispara um básico imediato com o bônus %; se matar, pode encadear.
+   * Golpe Relâmpago (motor_morte): após eliminar, anima salto ao vizinho do alvo no bioma,
+   * depois o básico bónus (projétil ou corpo a corpo); se matar, pode encadear.
    * Se após o salto ainda não houver alcance, mantém só o bônus no próximo básico manual.
    */
   private applyGolpeRelampagoAfterKill(killer: Unit, victim: Unit): void {
@@ -3285,36 +3287,130 @@ export class GameModel {
     const near = this.nearestEnemyToInHeroBiome(killer, victim.id);
     if (!near) return;
 
+    const fromQ = killer.q;
+    const fromR = killer.r;
     const jump = this.nearestFreeHexAdjacentToUnit(killer, near);
     if (jump) {
       killer.q = jump.q;
       killer.r = jump.r;
     }
 
+    const movedOnMap =
+      jump != null && (killer.q !== fromQ || killer.r !== fromR);
     const alc = this.effectiveAlcanceForHero(killer);
     const distToTarget = hexDistance(
       { q: killer.q, r: killer.r },
       { q: near.q, r: near.r },
     );
     const bonusPct = 10 * motor;
+
     if (distToTarget > alc) {
       killer.motorMorteNextBasicPct = bonusPct;
+      if (movedOnMap) {
+        this.pendingMoveAnim = {
+          unitId: killer.id,
+          cells: [
+            { q: fromQ, r: fromR },
+            { q: killer.q, r: killer.r },
+          ],
+          segmentMs: GOLPE_RELAMPAGO_MOVE_MS,
+        };
+      }
+      this.emit();
       return;
     }
 
-    killer.motorMorteNextBasicPct = bonusPct;
-    const raw = this.computeBasicAttackRawDamage(killer);
-    killer.motorMorteNextBasicPct = 0;
-
-    const t2 = this.units.find((u) => u.id === near.id);
-    if (!t2 || t2.isPlayer || t2.hp <= 0) return;
-
-    this.strike(killer, t2, raw);
-    this.flushCombatLevelUp(killer);
-    if (this.phase === "combat") {
-      this.tryResolveWaveClearAfterCombatResume();
+    let delayBeforeStrike = GOLPE_RELAMPAGO_WINDUP_MS;
+    if (movedOnMap) {
+      this.pendingMoveAnim = {
+        unitId: killer.id,
+        cells: [
+          { q: fromQ, r: fromR },
+          { q: killer.q, r: killer.r },
+        ],
+        segmentMs: GOLPE_RELAMPAGO_MOVE_MS,
+      };
+      delayBeforeStrike = GOLPE_RELAMPAGO_MOVE_MS;
     }
+
     this.emit();
+    this.queueCombat(delayBeforeStrike, () => {
+      this.executeGolpeRelampagoBonusStrike(killer.id, near.id, bonusPct);
+    });
+  }
+
+  /**
+   * Básico bónus do Golpe Relâmpago após o salto (ou windup): alinhado a VFX de ataque básico.
+   */
+  private executeGolpeRelampagoBonusStrike(
+    killerId: string,
+    targetId: string,
+    bonusPct: number,
+  ): void {
+    const att = this.units.find((u) => u.id === killerId);
+    const tgt = this.units.find((u) => u.id === targetId);
+    if (
+      !att ||
+      !tgt ||
+      att.hp <= 0 ||
+      tgt.isPlayer ||
+      tgt.hp <= 0 ||
+      this.phase !== "combat" ||
+      this.duel
+    ) {
+      this.emit();
+      return;
+    }
+
+    const applyDamage = (): void => {
+      const a = this.units.find((u) => u.id === killerId);
+      const t = this.units.find((u) => u.id === targetId);
+      if (
+        !a ||
+        !t ||
+        a.hp <= 0 ||
+        t.isPlayer ||
+        t.hp <= 0 ||
+        this.phase !== "combat" ||
+        this.duel
+      ) {
+        this.emit();
+        return;
+      }
+      a.motorMorteNextBasicPct = bonusPct;
+      const raw = this.computeBasicAttackRawDamage(a);
+      a.motorMorteNextBasicPct = 0;
+      this.strike(a, t, raw);
+      this.flushCombatLevelUp(a);
+      if (this.phase === "combat") {
+        this.tryResolveWaveClearAfterCombatResume();
+      }
+      this.emit();
+    };
+
+    if (att.heroClass === "pistoleiro" && att.ultimateId !== "arauto_caos") {
+      this.pendingCombatVfxQueue.push({
+        kind: "basic_projectile",
+        fromId: att.id,
+        toId: tgt.id,
+        style: "bullet",
+      });
+      this.queueCombat(BASIC_PISTOL_FLIGHT_MS, applyDamage);
+      this.emit();
+      return;
+    }
+    if (att.heroClass === "sacerdotisa") {
+      this.pendingCombatVfxQueue.push({
+        kind: "basic_projectile",
+        fromId: att.id,
+        toId: tgt.id,
+        style: "magic",
+      });
+      this.queueCombat(BASIC_MAGIC_FLIGHT_MS, applyDamage);
+      this.emit();
+      return;
+    }
+    applyDamage();
   }
 
   /** Mãos venenosas: adiciona 2 instâncias de dano (3×acúmulos cada); soma à fila existente. */
