@@ -141,7 +141,7 @@ export interface Unit extends CoreStats {
   curandeiroDanoWave: number;
   /** Duro como pedra: defesa por imobilidade */
   duroPedraDefStacks: number;
-  /** Motor da morte: próximo básico % */
+  /** Golpe Relâmpago (motor_morte): próximo básico % */
   motorMorteNextBasicPct: number;
   /** Saiu do bunker neste ciclo: não pode reentrar até ao próprio turno. */
   bunkerReentryBlocked?: boolean;

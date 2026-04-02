@@ -198,7 +198,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   /* ——— Raros (10) ——— */
   {
     id: "motor_morte",
-    name: "Motor da morte",
+    name: "Golpe Relâmpago",
     rarity: "rare",
     description:
       "Ao eliminar um inimigo: teleporta ao mais próximo e +10% de dano no próximo básico por acúmulo.",

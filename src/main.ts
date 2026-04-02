@@ -5219,7 +5219,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     pushStat(
       cells,
       "motor",
-      "Motor da morte (próximo básico, %)",
+      "Golpe Relâmpago (próximo básico, %)",
       `${formatTooltipNumber(h.motorMorteNextBasicPct)}%`,
       h.motorMorteNextBasicPct,
       "pct",

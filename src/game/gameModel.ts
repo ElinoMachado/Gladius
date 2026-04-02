@@ -2121,7 +2121,7 @@ export class GameModel {
     return true;
   }
 
-  /** Dano bruto do ataque básico (antes de crítico/defesa). Inclui bônus do motor da morte se ativo. */
+  /** Dano bruto do ataque básico (antes de crítico/defesa). Inclui bônus do Golpe Relâmpago se ativo. */
   /** Parcela contínua da Garra de ferro (30% defesa por acúmulo, máx. 6); o total bruto arredonda a 2 casas. */
   tooltipGarraFerroRawPreview(u: Unit): number {
     if (!u.isPlayer) return 0;
@@ -4086,7 +4086,7 @@ export class GameModel {
     return p && p.length > 1 ? p : null;
   }
 
-  /** Hex vizinho livre ao alvo, o mais próximo da posição atual do atacante (ex.: motor da morte). */
+  /** Hex vizinho livre ao alvo, o mais próximo da posição atual do atacante (ex.: Golpe Relâmpago). */
   private nearestFreeHexAdjacentToUnit(
     mover: Unit,
     around: Unit,

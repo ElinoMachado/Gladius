@@ -259,7 +259,7 @@ export function artifactCardFigureSvg(artifactId: string): string {
   const sym: Record<string, string> = {
     trevo: `<path fill="#2e7d32" d="M24 8c-2 4-6 6-8 10 4 0 8-2 10-6-4 2-6-1-2-4zm0 0c2 4 6 6 8 10-4 0-8-2-10-6 4 2 6-1 2-4zm-8 12c4 3 4 9 0 12 3-4 9-4 12 0-3-4-1-8-5-8-3 4-7 4-7zm16 0c-4 3-4 9 0 12-3-4-9-4-12 0 3-4 1-8 5-8 3 4 7 4 7z"/><circle cx="24" cy="28" r="3" fill="#66bb6a"/>`,
     tonico: `<rect x="14" y="12" width="20" height="26" rx="3" fill="#5c6bc0" stroke="#3949ab"/><path fill="#9fa8da" d="M18 18h12v8H18z"/><path fill="#fff" d="M20 22h2v2h-2zm4 0h2v2h-2zm4 0h2v2h-2z"/>`,
-    motor_morte: `<circle cx="24" cy="26" r="14" fill="#424242" stroke="#212121"/><path fill="#ff7043" d="M24 10 L32 28 L16 28 Z"/><circle cx="24" cy="24" r="4" fill="#ffab91"/>`,
+    motor_morte: `<path fill="#ffee58" stroke="#e65100" stroke-width="1.4" stroke-linejoin="round" d="M30 3 L14 25h11l-7 21 22-26h-10l10-17z"/>`,
     maos_venenosas: `<path fill="#6a1b9a" d="M18 32 Q24 8 30 32 Z"/><circle cx="20" cy="26" r="2" fill="#ce93d8"/><circle cx="28" cy="26" r="2" fill="#ce93d8"/>`,
     ronin: `<path fill="#b71c1c" d="M12 36 L24 10 L36 36 Z" stroke="#3e2723" stroke-width="1"/><path fill="#eceff1" d="M22 20h4v14h-4z"/>`,
     imortal: `<path fill="#c62828" d="M24 12 C32 20 32 32 24 38 C16 32 16 20 24 12"/><path fill="#ffcdd2" d="M24 22v10" stroke="#fff" stroke-width="2"/>`,
