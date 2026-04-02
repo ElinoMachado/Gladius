@@ -4220,6 +4220,18 @@ export class GameModel {
     this.releaseEnemyPhaseAfterWaveIntro();
   }
 
+  /** Modo sandbox: alternar voo do herói (afeta pathfinding/combate e visual 3D). */
+  sandboxToggleHeroFlying(heroId: string): void {
+    if (!this.devSandboxMode || this.phase !== "combat") return;
+    const u = this.units.find((x) => x.id === heroId);
+    if (!u?.isPlayer || u.hp <= 0) return;
+    u.flying = !u.flying;
+    this.log(
+      `[Sandbox] ${u.name}: voo ${u.flying ? "ativado" : "desativado"}.`,
+    );
+    this.emit();
+  }
+
   /** Modo sandbox: matar herói (remove da arena como morte normal). */
   sandboxKillHero(heroId: string): void {
     if (!this.devSandboxMode || this.phase !== "combat") return;

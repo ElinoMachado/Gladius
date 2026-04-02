@@ -2284,7 +2284,10 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
       (p) =>
         `<div class="combat-sandbox-hero-row">
       <span class="combat-sandbox-hero-row__name">${escapeHtml(p.name)}</span>
-      <button type="button" class="btn combat-sandbox-kill-btn" data-sandbox-kill-hero="${escapeHtml(p.id)}">Matar</button>
+      <div class="combat-sandbox-hero-row__actions">
+        <button type="button" class="btn combat-sandbox-fly-btn" data-sandbox-toggle-fly="${escapeHtml(p.id)}" aria-pressed="${p.flying ? "true" : "false"}">${p.flying ? "Aterrar" : "Voar"}</button>
+        <button type="button" class="btn combat-sandbox-kill-btn" data-sandbox-kill-hero="${escapeHtml(p.id)}">Matar</button>
+      </div>
     </div>`,
     )
     .join("");
@@ -2298,7 +2301,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     <p class="combat-sandbox-panel__hero-hint">Herói: <strong>${heroLabelText}</strong> (turno ou primeiro vivo)</p>
     <section class="combat-sandbox-heroes" aria-label="Heróis sandbox">
       <h3 class="shop-sandbox-artifacts__title">Heróis</h3>
-      <p class="shop-sandbox-artifacts__hint">Matar remove o herói do combate (como morte).</p>
+      <p class="shop-sandbox-artifacts__hint">Voar / Aterrar altera o estado de voo (combate + modelo 3D). Matar remove o herói do combate (como morte).</p>
       ${
         partyKillRows
           ? `<div class="combat-sandbox-heroes__list" role="group">${partyKillRows}</div>`
@@ -2384,6 +2387,14 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
   panel.addEventListener(
     "click",
     (e) => {
+      const flyBtn = (e.target as HTMLElement).closest(
+        "[data-sandbox-toggle-fly]",
+      ) as HTMLButtonElement | null;
+      if (flyBtn && panel.contains(flyBtn)) {
+        const fid = flyBtn.dataset.sandboxToggleFly;
+        if (fid) model.sandboxToggleHeroFlying(fid);
+        return;
+      }
       const btn = (e.target as HTMLElement).closest(
         "[data-sandbox-kill-hero]",
       ) as HTMLButtonElement | null;

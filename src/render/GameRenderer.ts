@@ -32,6 +32,8 @@ const BIOME_HEX_COLOR: Record<BiomeId, number> = {
  * Raio centro→vértice no grid axial (vizinhos a distância √3·HEX_SIZE; mesh com o mesmo raio encosta sem folga).
  */
 const HEX_SIZE = 2.18;
+/** Heróis com `flying`: elevação acima do plano do hex (visual + alinhamento a animações). */
+const HERO_FLY_FLOAT_Y = 0.3;
 const ARENA_HEX_RADIUS = 25;
 /** Borda do pan: extensão do grid + folga (sem o anel decorativo removido). */
 const COLISEUM_XZ_MAX = HEX_SIZE * Math.sqrt(3) * ARENA_HEX_RADIUS + 10;
@@ -854,6 +856,56 @@ export class GameRenderer {
     }
   }
 
+  private buildGoldenFlyingWingsGroup(): THREE.Group {
+    const root = new THREE.Group();
+    root.userData.role = "flyingWings";
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xe8c547,
+      emissive: 0x332208,
+      emissiveIntensity: 0.22,
+      metalness: 0.68,
+      roughness: 0.32,
+      side: THREE.DoubleSide,
+    });
+    const geo = new THREE.PlaneGeometry(0.42, 0.58);
+    const wx = 0.24;
+    const wy = 1.08;
+    const wz = -0.14;
+    const flap = 0.42;
+    const left = new THREE.Mesh(geo, mat);
+    left.position.set(-wx, wy, wz);
+    left.rotation.set(-0.12, -flap, 0.08);
+    root.add(left);
+    const right = new THREE.Mesh(geo, mat.clone());
+    right.position.set(wx, wy, wz);
+    right.rotation.set(-0.12, flap, -0.08);
+    root.add(right);
+    return root;
+  }
+
+  /** Voo de herói: offset Y, asas douradas; `heroFlyBaseY` para movimento e ultimate. */
+  private updateHeroFlyingVisual(g: THREE.Group, u: Unit): void {
+    const flyY =
+      u.isPlayer && u.hp > 0 && u.flying ? HERO_FLY_FLOAT_Y : 0;
+    g.userData.heroFlyBaseY = flyY;
+
+    const wantWings = u.isPlayer && u.hp > 0 && u.flying;
+    let wings = g.userData.flyingWingsRoot as THREE.Group | undefined;
+    if (!wantWings) {
+      if (wings) {
+        g.remove(wings);
+        this.disposeObject3D(wings);
+        g.userData.flyingWingsRoot = undefined;
+      }
+      return;
+    }
+    if (!wings) {
+      wings = this.buildGoldenFlyingWingsGroup();
+      g.userData.flyingWingsRoot = wings;
+      g.add(wings);
+    }
+  }
+
   private updateUnitMoveAnims(dt: number): void {
     for (const id of [...this.unitMoveAnims.keys()]) {
       const a = this.unitMoveAnims.get(id);
@@ -874,9 +926,10 @@ export class GameRenderer {
       const p1 = axialToWorld(v.q, v.r, HEX_SIZE);
       a.t += dt;
       const p = Math.min(1, a.t / a.segSeconds);
+      const flyY = Number(g.userData.heroFlyBaseY) || 0;
       g.position.set(
         THREE.MathUtils.lerp(p0.x, p1.x, p),
-        0,
+        flyY,
         THREE.MathUtils.lerp(p0.z, p1.z, p),
       );
       if (p >= 1) {
@@ -1408,6 +1461,7 @@ export class GameRenderer {
           if (ch.userData?.role === "bars") continue;
           if (ch.userData?.role === "shieldBubble") continue;
           if (ch.userData?.role === "bunkerPickProxy") continue;
+          if (ch.userData?.role === "flyingWings") continue;
           this.disposeObject3D(ch);
           g.remove(ch);
         }
@@ -1416,14 +1470,16 @@ export class GameRenderer {
         g.add(body);
         g.userData.modelKey = mk;
       }
+      this.updateHeroFlyingVisual(g, u);
       if (!this.unitMoveAnims.has(u.id)) {
         const { x, z } = axialToWorld(u.q, u.r, HEX_SIZE);
+        const flyY = Number(g.userData.heroFlyBaseY) || 0;
         const ju = this.heroUltJumpById.get(u.id);
         if (ju) {
           ju.baseX = x;
           ju.baseZ = z;
         } else {
-          g.position.set(x, 0, z);
+          g.position.set(x, flyY, z);
         }
       }
       /** 2× no gigante: evita cobrir inimigos no raycast (antes 5×). */
@@ -2324,14 +2380,15 @@ export class GameRenderer {
         continue;
       }
       const elapsed = now - ju.startMs;
+      const fy = Number(g.userData.heroFlyBaseY) || 0;
       if (elapsed >= ju.durationMs) {
-        g.position.set(ju.baseX, 0, ju.baseZ);
+        g.position.set(ju.baseX, fy, ju.baseZ);
         this.heroUltJumpById.delete(id);
         continue;
       }
       const t = elapsed / ju.durationMs;
       const y = ju.peakY * Math.sin(Math.PI * t);
-      g.position.set(ju.baseX, y, ju.baseZ);
+      g.position.set(ju.baseX, fy + y, ju.baseZ);
     }
   }
 
