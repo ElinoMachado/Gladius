@@ -348,11 +348,6 @@ export class GameModel {
    * sem CDR em combate e ultimate da arma sempre disponível.
    */
   devSandboxMode = false;
-  /**
-   * Modo sandbox: na loja de ouro, se não for `null`, ao sair inicia-se esta wave
-   * em vez da sequência normal (1 na loja inicial; `wave + 1` entre waves).
-   */
-  sandboxShopJumpWave: number | null = null;
   /** Cores da run (sinergia VVA escudo/turno) */
   runColors: TeamColor[] = [];
   /** % extra de XP do grupo (ex.: tricolor verde+azul+vermelho). */
@@ -939,14 +934,7 @@ export class GameModel {
 
   finishInitialShop(): void {
     this.phase = "combat";
-    let w = 1;
-    if (this.devSandboxMode && this.sandboxShopJumpWave != null) {
-      w = this.sandboxShopJumpWave;
-      this.sandboxShopJumpWave = null;
-    }
-    this.startWave(
-      Math.max(1, Math.min(FINAL_VICTORY_WAVE, Math.floor(w))),
-    );
+    this.startWave(1);
   }
 
   startWave(n: number): void {
@@ -1990,15 +1978,7 @@ export class GameModel {
 
   finishWaveShop(): void {
     this.phase = "combat";
-    const defaultNext = this.wave + 1;
-    let w = defaultNext;
-    if (this.devSandboxMode && this.sandboxShopJumpWave != null) {
-      w = this.sandboxShopJumpWave;
-      this.sandboxShopJumpWave = null;
-    }
-    this.startWave(
-      Math.max(1, Math.min(FINAL_VICTORY_WAVE, Math.floor(w))),
-    );
+    this.startWave(this.wave + 1);
   }
 
   tryMoveHero(toQ: number, toR: number): boolean {
@@ -4189,10 +4169,10 @@ export class GameModel {
   }
 
   /**
-   * Modo sandbox: na loja de ouro, ajustar acúmulos de artefato do herói atual.
-   * Esquerdo +1, direito −1 (UI chama com delta ±1).
+   * Modo sandbox: ajustar acúmulos de artefato (combate ou outras fases).
+   * Esquerdo +1, direito −1 na UI (delta ±1).
    */
-  sandboxShopAdjustArtifact(
+  sandboxAdjustArtifact(
     heroId: string,
     artifactId: string,
     delta: 1 | -1,
@@ -4218,21 +4198,14 @@ export class GameModel {
   }
 
   /**
-   * Modo sandbox: escolher a wave ao sair da loja.
-   * Se `chosen` for igual a `defaultNextWave`, remove o override (comportamento normal).
+   * Modo sandbox: durante o combate, recomeçar na wave indicada (novos inimigos, etc.).
+   * Sem overlay de intro — liberta logo a fase inimiga como após fechar o splash.
    */
-  setSandboxShopJumpWaveChoice(chosen: number, defaultNextWave: number): void {
-    if (!this.devSandboxMode) return;
-    const n = Math.max(
-      1,
-      Math.min(FINAL_VICTORY_WAVE, Math.floor(chosen)),
-    );
-    const def = Math.max(
-      1,
-      Math.min(FINAL_VICTORY_WAVE, Math.floor(defaultNextWave)),
-    );
-    this.sandboxShopJumpWave = n === def ? null : n;
-    this.emit();
+  sandboxRestartWave(n: number): void {
+    if (!this.devSandboxMode || this.phase !== "combat") return;
+    const w = Math.max(1, Math.min(FINAL_VICTORY_WAVE, Math.floor(n)));
+    this.startWave(w);
+    this.releaseEnemyPhaseAfterWaveIntro();
   }
 
   pickArtifact(artifactId: string): void {

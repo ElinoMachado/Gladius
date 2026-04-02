@@ -5151,7 +5151,7 @@ body.enemy-inspect--dragging-body {
   color: #e8c547;
 }
 
-/* Loja ouro: bunker · sandbox · grelha de melhorias (ouro) em linha */
+/* Loja ouro: bunker · grelha de melhorias (ouro) em linha */
 .shop-screen__panel--gold .shop-panel-inner {
   max-width: min(1200px, 98vw);
 }
@@ -5174,20 +5174,8 @@ body.enemy-inspect--dragging-body {
   flex: 1 1 300px;
 }
 
-.shop-mid-cell--sandbox {
-  flex: 1 1 260px;
-}
-
 .shop-mid-cell--gold {
   flex: 1.25 1 300px;
-}
-
-.shop-mid-row .shop-sandbox-artifacts {
-  margin-top: 0;
-  height: 100%;
-  box-sizing: border-box;
-  max-height: min(520px, 70vh);
-  overflow-y: auto;
 }
 
 .shop-mid-row .shop-grid {
@@ -5599,38 +5587,6 @@ body.enemy-inspect--dragging-body {
   font-size: 0.74rem;
   line-height: 1.4;
   color: #a898c0;
-}
-
-.shop-sandbox-next-wave {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem 0.65rem;
-  padding: 0.45rem 0.65rem;
-  border-radius: 8px;
-  background: rgba(48, 28, 62, 0.35);
-  border: 1px solid rgba(180, 140, 220, 0.32);
-  max-width: 100%;
-}
-
-.shop-sandbox-next-wave__label {
-  margin: 0;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #c8b0e8;
-}
-
-.shop-sandbox-next-wave__sel {
-  font: inherit;
-  font-size: 0.85rem;
-  font-variant-numeric: tabular-nums;
-  padding: 0.28rem 0.5rem;
-  border-radius: 6px;
-  border: 1px solid rgba(180, 160, 200, 0.45);
-  background: rgba(22, 18, 30, 0.95);
-  color: #e8e0f0;
-  min-width: 4.5rem;
 }
 
 .shop-sandbox-artifacts__grid {
@@ -7667,6 +7623,104 @@ select.forge-biome-sel option:disabled {
   border-radius: 6px;
   border: 1px solid rgba(100, 180, 220, 0.45);
   background: rgba(12, 36, 52, 0.75);
+}
+
+/* Sandbox DEV: wave + artefatos durante o combate */
+.combat-sandbox-panel {
+  position: fixed;
+  top: 0.65rem;
+  right: 0.5rem;
+  z-index: 115;
+  width: min(300px, 42vw);
+  max-height: min(88vh, 640px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.55rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid rgba(140, 200, 255, 0.4);
+  background: rgba(10, 22, 36, 0.94);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  box-sizing: border-box;
+}
+
+.combat-sandbox-panel__head {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8ecfff;
+  margin: 0 0 0.35rem;
+}
+
+.combat-sandbox-panel__pill {
+  margin: 0 0 0.45rem;
+  font-size: 0.65rem;
+  line-height: 1.35;
+  color: rgba(180, 210, 235, 0.88);
+  font-weight: 600;
+}
+
+.combat-sandbox-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.combat-sandbox-panel__wave-label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #c8e0f8;
+}
+
+.combat-sandbox-panel__wave-sel {
+  font: inherit;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.22rem 0.4rem;
+  border-radius: 6px;
+  border: 1px solid rgba(120, 170, 220, 0.5);
+  background: rgba(16, 28, 44, 0.98);
+  color: #e8f4ff;
+  min-width: 4.25rem;
+}
+
+.combat-sandbox-panel__hero-hint {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: rgba(160, 190, 220, 0.92);
+}
+
+.combat-sandbox-panel__hero-hint strong {
+  color: #e0f0ff;
+  font-weight: 700;
+}
+
+.combat-sandbox-panel__muted {
+  margin: 0.25rem 0 0;
+  font-size: 0.7rem;
+  color: rgba(200, 160, 160, 0.9);
+}
+
+.combat-sandbox-panel .combat-sandbox-artifacts {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.combat-sandbox-panel .combat-sandbox-artifacts__grid,
+.combat-sandbox-panel .shop-sandbox-artifacts__grid {
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .wave-loot-toast {

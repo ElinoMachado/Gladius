@@ -1658,7 +1658,6 @@ function showForge(): void {
 
 function showMainMenu(): void {
   model.devSandboxMode = false;
-  model.sandboxShopJumpWave = null;
   hideGameTooltip();
   disposeMenu3dPreviews();
   mainMenuSword3d?.dispose();
@@ -1708,7 +1707,6 @@ function showMainMenu(): void {
           break;
         case "new":
           model.devSandboxMode = false;
-          model.sandboxShopJumpWave = null;
           model.phase = "setup_heroes";
           setup.slots = [null, null, null];
           setup.biomes = [];
@@ -1718,7 +1716,6 @@ function showMainMenu(): void {
         case "dev-sandbox":
           if (!import.meta.env.DEV) break;
           model.devSandboxMode = true;
-          model.sandboxShopJumpWave = null;
           model.phase = "setup_heroes";
           setup.slots = [null, null, null];
           setup.biomes = [];
@@ -2193,8 +2190,8 @@ function showColorSetup(): void {
   });
 }
 
-/** Grelha de artefatos na loja de ouro (modo sandbox). */
-function goldShopSandboxArtifactsSectionHtml(h: Unit): string {
+/** Botões da grelha de artefatos (sandbox no combate). */
+function sandboxArtifactTilesHtml(h: Unit): string {
   const sorted = [...ARTIFACT_POOL].sort((a, b) => {
     const ri =
       ARTIFACT_RARITY_ORDER.indexOf(a.rarity) -
@@ -2202,7 +2199,7 @@ function goldShopSandboxArtifactsSectionHtml(h: Unit): string {
     if (ri !== 0) return ri;
     return a.name.localeCompare(b.name, "pt");
   });
-  const tiles = sorted
+  return sorted
     .map((a) => {
       const n = h.artifacts[a.id] ?? 0;
       const cap = getArtifactMaxStacks(a.id);
@@ -2213,11 +2210,87 @@ function goldShopSandboxArtifactsSectionHtml(h: Unit): string {
     </button>`;
     })
     .join("");
-  return `<section class="shop-sandbox-artifacts" aria-label="Artefatos sandbox">
-    <h3 class="shop-sandbox-artifacts__title">Sandbox — artefatos deste herói</h3>
-    <p class="shop-sandbox-artifacts__hint">Botão esquerdo: +1 acúmulo (do 0 liga o artefato). Botão direito: −1 (em 0 fica desligado). Passe o rato para ver todos os níveis e efeitos.</p>
-    <div class="shop-sandbox-artifacts__grid" role="group">${tiles}</div>
-  </section>`;
+}
+
+function sandboxHeroForCombatEditor(m: GameModel): Unit | null {
+  const cur = m.currentHero();
+  if (cur?.isPlayer && cur.hp > 0) return cur;
+  return m.getParty().find((u) => u.hp > 0) ?? null;
+}
+
+function mountCombatSandboxDevtools(signal: AbortSignal): void {
+  if (!import.meta.env.DEV || !model.devSandboxMode) return;
+  const hero = sandboxHeroForCombatEditor(model);
+  const waveOpts = Array.from({ length: FINAL_VICTORY_WAVE }, (_, i) => {
+    const w = i + 1;
+    return `<option value="${w}"${w === model.wave ? " selected" : ""}>${w}</option>`;
+  }).join("");
+  const gridInner = hero ? sandboxArtifactTilesHtml(hero) : "";
+  const heroLabelText = hero ? escapeHtml(hero.name) : "—";
+  const panel = el(`<aside class="combat-sandbox-panel" aria-label="Ferramentas de teste sandbox">
+    <div class="combat-sandbox-panel__head">Sandbox</div>
+    <p class="combat-sandbox-panel__pill">Ouro/cristais/essências amplos · sem CDR · ultimate pronta</p>
+    <div class="combat-sandbox-panel__row">
+      <label class="combat-sandbox-panel__wave-label" for="combat-sandbox-wave-sel">Recomeçar na wave</label>
+      <select id="combat-sandbox-wave-sel" class="combat-sandbox-panel__wave-sel" aria-label="Recomeçar combate nesta wave">${waveOpts}</select>
+    </div>
+    <p class="combat-sandbox-panel__hero-hint">Herói: <strong>${heroLabelText}</strong> (turno ou primeiro vivo)</p>
+    <section class="shop-sandbox-artifacts combat-sandbox-artifacts" aria-label="Artefatos sandbox">
+      <h3 class="shop-sandbox-artifacts__title">Artefatos</h3>
+      <p class="shop-sandbox-artifacts__hint">Esquerdo +1 · direito −1 · pairar para níveis.</p>
+      ${
+        hero
+          ? `<div class="shop-sandbox-artifacts__grid combat-sandbox-artifacts__grid" role="group">${gridInner}</div>`
+          : `<p class="combat-sandbox-panel__muted">Sem herói vivo.</p>`
+      }
+    </section>
+  </aside>`);
+  uiRoot.appendChild(panel);
+  const sel = panel.querySelector(
+    "#combat-sandbox-wave-sel",
+  ) as HTMLSelectElement;
+  sel.addEventListener(
+    "change",
+    () => {
+      const v = Number(sel.value);
+      if (!Number.isFinite(v)) return;
+      model.sandboxRestartWave(v);
+    },
+    { signal },
+  );
+  if (hero) {
+    panel.querySelectorAll("[data-sandbox-artifact]").forEach((node) => {
+      const btn = node as HTMLElement;
+      const artId = btn.dataset.sandboxArtifact;
+      if (!artId) return;
+      btn.addEventListener("contextmenu", (e) => e.preventDefault(), {
+        signal,
+      });
+      btn.addEventListener(
+        "mousedown",
+        (e) => {
+          if (e.button !== 0 && e.button !== 2) return;
+          e.preventDefault();
+          const delta = e.button === 0 ? (1 as const) : (-1 as const);
+          const hNow = sandboxHeroForCombatEditor(model);
+          if (!hNow) return;
+          model.sandboxAdjustArtifact(hNow.id, artId, delta);
+        },
+        { signal },
+      );
+      bindGameTooltip(btn, () => {
+        const def = artifactDefById(artId);
+        const hNow = sandboxHeroForCombatEditor(model);
+        const cur = hNow?.artifacts[artId] ?? 0;
+        const cap = getArtifactMaxStacks(artId);
+        const state = `<p class="artifact-tt-sandbox-state"><strong>Acúmulos:</strong> ${cur}/${cap}</p>`;
+        const flavor = def?.description
+          ? `<p class="artifact-tt-sandbox-flavor">${escapeHtml(def.description)}</p>`
+          : "";
+        return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--wide-artifact">${state}${flavor}${artifactCodexAllTiersHtml(artId, hNow ?? hero)}</div>`;
+      });
+    });
+  }
 }
 
 function showGoldShop(isInitial: boolean): void {
@@ -2362,30 +2435,7 @@ function showGoldShop(isInitial: boolean): void {
         ? "Reembolsar alterações da loja (custo: 0 Cristais)"
         : `Reembolsar alterações da loja por ${refundCost} Cristais`;
     const refundBtnInner = `<span class="shop-refund-btn__inner"><span class="shop-refund-btn__label">Reembolsar</span><span class="shop-refund-btn__crystal-line" aria-hidden="true">${metaCrystalIconSvgHtml()}<span class="shop-refund-btn__crystal-num">${refundCost}</span><span class="shop-refund-btn__crystal-suffix"> cristais</span></span></span>`;
-    const defaultCombatWave = isInitial ? 1 : model.wave + 1;
-    const sandboxTargetWave = model.devSandboxMode
-      ? model.sandboxShopJumpWave != null
-        ? model.sandboxShopJumpWave
-        : Math.max(1, Math.min(FINAL_VICTORY_WAVE, defaultCombatWave))
-      : 0;
-    const sandboxWaveJumpHtml = model.devSandboxMode
-      ? `<div class="shop-sandbox-next-wave">
-      <label for="shop-sandbox-wave-sel" class="shop-sandbox-next-wave__label">Sandbox — wave do próximo combate</label>
-      <select id="shop-sandbox-wave-sel" class="shop-sandbox-next-wave__sel" aria-label="Escolher wave (1 a ${FINAL_VICTORY_WAVE})">
-        ${Array.from({ length: FINAL_VICTORY_WAVE }, (_, i) => {
-          const w = i + 1;
-          return `<option value="${w}"${w === sandboxTargetWave ? " selected" : ""}>${w}</option>`;
-        }).join("")}
-      </select>
-    </div>`
-      : "";
-    const startBtnLabel = model.devSandboxMode
-      ? isInitial
-        ? `Começar wave ${sandboxTargetWave}`
-        : `Ir para wave ${sandboxTargetWave}`
-      : isInitial
-        ? "Começar wave 1"
-        : "Próxima wave";
+    const startBtnLabel = isInitial ? "Começar wave 1" : "Próxima wave";
     const goldBagsHtml = party
       .map((ph, i) => {
         const active = i === idx;
@@ -2411,9 +2461,6 @@ function showGoldShop(isInitial: boolean): void {
     const bunkerSide = bunkerShop
       ? `<div class="shop-bunker-viz shop-hero-viz" aria-label="Bunker da arena">${goldShopBunkerSectionHtml(bunkerShop, h)}</div>`
       : "";
-    const sandboxMidCell = model.devSandboxMode
-      ? `<div class="shop-mid-cell shop-mid-cell--sandbox">${goldShopSandboxArtifactsSectionHtml(h)}</div>`
-      : "";
     panel.innerHTML = `
       <div class="shop-panel-inner">
         <h1 class="shop-title hero-setup-main-title">Loja do coliseu</h1>
@@ -2436,14 +2483,12 @@ function showGoldShop(isInitial: boolean): void {
           ${bunkerSide}
         </div>
         <div class="shop-mid-row">
-          ${sandboxMidCell}
           <div class="shop-mid-cell shop-mid-cell--gold">
             <div class="shop-grid">${list}</div>
           </div>
         </div>
         <div class="shop-footer">
           <p id="shop-footer-msg" class="shop-footer-msg" role="status" hidden></p>
-          ${sandboxWaveJumpHtml}
           <p class="shop-footer-crystals" aria-live="polite">Cristais: <strong>${model.meta.crystals}</strong></p>
           <div class="shop-footer__actions">
             <button type="button" class="btn shop-refund-btn" id="shop-refund" ${!canRefund ? "disabled" : ""} aria-label="${escapeHtml(refundAria)}">${refundBtnInner}</button>
@@ -2470,44 +2515,6 @@ function showGoldShop(isInitial: boolean): void {
         /* `emit` → `render` → `refreshGoldShop`; evitar segundo `renderShop` aqui (WebGL). */
       });
     });
-    const waveSel = panel.querySelector(
-      "#shop-sandbox-wave-sel",
-    ) as HTMLSelectElement | null;
-    if (waveSel && model.devSandboxMode) {
-      waveSel.addEventListener("change", () => {
-        const v = Number(waveSel.value);
-        if (!Number.isFinite(v)) return;
-        model.setSandboxShopJumpWaveChoice(
-          v,
-          Math.max(1, Math.min(FINAL_VICTORY_WAVE, defaultCombatWave)),
-        );
-      });
-    }
-    if (model.devSandboxMode) {
-      panel.querySelectorAll("[data-sandbox-artifact]").forEach((node) => {
-        const btn = node as HTMLElement;
-        const artId = btn.dataset.sandboxArtifact;
-        if (!artId) return;
-        btn.addEventListener("contextmenu", (e) => e.preventDefault());
-        btn.addEventListener("mousedown", (e) => {
-          if (e.button !== 0 && e.button !== 2) return;
-          e.preventDefault();
-          const delta = e.button === 0 ? (1 as const) : (-1 as const);
-          model.sandboxShopAdjustArtifact(h.id, artId, delta);
-          renderShop();
-        });
-        bindGameTooltip(btn, () => {
-          const def = artifactDefById(artId);
-          const cur = h.artifacts[artId] ?? 0;
-          const cap = getArtifactMaxStacks(artId);
-          const state = `<p class="artifact-tt-sandbox-state"><strong>Acúmulos:</strong> ${cur}/${cap}</p>`;
-          const flavor = def?.description
-            ? `<p class="artifact-tt-sandbox-flavor">${escapeHtml(def.description)}</p>`
-            : "";
-          return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--wide-artifact">${state}${flavor}${artifactCodexAllTiersHtml(artId, h)}</div>`;
-        });
-      });
-    }
     panel.querySelector("#bunk-repair")?.addEventListener("click", () => {
       model.buyBunkerRepair(h.id);
     });
@@ -4943,7 +4950,7 @@ function showCombatHUD(): void {
   uiRoot.innerHTML = "";
   const sandboxHudHtml =
     import.meta.env.DEV && model.devSandboxMode
-      ? `<div class="hud-block hud-sandbox-pill" role="status">Modo sandbox — ouro/cristais/essências amplos · sem CDR · ultimate da arma sempre pronta · na loja: grelha de artefatos (esq./dir.)</div>`
+      ? `<div class="hud-block hud-sandbox-pill" role="note">Sandbox — painel à direita: recomeçar wave e artefatos (esq./dir.)</div>`
       : "";
   const hud = el(`
     <div class="hud">
@@ -5111,6 +5118,7 @@ function showCombatHUD(): void {
   uiRoot.appendChild(enemyInspectPanel);
   uiRoot.appendChild(turnOrderWrap);
   uiRoot.appendChild(combatDockStack);
+  mountCombatSandboxDevtools(combatInputSignal);
   const lolPortrait = bottom.querySelector("#lol-portrait") as HTMLElement;
   const lolWeaponSlot = bottom.querySelector("#lol-weapon-slot") as HTMLElement;
   const lolPassiveSlot = bottom.querySelector("#lol-passive-slot") as HTMLElement;
