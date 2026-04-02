@@ -219,7 +219,17 @@ export function artifactCodexAllTiersHtml(id: string, u?: Unit): string {
     const desc =
       d?.description ??
       "Receba {valor} de regeneração de mana adicional, equivalente a 50% da sua regeneração de vida.";
-    return `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(name)}</div><div class="artifact-tt-cur">${escapeHtml(desc)}</div></div>`;
+    const max = getArtifactMaxStacks(id);
+    const parts: string[] = [
+      `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(name)}</div>`,
+    ];
+    for (let s = 1; s <= max; s++) {
+      parts.push(
+        `<div class="artifact-tt-next"><strong>${s}/${max}:</strong> ${escapeHtml(desc)}</div>`,
+      );
+    }
+    parts.push(`</div>`);
+    return parts.join("");
   }
   const d = defOr(id);
   const name = d?.name ?? id;
