@@ -4480,6 +4480,30 @@ function displayedCritChanceFromParts(
   return Math.min(100, t);
 }
 
+/** Regen de vida/mana por turno com bioma, deserto e sinergias (igual à grelha de atributos). */
+function computeHeroEffectiveTurnRegen(h: Unit, m: GameModel): {
+  hp: number;
+  mana: number;
+} {
+  const bio = biomeAt(m.grid, h.q, h.r) as BiomeId;
+  const ign = unitIgnoresTerrain(h);
+  const fd = forgeSynergyTier(h.forgeLoadout, "deserto");
+  const desertoBlock = bio === "deserto" && !ign && fd < 1;
+  const regMult = h.isPlayer && fd >= 2 && bio === "deserto" ? 2 : 1;
+  const rulerDesertRegenFlat =
+    h.isPlayer && fd >= 1 && (h.artifacts["ruler"] ?? 0) > 0 ? 2 : 0;
+  return {
+    hp:
+      Math.floor((desertoBlock ? 0 : h.regenVida) * regMult) +
+      (h.isPlayer ? m.desertoAllyRegenExtraHp(h) : 0) +
+      rulerDesertRegenFlat,
+    mana:
+      Math.floor((desertoBlock ? 0 : h.regenMana) * regMult) +
+      (h.isPlayer ? m.desertoAllyRegenExtraMana(h) : 0) +
+      rulerDesertRegenFlat,
+  };
+}
+
 function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   const bio = biomeAt(m.grid, h.q, h.r) as BiomeId;
   const ign = unitIgnoresTerrain(h);
@@ -4505,20 +4529,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     h.danoCritico +
     rochCritTileAdd +
     (h.isPlayer ? m.rochosoRulerAllyCritMultBonus(h) : 0);
-  const fd = forgeSynergyTier(h.forgeLoadout, "deserto");
-  const desertoBlock = bio === "deserto" && !ign && fd < 1;
-  const regMult =
-    h.isPlayer && fd >= 2 && bio === "deserto" ? 2 : 1;
-  const rulerDesertRegenFlat =
-    h.isPlayer && fd >= 1 && (h.artifacts["ruler"] ?? 0) > 0 ? 2 : 0;
-  const effRegV =
-    Math.floor((desertoBlock ? 0 : h.regenVida) * regMult) +
-    (h.isPlayer ? m.desertoAllyRegenExtraHp(h) : 0) +
-    rulerDesertRegenFlat;
-  const effRegM =
-    Math.floor((desertoBlock ? 0 : h.regenMana) * regMult) +
-    (h.isPlayer ? m.desertoAllyRegenExtraMana(h) : 0) +
-    rulerDesertRegenFlat;
+  const { hp: effRegV, mana: effRegM } = computeHeroEffectiveTurnRegen(h, m);
 
   const b = h.statBaseline;
   const cells: HeroStatCell[] = [];
@@ -5380,6 +5391,7 @@ function showCombatHUD(): void {
                         <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill"></div>
                         <span class="lol-bar-label" id="lol-hp-txt"></span>
                       </div>
+                      <span class="lol-bar-regen-hint lol-bar-regen-hint--hp" id="lol-hp-regen" aria-hidden="true"></span>
                     </div>
                   </div>
                   <div class="lol-hp-dual-wrap" id="lol-hp-dual-wrap" hidden>
@@ -5390,6 +5402,7 @@ function showCombatHUD(): void {
                             <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill-hero"></div>
                             <span class="lol-bar-label" id="lol-hp-txt-hero"></span>
                           </div>
+                          <span class="lol-bar-regen-hint lol-bar-regen-hint--hp" id="lol-hp-regen-hero" aria-hidden="true"></span>
                         </div>
                         <div class="lol-bar lol-bar--hp lol-hp-layer lol-hp-layer--bunker" aria-hidden="true">
                           <div class="lol-bar-track">
@@ -5410,6 +5423,7 @@ function showCombatHUD(): void {
                     <div class="lol-bar-fill lol-bar-fill--mana" id="lol-mana-fill"></div>
                     <span class="lol-bar-label" id="lol-mana-txt"></span>
                   </div>
+                  <span class="lol-bar-regen-hint lol-bar-regen-hint--mana" id="lol-mana-regen" aria-hidden="true"></span>
                 </div>
                 <div class="lol-bar lol-bar--xp" aria-hidden="true">
                   <div class="lol-bar-track">
@@ -5471,6 +5485,13 @@ function showCombatHUD(): void {
   const lolHpBtnBunker = bottom.querySelector("#lol-hp-btn-bunker") as HTMLButtonElement | null;
   const lolManaFill = bottom.querySelector("#lol-mana-fill") as HTMLElement;
   const lolManaTxt = bottom.querySelector("#lol-mana-txt") as HTMLElement;
+  const lolHpRegen = bottom.querySelector("#lol-hp-regen") as HTMLElement | null;
+  const lolHpRegenHero = bottom.querySelector(
+    "#lol-hp-regen-hero",
+  ) as HTMLElement | null;
+  const lolManaRegen = bottom.querySelector(
+    "#lol-mana-regen",
+  ) as HTMLElement | null;
   const lolXpFill = bottom.querySelector("#lol-xp-fill") as HTMLElement;
   const lolXpTxt = bottom.querySelector("#lol-xp-txt") as HTMLElement;
   const lolLevel = bottom.querySelector("#lol-level") as HTMLElement;
@@ -6004,6 +6025,9 @@ function showCombatHUD(): void {
       if (lolHpTxtBunker) lolHpTxtBunker.textContent = "";
       lolManaFill.style.transform = "scaleX(0)";
       lolManaTxt.textContent = "";
+      if (lolHpRegen) lolHpRegen.textContent = "";
+      if (lolHpRegenHero) lolHpRegenHero.textContent = "";
+      if (lolManaRegen) lolManaRegen.textContent = "";
       lolXpFill.style.transform = "scaleX(0)";
       lolXpTxt.textContent = "";
       lolStatsGrid.innerHTML = "";
@@ -6078,6 +6102,12 @@ function showCombatHUD(): void {
       h.maxMana > 0 ? Math.max(0, Math.min(1, h.mana / h.maxMana)) : 0;
     lolManaFill.style.transform = `scaleX(${manaR})`;
     lolManaTxt.textContent = `${h.mana} / ${h.maxMana}`;
+    const turnRegen = computeHeroEffectiveTurnRegen(h, model);
+    const hpRegLine = `+${formatTooltipNumber(turnRegen.hp)} por turno.`;
+    const manaRegLine = `+${formatTooltipNumber(turnRegen.mana)} por turno.`;
+    if (lolHpRegen) lolHpRegen.textContent = hpRegLine;
+    if (lolHpRegenHero) lolHpRegenHero.textContent = hpRegLine;
+    if (lolManaRegen) lolManaRegen.textContent = manaRegLine;
     let xpR = 1;
     if (Number.isFinite(h.xpToNext) && h.xpToNext > 0)
       xpR = Math.max(0, Math.min(1, h.xp / h.xpToNext));

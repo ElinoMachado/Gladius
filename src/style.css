@@ -3332,6 +3332,30 @@ body.enemy-inspect--dragging-body {
   margin-bottom: 0.3rem;
 }
 
+.lol-bar-regen-hint {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-size: 0.56rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  margin-top: 0.1rem;
+  line-height: 1.2;
+  pointer-events: none;
+  text-shadow:
+    0 0 3px #000,
+    0 1px 2px #000;
+}
+
+.lol-bar-regen-hint--hp {
+  color: #b8f0c4;
+}
+
+.lol-bar-regen-hint--mana {
+  color: #b4d4ff;
+}
+
 .lol-bar-track {
   position: relative;
   width: 100%;
