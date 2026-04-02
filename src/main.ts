@@ -153,8 +153,6 @@ import {
   bunkerMinasMaxRing,
   bunkerStatsForTier,
   bunkerTiroCooldownWaves,
-  describeBunkerMinasTier,
-  describeBunkerTiroTier,
 } from "./game/bunker";
 import type { BunkerState } from "./game/bunker";
 import {
@@ -2423,7 +2421,7 @@ function showGoldShop(isInitial: boolean): void {
         "#gold-shop-bunker-skills",
       ) as HTMLElement | null;
       if (bunkerSkillsRow)
-        mountGoldShopBunkerSkillsRow(bunkerSkillsRow, bunkerShop);
+        mountGoldShopBunkerSkillsRow(bunkerSkillsRow, bunkerShop, h, model);
     }
     panel.querySelectorAll("[data-item]").forEach((b) => {
       b.addEventListener("click", () => {
@@ -2686,40 +2684,47 @@ function mountGoldShopHeroSkillsRow(
   const inBunker = !!bunk && bunk.occupantId === h.id;
   if (inBunker && bunk) {
     const cdM = cdEff(h.skillCd["bunker_minas"] ?? 0);
-    append(
-      goldShopSkillChipHtml({
-        iconHtml: skillButtonIconHtml("bunker_minas"),
-        manaBadge: manaCostBadgeText(0),
-        ariaLabel: inGoldShop
-          ? "Minas terrestres"
-          : ariaSkillLabel("Minas terrestres", cdM),
-        cdTurns:
-          inGoldShop || cdM <= 0 ? undefined : cdM,
-        omitManaBadge: inGoldShop,
-      }),
-      () =>
-        inGoldShop
-          ? bunkerMinasShopTooltipHtml(bunk.tier)
-          : tooltipBunkerMinasCombat(h, m),
-    );
-    if (bunk.tier >= 2) {
-      const cdT = cdEff(h.skillCd["bunker_tiro_preciso"] ?? 0);
+    if (inGoldShop) {
+      append(
+        goldShopBunkerSkillSquareHtml({
+          skillId: "bunker_minas",
+          hotkey: "W",
+          disabled: false,
+        }),
+        () => bunkerMinasGoldShopCompositeTooltip(h, m, bunk.tier),
+      );
+      const tiroOk = bunk.tier >= BUNKER_TIRO_MIN_TIER;
+      append(
+        goldShopBunkerSkillSquareHtml({
+          skillId: "bunker_tiro_preciso",
+          hotkey: "E",
+          disabled: !tiroOk,
+          extraClass: tiroOk ? undefined : "gold-shop-bunker-skill--locked",
+        }),
+        () => bunkerTiroGoldShopCompositeTooltip(h, m, bunk.tier),
+      );
+    } else {
       append(
         goldShopSkillChipHtml({
-          iconHtml: skillButtonIconHtml("bunker_tiro_preciso"),
+          iconHtml: skillButtonIconHtml("bunker_minas"),
           manaBadge: manaCostBadgeText(0),
-          ariaLabel: inGoldShop
-            ? "Tiro preciso"
-            : ariaSkillLabel("Tiro preciso", cdT),
-          cdTurns:
-            inGoldShop || cdT <= 0 ? undefined : cdT,
-          omitManaBadge: inGoldShop,
+          ariaLabel: ariaSkillLabel("Minas terrestres", cdM),
+          cdTurns: cdM > 0 ? cdM : undefined,
         }),
-        () =>
-          inGoldShop
-            ? bunkerTiroShopTooltipHtml(bunk.tier)
-            : tooltipBunkerTiroCombat(h, m),
+        () => tooltipBunkerMinasCombat(h, m),
       );
+      if (bunk.tier >= 2) {
+        const cdT = cdEff(h.skillCd["bunker_tiro_preciso"] ?? 0);
+        append(
+          goldShopSkillChipHtml({
+            iconHtml: skillButtonIconHtml("bunker_tiro_preciso"),
+            manaBadge: manaCostBadgeText(0),
+            ariaLabel: ariaSkillLabel("Tiro preciso", cdT),
+            cdTurns: cdT > 0 ? cdT : undefined,
+          }),
+          () => tooltipBunkerTiroCombat(h, m),
+        );
+      }
     }
   } else {
     if (h.heroClass === "gladiador") {
@@ -3104,17 +3109,22 @@ function heroSetupWeaponAbilitiesTooltipHtml(
   return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--hero-weapon">${skillBlock}${ultBlock}</div>`;
 }
 
-function tooltipAbilityHtml(
-  title: string,
+function formatTooltipAbilityLines(
   lines: { label: string; value: string; kind: TooltipLineKind }[],
 ): string {
-  const body = lines
+  return lines
     .map(
       (L) =>
         `<p class="game-ui-tooltip-line"><span class="tt-lbl">${escapeHtml(L.label)}</span> <span class="${tooltipLineClass(L.kind)}">${escapeHtml(L.value)}</span></p>`,
     )
     .join("");
-  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">${escapeHtml(title)}</div><div class="game-ui-tooltip-body">${body}</div></div>`;
+}
+
+function tooltipAbilityHtml(
+  title: string,
+  lines: { label: string; value: string; kind: TooltipLineKind }[],
+): string {
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">${escapeHtml(title)}</div><div class="game-ui-tooltip-body">${formatTooltipAbilityLines(lines)}</div></div>`;
 }
 
 function tooltipPassiveHtml(passiveTitle: string, description: string): string {
@@ -3243,30 +3253,76 @@ function bunkerEvolveTooltipHtml(currentTier: 0 | 1 | 2): string {
   return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Após evolução (bunker nv. ${bunkerDisplayLevel(nt)})</div><p class="game-ui-tooltip-passive"><span class="tt-lbl">PV máx.:</span> ${formatTooltipNumber(st.maxHp)} · <span class="tt-lbl">Defesa:</span> ${formatTooltipNumber(st.defesa)}</p></div>`;
 }
 
-/** Tooltip da loja: nível atual + próximo nível (ou bloqueado). */
-function bunkerTiroShopTooltipHtml(tier: 0 | 1 | 2): string {
-  if (tier >= BUNKER_TIRO_MIN_TIER) {
-    const cur = describeBunkerTiroTier();
-    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Tiro preciso</div><p class="game-ui-tooltip-passive">Nv. ${bunkerDisplayLevel(tier)} — ${escapeHtml(cur)}</p><p class="game-ui-tooltip-line"><span class="tt-lbl">Próximo nível:</span> evolução máxima.</p></div>`;
-  }
-  const req = bunkerDisplayLevel(BUNKER_TIRO_MIN_TIER);
-  const nextDesc = describeBunkerTiroTier();
-  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--badged"><span class="game-ui-tooltip-badge">Bunker nv. ${req}</span><div class="game-ui-tooltip-title">Tiro preciso</div><p class="game-ui-tooltip-passive">Bloqueado neste nível do bunker.</p><p class="game-ui-tooltip-line"><span class="tt-lbl">Próximo nível (bunker nv. ${req}):</span> ${escapeHtml(nextDesc)}</p></div>`;
-}
-
-function bunkerMinasShopTooltipHtml(tier: 0 | 1 | 2): string {
-  const cur = describeBunkerMinasTier(tier);
+/** Loja: mesmo formato do HUD de combate, com stats ao nível atual e ao próximo do bunker. */
+function bunkerMinasGoldShopCompositeTooltip(
+  h: Unit,
+  _m: GameModel,
+  tier: 0 | 1 | 2,
+): string {
+  const cdCur = `${tipInt(bunkerMinasCooldownWaves(tier))} onda(s)`;
+  const curBody = formatTooltipAbilityLines(
+    bunkerMinasAbilityLines(h, tier, cdCur),
+  );
   let nextBlock: string;
   if (tier < 2) {
     const nt = (tier + 1) as 1 | 2;
-    nextBlock = `<p class="game-ui-tooltip-line"><span class="tt-lbl">Próximo nível (nv. ${bunkerDisplayLevel(nt)}):</span> ${escapeHtml(describeBunkerMinasTier(nt))}</p>`;
+    const cdN = `${tipInt(bunkerMinasCooldownWaves(nt))} onda(s)`;
+    const nextBody = formatTooltipAbilityLines(
+      bunkerMinasAbilityLines(h, nt, cdN),
+    );
+    nextBlock = `<p class="game-ui-tooltip-subhead game-ui-tooltip-subhead--next">Próximo nível — bunker nv. ${bunkerDisplayLevel(nt)}</p><div class="game-ui-tooltip-body">${nextBody}</div>`;
   } else {
-    nextBlock = `<p class="game-ui-tooltip-line"><span class="tt-lbl">Evolução:</span> máxima.</p>`;
+    nextBlock = `<p class="game-ui-tooltip-passive game-ui-tooltip-passive--tight-top">Próximo nível: evolução máxima.</p>`;
   }
-  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Minas terrestres</div><p class="game-ui-tooltip-passive">Nv. ${bunkerDisplayLevel(tier)} — ${escapeHtml(cur)}</p>${nextBlock}</div>`;
+  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--bunker-shop"><div class="game-ui-tooltip-title">Minas terrestres</div><p class="game-ui-tooltip-subhead">Bunker nv. ${bunkerDisplayLevel(tier)} — atual</p><div class="game-ui-tooltip-body">${curBody}</div>${nextBlock}</div>`;
 }
 
-function mountGoldShopBunkerSkillsRow(row: HTMLElement, bunk: BunkerState): void {
+function bunkerTiroGoldShopCompositeTooltip(
+  h: Unit,
+  _m: GameModel,
+  tier: 0 | 1 | 2,
+): string {
+  const cdShop = `${tipInt(bunkerTiroCooldownWaves())} onda(s)`;
+  if (tier >= BUNKER_TIRO_MIN_TIER) {
+    const body = formatTooltipAbilityLines(
+      bunkerTiroAbilityLines(h, cdShop),
+    );
+    return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--bunker-shop"><div class="game-ui-tooltip-title">Tiro preciso</div><p class="game-ui-tooltip-subhead">Bunker nv. ${bunkerDisplayLevel(tier)} — atual</p><div class="game-ui-tooltip-body">${body}</div><p class="game-ui-tooltip-passive game-ui-tooltip-passive--tight-top">Próximo nível: evolução máxima.</p></div>`;
+  }
+  const req = bunkerDisplayLevel(BUNKER_TIRO_MIN_TIER);
+  const nextBody = formatTooltipAbilityLines(
+    bunkerTiroAbilityLines(h, cdShop),
+  );
+  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--badged game-ui-tooltip-inner--bunker-shop"><span class="game-ui-tooltip-badge">Bunker nv. ${req}</span><div class="game-ui-tooltip-title">Tiro preciso</div><p class="game-ui-tooltip-passive">Nível atual: bloqueado.</p><p class="game-ui-tooltip-subhead game-ui-tooltip-subhead--next">Ao desbloquear (bunker nv. ${req})</p><div class="game-ui-tooltip-body">${nextBody}</div></div>`;
+}
+
+function goldShopBunkerSkillSquareHtml(opts: {
+  skillId: "bunker_minas" | "bunker_tiro_preciso";
+  hotkey: string;
+  disabled: boolean;
+  extraClass?: string;
+}): string {
+  const name =
+    opts.skillId === "bunker_minas" ? "Minas terrestres" : "Tiro preciso";
+  const xcls = ["gold-shop-bunker-skill--hud-style", opts.extraClass]
+    .filter(Boolean)
+    .join(" ");
+  return combatSquareSkillHtml({
+    disabled: opts.disabled,
+    iconHtml: skillButtonIconHtml(opts.skillId),
+    hotkey: opts.hotkey,
+    manaBadge: manaCostBadgeText(0),
+    ariaLabel: name,
+    extraClass: xcls,
+  });
+}
+
+function mountGoldShopBunkerSkillsRow(
+  row: HTMLElement,
+  bunk: BunkerState,
+  h: Unit,
+  m: GameModel,
+): void {
   row.innerHTML = "";
   const t = bunk.tier;
   const tiroOk = t >= BUNKER_TIRO_MIN_TIER;
@@ -3277,29 +3333,21 @@ function mountGoldShopBunkerSkillsRow(row: HTMLElement, bunk: BunkerState): void
     row.appendChild(b);
   };
   append(
-    goldShopSkillChipHtml({
-      iconHtml: skillButtonIconHtml("bunker_minas"),
-      manaBadge: manaCostBadgeText(0),
-      ariaLabel: "Minas terrestres",
-      omitManaBadge: true,
-      extraClass: "gold-shop-skill-chip--bunker-panel",
+    goldShopBunkerSkillSquareHtml({
+      skillId: "bunker_minas",
+      hotkey: "W",
+      disabled: false,
     }),
-    () => bunkerMinasShopTooltipHtml(t),
+    () => bunkerMinasGoldShopCompositeTooltip(h, m, t),
   );
   append(
-    goldShopSkillChipHtml({
-      iconHtml: skillButtonIconHtml("bunker_tiro_preciso"),
-      manaBadge: manaCostBadgeText(0),
-      ariaLabel: "Tiro preciso",
-      omitManaBadge: true,
-      extraClass: [
-        "gold-shop-skill-chip--bunker-panel",
-        tiroOk ? "" : "gold-shop-bunker-skill--locked",
-      ]
-        .filter(Boolean)
-        .join(" "),
+    goldShopBunkerSkillSquareHtml({
+      skillId: "bunker_tiro_preciso",
+      hotkey: "E",
+      disabled: !tiroOk,
+      extraClass: tiroOk ? undefined : "gold-shop-bunker-skill--locked",
     }),
-    () => bunkerTiroShopTooltipHtml(t),
+    () => bunkerTiroGoldShopCompositeTooltip(h, m, t),
   );
 }
 
@@ -3667,28 +3715,21 @@ function tooltipSkillPisotear(h: Unit, _m: GameModel): string {
   ]);
 }
 
-function tooltipBunkerMinasCombat(h: Unit, m: GameModel): string {
-  const b = m.bunkerAtHex(h.q, h.r);
-  if (!b) {
-    return tooltipPassiveHtml("Minas terrestres", "—");
-  }
-  const t = b.tier;
-  const mult = bunkerMinasDamageMult(t);
-  const rings = bunkerMinasMaxRing(t);
-  const cdBase = bunkerMinasCooldownWaves(t);
+function bunkerMinasAbilityLines(
+  h: Unit,
+  tier: 0 | 1 | 2,
+  cdrLabel: string,
+): { label: string; value: string; kind: TooltipLineKind }[] {
+  const mult = bunkerMinasDamageMult(tier);
+  const rings = bunkerMinasMaxRing(tier);
   const baseDano =
     heroDanoPlusRoninOverflow(h) +
     h.pistoleiroBonusDanoWave +
     h.curandeiroDanoWave;
   const per = baseDano * mult;
-  const cdv = h.skillCd["bunker_minas"] ?? 0;
-  const cdrStr =
-    cdv > 0
-      ? `${tipInt(cdv)} onda(s) até disponível`
-      : tipInt(cdBase);
-  return tooltipAbilityHtml("Minas terrestres (bunker)", [
+  return [
     { label: "Custo de mana:", value: tipInt(0), kind: "mana" },
-    { label: "CDR:", value: cdrStr, kind: "cdr" },
+    { label: "CDR:", value: cdrLabel, kind: "cdr" },
     {
       label: "Alcance:",
       value: `Até ${tipInt(rings)} anel(is) em volta do bunker`,
@@ -3705,24 +3746,36 @@ function tooltipBunkerMinasCombat(h: Unit, m: GameModel): string {
         "Primeiro aparecem os hexes afetados (anéis); clique num hex destacado para confirmar",
       kind: "fx",
     },
-  ]);
+  ];
 }
 
-function tooltipBunkerTiroCombat(h: Unit, _m: GameModel): string {
-  const cdv = h.skillCd["bunker_tiro_preciso"] ?? 0;
-  const cd = bunkerTiroCooldownWaves();
+function tooltipBunkerMinasCombat(h: Unit, m: GameModel): string {
+  const b = m.bunkerAtHex(h.q, h.r);
+  if (!b) {
+    return tooltipPassiveHtml("Minas terrestres", "—");
+  }
+  const cdBase = bunkerMinasCooldownWaves(b.tier);
+  const cdv = h.skillCd["bunker_minas"] ?? 0;
+  const cdrStr =
+    cdv > 0
+      ? `${tipInt(cdv)} onda(s) até disponível`
+      : tipInt(cdBase);
+  const lines = bunkerMinasAbilityLines(h, b.tier, cdrStr);
+  return tooltipAbilityHtml("Minas terrestres (bunker)", lines);
+}
+
+function bunkerTiroAbilityLines(
+  h: Unit,
+  cdrLabel: string,
+): { label: string; value: string; kind: TooltipLineKind }[] {
   const baseDano =
     heroDanoPlusRoninOverflow(h) +
     h.pistoleiroBonusDanoWave +
     h.curandeiroDanoWave;
   const raw = baseDano * 10;
-  const cdrStr =
-    cdv > 0
-      ? `${tipInt(cdv)} onda(s) até disponível`
-      : tipInt(cd);
-  return tooltipAbilityHtml("Tiro preciso", [
+  return [
     { label: "Custo de mana:", value: tipInt(0), kind: "mana" },
-    { label: "CDR:", value: cdrStr, kind: "cdr" },
+    { label: "CDR:", value: cdrLabel, kind: "cdr" },
     { label: "Alcance:", value: "Qualquer inimigo no coliseu", kind: "range" },
     { label: "Dano:", value: `${formatTooltipNumber(raw)} bruto (morteiro)`, kind: "dmg" },
     {
@@ -3730,7 +3783,20 @@ function tooltipBunkerTiroCombat(h: Unit, _m: GameModel): string {
       value: "Projétil em arco até ao alvo selecionado",
       kind: "fx",
     },
-  ]);
+  ];
+}
+
+function tooltipBunkerTiroCombat(h: Unit, _m: GameModel): string {
+  const cdv = h.skillCd["bunker_tiro_preciso"] ?? 0;
+  const cd = bunkerTiroCooldownWaves();
+  const cdrStr =
+    cdv > 0
+      ? `${tipInt(cdv)} onda(s) até disponível`
+      : tipInt(cd);
+  return tooltipAbilityHtml(
+    "Tiro preciso",
+    bunkerTiroAbilityLines(h, cdrStr),
+  );
 }
 
 function tooltipSkillSentenca(h: Unit, m: GameModel, sk: SkillDef): string {

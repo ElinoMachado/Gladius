@@ -228,6 +228,34 @@ body {
   color: #eae8e4;
 }
 
+.game-ui-tooltip-passive--tight-top {
+  margin-top: 0.35rem !important;
+}
+
+.game-ui-tooltip-subhead {
+  margin: 0 0 0.3rem;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #b8a878;
+}
+
+.game-ui-tooltip-subhead--next {
+  margin-top: 0.5rem;
+  margin-bottom: 0.32rem;
+  padding-top: 0.42rem;
+  border-top: 1px solid rgba(201, 162, 39, 0.25);
+}
+
+.game-ui-tooltip-inner--bunker-shop .game-ui-tooltip-body + .game-ui-tooltip-body {
+  margin-top: 0;
+}
+
+.game-ui-tooltip-inner--bunker-shop {
+  max-width: min(22rem, 92vw);
+}
+
 .tt-lbl {
   color: #9a9588;
 }
@@ -4395,9 +4423,16 @@ body.enemy-inspect--dragging-body {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: stretch;
+  align-items: flex-start;
   gap: 1.25rem 1.75rem;
   margin-bottom: 0.75rem;
+}
+
+/* Mesmo padding vertical nos dois cartões: alinha o topo dos viewports 3D herói/bunker */
+.shop-screen__panel--gold .shop-hero-bunker-pair > .shop-hero-viz {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding: 1.15rem 1.2rem 1.25rem;
 }
 
 .shop-hero-bunker-pair > .shop-hero-viz,
@@ -4419,7 +4454,7 @@ body.enemy-inspect--dragging-body {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  align-items: stretch;
+  align-items: flex-start;
   gap: 1.15rem 1.85rem;
   height: 100%;
   box-sizing: border-box;
@@ -4430,7 +4465,7 @@ body.enemy-inspect--dragging-body {
   flex: 0 0 auto;
   width: 200px;
   max-width: 100%;
-  padding: 0.35rem 0.45rem 0.35rem 0.15rem;
+  padding: 0 0.4rem 0 0;
   box-sizing: border-box;
 }
 
@@ -5161,6 +5196,16 @@ body.enemy-inspect--dragging-body {
 .shop-screen__panel--gold .gold-shop-skill-chip {
   cursor: default;
   flex-shrink: 0;
+}
+
+/* Skills bunker na loja: mesmo quadrado do HUD (W/E, mana 0) */
+.shop-screen__panel--gold .gold-shop-bunker-skill--hud-style.lol-skill-btn {
+  cursor: default;
+}
+
+.shop-screen__panel--gold .gold-shop-bunker-skill--hud-style.lol-skill-btn:disabled {
+  cursor: default;
+  opacity: 0.48;
 }
 
 .shop-hero-stats-fallback {
