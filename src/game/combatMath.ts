@@ -15,6 +15,19 @@ export function roundToCombatDecimals(n: number): number {
 }
 
 /**
+ * Corrige PV/mana/escudo após operações em vírgula flutuante (ex.: 140.6666666 → 140.67).
+ * Só heróis; chamar antes de atualizar a UI (ex.: a cada `emit`).
+ */
+export function snapPlayerVitality(u: Unit): void {
+  if (!u.isPlayer) return;
+  u.maxHp = Math.max(1, roundToCombatDecimals(u.maxHp));
+  u.hp = roundToCombatDecimals(Math.max(0, Math.min(u.maxHp, u.hp)));
+  u.maxMana = Math.max(0, roundToCombatDecimals(u.maxMana));
+  u.mana = roundToCombatDecimals(Math.max(0, Math.min(u.maxMana, u.mana)));
+  u.shieldGGBlue = roundToCombatDecimals(Math.max(0, u.shieldGGBlue));
+}
+
+/**
  * Texto para números flutuantes no combate (floats DOM): no máximo 2 casas decimais,
  * sem lixo de precisão IEEE (ex.: 12.300000000004).
  */

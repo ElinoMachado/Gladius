@@ -21,6 +21,7 @@ import {
   effectiveAlcanceForBiome,
   biomeVolcanicDamage,
   roundToCombatDecimals,
+  snapPlayerVitality,
   unitIgnoresTerrain,
   rulerMovementBonus,
 } from "./combatMath";
@@ -441,6 +442,7 @@ export class GameModel {
   }
 
   private emit(): void {
+    for (const u of this.units) snapPlayerVitality(u);
     for (const l of this.listeners) l();
   }
 
