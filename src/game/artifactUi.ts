@@ -112,14 +112,18 @@ export function pickChoiceRarity(id: string): ArtifactRarity | null {
   return defOr(id)?.rarity ?? null;
 }
 
-/** Texto do Tônico na run: substitui `{valor}` pela mana extra (50% × regen vida × acúmulos). */
+const TONICO_DESC_FALLBACK =
+  "Receba {valor} de regeneração de mana adicional, equivalente a {pct}% da sua regeneração de vida.";
+
+/** Texto do Tônico na run: `{pct}` = 50%×acúmulos; `{valor}` = mana extra (regen vida × 50% × acúmulos). */
 function describeTonicoForRun(stacks: number, u: Unit | undefined): string {
-  const tpl =
-    defOr("tonico")?.description ??
-    "Receba {valor} de regeneração de mana adicional, equivalente a 50% da sua regeneração de vida.";
-  if (!u) return tpl;
-  const bonus = Math.floor(u.regenVida * 0.5 * Math.max(1, stacks));
-  return tpl.replace("{valor}", String(bonus));
+  const tpl = defOr("tonico")?.description ?? TONICO_DESC_FALLBACK;
+  const n = Math.max(1, stacks);
+  const pct = 50 * n;
+  let out = tpl.replace("{pct}", String(pct));
+  if (!u) return out;
+  const bonus = Math.floor(u.regenVida * 0.5 * n);
+  return out.replace("{valor}", String(bonus));
 }
 
 /** Efeito resumido no nível de stack `s` (≥1). */
@@ -216,16 +220,15 @@ export function artifactCodexAllTiersHtml(id: string, u?: Unit): string {
   if (id === "tonico") {
     const d = defOr(id);
     const name = d?.name ?? id;
-    const desc =
-      d?.description ??
-      "Receba {valor} de regeneração de mana adicional, equivalente a 50% da sua regeneração de vida.";
+    const base = d?.description ?? TONICO_DESC_FALLBACK;
     const max = getArtifactMaxStacks(id);
     const parts: string[] = [
       `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(name)}</div>`,
     ];
     for (let s = 1; s <= max; s++) {
+      const line = base.replace("{pct}", String(50 * s));
       parts.push(
-        `<div class="artifact-tt-next"><strong>${s}/${max}:</strong> ${escapeHtml(desc)}</div>`,
+        `<div class="artifact-tt-next"><strong>${s}/${max}:</strong> ${escapeHtml(line)}</div>`,
       );
     }
     parts.push(`</div>`);
