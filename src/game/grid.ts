@@ -8,7 +8,8 @@ export interface HexCell {
   biome: BiomeId;
 }
 
-const HUB_MAX_DIST = 1;
+/** Distância axial máxima ao centro (0,0) para bioma hub (castelo). Era 1 (+6 hex); +2 anéis ⇒ 3. */
+const HUB_MAX_DIST = 3;
 
 function sectorFromAxial(q: number, r: number): number {
   const x = Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r;
