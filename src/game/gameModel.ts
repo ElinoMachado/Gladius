@@ -2021,7 +2021,8 @@ export class GameModel {
         adjEnemy++;
       }
     }
-    if (adjEnemy >= 2) {
+    /* No chão: cerco por 2+ adjacentes impede sair; em voo isso não aplica. */
+    if (!h.flying && adjEnemy >= 2) {
       this.pendingMoveBlockedHint = {
         text: "2 ou mais inimigos me bloqueiam! Preciso me livrar deles!",
         unitId: h.id,

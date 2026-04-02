@@ -5624,7 +5624,7 @@ function showCombatHUD(): void {
         adjEnemy++;
       }
     }
-    if (active.bunkerReentryBlocked || adjEnemy >= 2) {
+    if (active.bunkerReentryBlocked || (!active.flying && adjEnemy >= 2)) {
       clearBunkerHoverHint();
       return;
     }
