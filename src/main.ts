@@ -3412,15 +3412,23 @@ function bunkerShopStatCells(bunk: BunkerState): HeroStatCell[] {
   return [
     {
       icon: "max_hp",
-      label: "PV",
+      label: "Vida",
       value: hpDisp,
-      tooltipHtml: tooltipStatCell("PV", hpDisp),
+      tooltipValue: hpDisp,
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "max_hp",
+        display: hpDisp,
+      }),
     },
     {
       icon: "def",
       label: "Defesa",
       value: defDisp,
-      tooltipHtml: tooltipStatCell("Defesa", defDisp),
+      tooltipValue: defDisp,
+      tooltipHtml: combatHeroStatTooltip({
+        stat: "def",
+        display: defDisp,
+      }),
     },
   ];
 }
