@@ -50,6 +50,7 @@ import { EnemyPreview3D } from "./render/EnemyPreview3D";
 import {
   mountColorTriangleEditor,
   mountReadOnlyColorTriangle,
+  teamColorCss,
 } from "./ui/colorTriangle";
 import { initMusicVolumeControl } from "./ui/musicVolumeControl";
 import { mountCrystalSelect } from "./ui/crystalSelect";
@@ -2254,14 +2255,31 @@ function showGoldShop(isInitial: boolean): void {
         </div>
       </div>`;
     }).join("");
-    const goldAriaLabel =
-      party.length > 1
-        ? `Ouro deste herói (bolsa individual, não partilhada): ${h.ouro}`
-        : `Ouro atual na loja: ${h.ouro}`;
     const goldMultiHint =
       party.length > 1
-        ? `<p class="shop-hero-gold-multi-hint" role="note">O ouro acima é só <strong>deste herói</strong> — na loja, <strong>cada herói tem a sua própria bolsa</strong>; troca de herói para gastar o ouro de cada um.</p>`
+        ? `<p class="shop-hero-gold-multi-hint" role="note">Cada bolsa é <strong>só desse herói</strong> — clica numa bolsa ou usa os botões em baixo para trocar.</p>`
         : "";
+    const goldBagsHtml = party
+      .map((ph, i) => {
+        const active = i === idx;
+        const tc = ph.teamColor
+          ? teamColorCss(ph.teamColor)
+          : "rgba(160, 150, 130, 0.85)";
+        const bagLabel = `${ph.name}: ${ph.ouro} ouro. ${
+          active ? "A ver na loja." : "Clica para ver a loja deste herói."
+        }`;
+        return `<button type="button" class="shop-hero-gold-bag${
+          active ? " shop-hero-gold-bag--active" : ""
+        }" data-shop-hero-bag="${i}" style="--shop-bag-team: ${tc}" aria-pressed="${active}" aria-label="${escapeHtml(bagLabel)}">
+          <span class="shop-hero-gold-bag__stripe" aria-hidden="true"></span>
+          <span class="shop-hero-gold-bag__coin" aria-hidden="true">${combatGoldCoinSvgHtml("shop-hero-gold-bag__coin-svg")}</span>
+          <span class="shop-hero-gold-bag__meta">
+            <span class="shop-hero-gold-bag__value">${ph.ouro}</span>
+            <span class="shop-hero-gold-bag__name">${escapeHtml(ph.name)}</span>
+          </span>
+        </button>`;
+      })
+      .join("");
     const bunkerShop = model.bunkerForShop();
     const bunkerMidCell = bunkerShop
       ? `<div class="shop-mid-cell shop-mid-cell--bunker">${goldShopBunkerSectionHtml(bunkerShop, h)}</div>`
@@ -2273,13 +2291,8 @@ function showGoldShop(isInitial: boolean): void {
       <div class="shop-panel-inner">
         <h1 class="shop-title hero-setup-main-title">Loja do coliseu</h1>
         <h2 class="shop-hero-name">${escapeHtml(h.name)}</h2>
-        <div class="shop-hero-gold-row">
-          <span class="shop-hero-gold__coin-wrap" id="shop-gold-coin-tip" role="img" tabindex="0" aria-label="${escapeHtml(goldAriaLabel)}">
-            <span class="shop-hero-gold__icon" aria-hidden="true">${combatGoldCoinSvgHtml("shop-hero-gold__coin-svg")}</span>
-          </span>
-          <strong class="shop-hero-gold__value" id="shop-gold-value">${h.ouro}</strong>
-          <span class="shop-hero-gold__sep" aria-hidden="true">·</span>
-          <span class="shop-hero-gold__hero-idx">Herói ${idx + 1}/${party.length}</span>
+        <div class="shop-hero-gold-bags" role="group" aria-label="Ouro por herói — cada um tem a sua bolsa">
+          ${goldBagsHtml}
         </div>
         ${goldMultiHint}
         <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
@@ -2370,16 +2383,26 @@ function showGoldShop(isInitial: boolean): void {
         bunkerEvolveTooltipHtml(bShop.tier),
       );
     }
-    const goldTip = panel.querySelector(
-      "#shop-gold-coin-tip",
-    ) as HTMLElement | null;
-    if (goldTip) {
-      bindGameTooltip(
-        goldTip,
-        () =>
-          `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Ouro Atual</div></div>`,
-      );
-    }
+    panel.querySelectorAll(".shop-hero-gold-bag").forEach((node) => {
+      bindGameTooltip(node as HTMLElement, () => {
+        const i = Number((node as HTMLElement).dataset.shopHeroBag);
+        const ph = party[i];
+        if (!ph)
+          return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Bolsa de ouro</div></div>`;
+        const title = escapeHtml(ph.name);
+        const body = `<p class="game-ui-tooltip-passive">Bolsa <strong>individual</strong>: só este herói pode gastar estes <strong>${ph.ouro}</strong> ouro na loja.</p>`;
+        return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">${title}</div>${body}</div>`;
+      });
+    });
+    panel.querySelectorAll("[data-shop-hero-bag]").forEach((node) => {
+      node.addEventListener("click", () => {
+        const i = Number((node as HTMLElement).dataset.shopHeroBag);
+        if (!Number.isFinite(i) || i < 0 || i >= party.length) return;
+        idx = i;
+        goldShopHeroIndex = idx;
+        renderShop();
+      });
+    });
     const prevHost = panel.querySelector("#bunker-preview-host");
     if (prevHost && bShop) {
       goldShopBunker3d = new BunkerPreview3D(prevHost as HTMLElement);

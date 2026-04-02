@@ -4247,58 +4247,117 @@ body.enemy-inspect--dragging-body {
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
 }
 
-.shop-hero-gold-row {
+.shop-hero-gold-bags {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 0.5rem;
-  margin: 0 0 0.55rem;
-  font-size: 0.92rem;
-  color: #c4b8a8;
-}
-
-.shop-hero-gold__coin-wrap {
-  display: inline-flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  line-height: 0;
-  cursor: help;
-  border-radius: 6px;
+  gap: 0.5rem 0.65rem;
+  margin: 0 0 0.55rem;
+}
+
+.shop-hero-gold-bag {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  max-width: 11.5rem;
+  padding: 0.35rem 0.55rem 0.35rem 0;
+  margin: 0;
+  overflow: hidden;
+  font: inherit;
+  text-align: left;
+  color: #c4b8a8;
+  cursor: pointer;
+  border: 2px solid rgba(120, 108, 88, 0.55);
+  border-radius: 10px;
+  background: linear-gradient(
+    165deg,
+    rgba(36, 32, 44, 0.92) 0%,
+    rgba(18, 16, 24, 0.88) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 2px 8px rgba(0, 0, 0, 0.35);
   outline: none;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease;
 }
 
-.shop-hero-gold__coin-wrap:focus-visible {
-  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.65);
+.shop-hero-gold-bag:hover:not(:disabled) {
+  border-color: rgba(201, 162, 39, 0.45);
 }
 
-.shop-hero-gold__icon {
+.shop-hero-gold-bag:focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(212, 175, 55, 0.55),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.shop-hero-gold-bag--active {
+  border-color: rgba(232, 197, 71, 0.72);
+  background: linear-gradient(
+    165deg,
+    rgba(48, 42, 28, 0.95) 0%,
+    rgba(26, 22, 18, 0.92) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 220, 120, 0.12),
+    0 0 0 1px rgba(232, 197, 71, 0.25),
+    0 3px 12px rgba(0, 0, 0, 0.4);
+}
+
+.shop-hero-gold-bag__stripe {
+  align-self: stretch;
+  width: 5px;
+  flex-shrink: 0;
+  background: var(--shop-bag-team, rgba(160, 150, 130, 0.85));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+.shop-hero-gold-bag__coin {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  line-height: 0;
 }
 
-.shop-hero-gold__coin-svg {
-  width: 2.15rem;
-  height: 2.15rem;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.45));
+.shop-hero-gold-bag__coin-svg {
+  width: 1.75rem;
+  height: 1.75rem;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5));
 }
 
-.shop-hero-gold__value {
+.shop-hero-gold-bag__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.shop-hero-gold-bag__value {
   font-variant-numeric: tabular-nums;
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   font-weight: 800;
   color: #f2d56a;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  line-height: 1.1;
 }
 
-.shop-hero-gold__sep {
-  opacity: 0.55;
-  user-select: none;
-}
-
-.shop-hero-gold__hero-idx {
-  color: #a89878;
-  font-size: 0.88rem;
+.shop-hero-gold-bag__name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.15;
+  color: #b8a890;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shop-hero-gold-multi-hint {
