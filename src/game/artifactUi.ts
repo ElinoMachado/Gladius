@@ -20,7 +20,6 @@ const SPECIAL_MAX: Record<string, number> = {
   seda_vampira: 10,
   fio_cruel: 10,
   crystal_extra: 4,
-  braco_forte: 999,
   passo_gigante: 3,
   martelo_juiz: 3,
   manto_espectral: 3,

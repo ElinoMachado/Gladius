@@ -593,16 +593,18 @@ export class GameRenderer {
   }
 
   private makeEnemyTierLabelMesh(text: string, fillCss: string): THREE.Mesh {
+    const isElite = text === "Elite";
+    const fontPx = isElite ? 170 : 34;
     const c = document.createElement("canvas");
-    c.width = 160;
-    c.height = 56;
+    c.width = isElite ? 800 : 160;
+    c.height = isElite ? 280 : 56;
     const ctx = c.getContext("2d")!;
     ctx.clearRect(0, 0, c.width, c.height);
     ctx.fillStyle = fillCss;
-    ctx.font = "bold 34px Segoe UI, system-ui, sans-serif";
+    ctx.font = `bold ${fontPx}px Segoe UI, system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(text, c.width / 2, c.height / 2 + 2);
+    ctx.fillText(text, c.width / 2, c.height / 2 + (isElite ? 8 : 2));
     const tex = new THREE.CanvasTexture(c);
     tex.needsUpdate = true;
     const mat = new THREE.MeshBasicMaterial({
@@ -610,7 +612,9 @@ export class GameRenderer {
       transparent: true,
       depthWrite: false,
     });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.15), mat);
+    const gw = isElite ? 2.1 : 0.42;
+    const gh = isElite ? 0.75 : 0.15;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(gw, gh), mat);
     mesh.renderOrder = 11;
     mesh.userData.role = "enemyTierLabel";
     return mesh;
