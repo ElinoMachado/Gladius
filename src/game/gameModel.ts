@@ -420,12 +420,6 @@ export class GameModel {
    * Reembolsos de loja já usados nesta run: o primeiro é grátis; os seguintes custam cristais meta.
    */
   runShopRefundUses = 0;
-  /**
-   * Visitas à loja: qualquer gasto ou alteração (ouro, bunker, sandbox) nesta abertura.
-   * Reposto em `captureShopSnapshot`; não é limpo no reembolso — evita o aviso “sair sem gastar”
-   * depois de comprar e reembolsar na mesma loja.
-   */
-  initialShopSessionTouched = false;
 
   constructor() {
     this.meta = loadMeta();
@@ -4194,8 +4188,6 @@ export class GameModel {
     if (!ok) return false;
     u.hp = Math.max(0, Math.min(u.hp, u.maxHp));
     u.mana = Math.max(0, Math.min(u.mana, u.maxMana));
-    if (this.phase === "shop_initial" || this.phase === "shop_wave")
-      this.initialShopSessionTouched = true;
     if (artifactId === "braco_forte") {
       const ch = this.currentHero();
       if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
@@ -4268,8 +4260,6 @@ export class GameModel {
     if (u.ouro < missing) return false;
     u.ouro -= missing;
     for (const b of list) b.hp = b.maxHp;
-    if (this.phase === "shop_initial" || this.phase === "shop_wave")
-      this.initialShopSessionTouched = true;
     this.log(`Bunkers reparados (${missing} ouro).`);
     this.emit();
     return true;
@@ -4295,8 +4285,6 @@ export class GameModel {
       b.defesa = st.defesa;
       b.hp = st.maxHp;
     }
-    if (this.phase === "shop_initial" || this.phase === "shop_wave")
-      this.initialShopSessionTouched = true;
     this.log(`Bunkers evoluíram (nível ${nt}).`);
     this.emit();
     return true;
@@ -4327,8 +4315,6 @@ export class GameModel {
     if (u.ouro < cost) return false;
     u.ouro -= cost;
     item.apply(u);
-    if (this.phase === "shop_initial" || this.phase === "shop_wave")
-      this.initialShopSessionTouched = true;
     this.emit();
     return true;
   }
@@ -4447,7 +4433,6 @@ export class GameModel {
   }
 
   private captureShopSnapshot(): void {
-    this.initialShopSessionTouched = false;
     this.shopRestoreSnapshot = {
       heroes: this.getParty().map((u) => this.heroToShopSnapshot(u)),
       bunkers: this.snapshotBunkersNow(),

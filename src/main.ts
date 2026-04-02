@@ -2276,7 +2276,8 @@ function showGoldShop(isInitial: boolean): void {
 
   const openEmptySpendConfirm = (): boolean => {
     if (!isInitial) return false;
-    if (model.initialShopSessionTouched) return false;
+    // Só avisar se o estado ainda for o da abertura da loja (nada gasto / alterado).
+    if (model.shopHasChangesFromSnapshot()) return false;
     if (readSkipInitialShopEmptyConfirm()) return false;
     modalRoot.hidden = false;
     modalRoot.setAttribute("aria-hidden", "false");
