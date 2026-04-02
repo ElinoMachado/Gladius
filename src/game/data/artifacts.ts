@@ -39,7 +39,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Mãos venenosas",
     rarity: "common",
     description:
-      "Qualquer dano que o herói cause aplica veneno: 25% do dano bruto por turno por acúmulo, durante 3 turnos +1 por acúmulo; reaplicar reinicia a duração.",
+      "Ao causar dano a um inimigo, aplica envenenamento: 3 por turno durante 4 turnos. Cada acúmulo adiciona +3 ao dano por turno. O dano do envenenamento não é reduzido pela defesa do alvo.",
   },
   {
     id: "ronin",

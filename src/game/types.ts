@@ -140,7 +140,7 @@ export interface Unit extends CoreStats {
   motorMorteNextBasicPct: number;
   /** Saiu do bunker neste ciclo: não pode reentrar até ao próprio turno. */
   bunkerReentryBlocked?: boolean;
-  /** Mãos venenosas: { turnsLeft, dps } */
+  /** Envenenamento (Mãos venenosas): tick desconta HP direto, sem defesa. */
   poison?: { turns: number; perTurn: number };
   /** Cura contínua por turno (outras fontes). */
   hot?: { turns: number; perTurn: number };

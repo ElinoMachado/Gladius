@@ -141,7 +141,7 @@ export function describeArtifactAtStack(
     case "motor_morte":
       return `Ao matar: salto ao inimigo mais próximo; próximo básico +${10 * n}% dano.`;
     case "maos_venenosas":
-      return `Veneno em qualquer dano seu: ${25 * n}% do dano bruto por turno, ${3 + n} turno(s).`;
+      return `Ao causar dano: ${3 * n} de envenenamento por turno durante 4 turnos (ignora defesa).`;
     case "ronin":
       return `+${20 * n}% acerto crítico; acima de 100% o excesso não aumenta crítico; cada 5% de excesso → +1 de dano.`;
     case "imortal":

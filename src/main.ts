@@ -848,7 +848,7 @@ function enemyStatusTooltipHotHtml(u: Unit): string {
 
 function enemyStatusTooltipPoisonHtml(u: Unit): string {
   if (!u.poison) return "";
-  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Veneno</div><p class="game-ui-tooltip-passive">${u.poison.perTurn} de dano por turno · ${u.poison.turns} turno(s) restante(s).</p></div>`;
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Veneno</div><p class="game-ui-tooltip-passive">${u.poison.perTurn} de dano por turno · ${u.poison.turns} turno(s) restante(s). Ignora defesa.</p></div>`;
 }
 
 function fillEnemyInspectStatusRow(host: HTMLElement, u: Unit): void {

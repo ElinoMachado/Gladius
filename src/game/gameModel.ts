@@ -2968,7 +2968,7 @@ export class GameModel {
       mit > 0 &&
       (dmg > 0 || shieldAbsorb > 0)
     ) {
-      this.applyPoison(src, tgt, rawUse);
+      this.applyPoison(src, tgt);
     }
     if (tgt === src) {
       this.onDeaths();
@@ -3242,12 +3242,13 @@ export class GameModel {
     return best;
   }
 
-  private applyPoison(att: Unit, tgt: Unit, raw: number): void {
+  /** Mãos venenosas: dano fixo por turno (3×acúmulos), 4 turnos; tick em HP sem passar por defesa. */
+  private applyPoison(att: Unit, tgt: Unit): void {
     const s = att.artifacts["maos_venenosas"] ?? 0;
     if (s <= 0) return;
-    const per = roundToCombatDecimals(raw * 0.25 * s);
-    const turns = 3 + s;
-    tgt.poison = { turns, perTurn: per };
+    const perTurn = 3 * s;
+    const turns = 4;
+    tgt.poison = { turns, perTurn };
   }
 
   /** Seda vampira: % da cura em HP vira dano bruto em inimigos do mesmo bioma (20% por acúmulo, máx. 10). */
@@ -3518,7 +3519,7 @@ export class GameModel {
   /**
    * Veneno e HoT: ticks no fim do turno do herói (via `applyEndTurnEffects`) ou,
    * para cada inimigo, logo após o fim do turno daquele inimigo (`processNextEnemyTurn`).
-   * Dano de veneno não usa crítico de habilidades; crítico em DoT só com efeito/artefato dedicado no futuro.
+   * Dano de veneno não usa crítico de habilidades; aplica-se direto em HP (ignora defesa).
    */
   private applyPoisonAndHotTick(u: Unit): void {
     if (u.hp <= 0) return;
@@ -3535,6 +3536,7 @@ export class GameModel {
           poisonDot: true,
         });
       }
+      /* Veneno (Mãos venenosas): não passa por `dealDamage` / mitigação por defesa. */
       u.hp = Math.max(0, u.hp - pd);
       u.poison.turns--;
     }
