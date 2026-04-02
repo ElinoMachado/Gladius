@@ -2838,8 +2838,15 @@ function showGoldShop(isInitial: boolean): void {
     }
     panel.querySelectorAll("[data-gold-shop-item]").forEach((b) => {
       b.addEventListener("click", () => {
-        const id = (b as HTMLElement).dataset.goldShopItem!;
-        model.buyGoldItem(h.id, id);
+        const id = (b as HTMLElement).dataset.goldShopItem as GoldShopId;
+        const prevTab = goldShopHeroStatsTabRef.current;
+        if (id && id in GOLD_SHOP_TAB_FOR_ITEM) {
+          goldShopHeroStatsTabRef.current = GOLD_SHOP_TAB_FOR_ITEM[id];
+        }
+        const ok = model.buyGoldItem(h.id, id);
+        if (!ok && id && id in GOLD_SHOP_TAB_FOR_ITEM) {
+          goldShopHeroStatsTabRef.current = prevTab;
+        }
         /* `emit` → `render` → `refreshGoldShop`; evitar segundo `renderShop` aqui (WebGL). */
       });
     });
@@ -4079,6 +4086,22 @@ const goldShopHeroStatsTabRef: { current: HeroStatCategory } = {
 };
 const combatHeroStatsTabRef: { current: HeroStatCategory } = {
   current: "offense",
+};
+
+/** Aba da grelha “Atributos atuais” onde cada compra da loja de ouro aparece. */
+const GOLD_SHOP_TAB_FOR_ITEM: Record<GoldShopId, HeroStatCategory> = {
+  vida: "defense",
+  max_mana: "defense",
+  regen_hp: "defense",
+  regen_mana: "defense",
+  dano: "offense",
+  crit_chance: "offense",
+  crit_dmg: "offense",
+  defesa: "defense",
+  penetracao: "offense",
+  movimento: "utility",
+  heal_shield: "utility",
+  xp_pct: "utility",
 };
 
 function bindGameTooltip(el: HTMLElement, getHtml: () => string): void {
