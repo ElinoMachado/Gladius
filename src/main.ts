@@ -657,6 +657,15 @@ let crystalShop3d: CrystalShop3D | null = null;
 let goldShopBunker3d: BunkerPreview3D | null = null;
 /** Atualização parcial da loja (evita `innerHTML` na shell a cada `emit()`). */
 let refreshGoldShop: (() => void) | null = null;
+/** RAF para fundir vários `emit`/cliques na mesma frame — evita criar/destruir WebGL em rajada (Opera e outros). */
+let goldShopLayoutRafId = 0;
+
+function cancelGoldShopLayoutRaf(): void {
+  if (goldShopLayoutRafId !== 0) {
+    cancelAnimationFrame(goldShopLayoutRafId);
+    goldShopLayoutRafId = 0;
+  }
+}
 let artifactCodex3d: ArtifactCodex3D | null = null;
 let enemyCompendium3d: EnemyPreview3D | null = null;
 let mainMenuSword3d: MainMenuSword3D | null = null;
@@ -2619,6 +2628,7 @@ function showGoldShop(isInitial: boolean): void {
     refreshGoldShop();
     return;
   }
+  cancelGoldShopLayoutRaf();
   goldShopArtifactPage = 0;
   goldShopArtifactSig = "";
   refreshGoldShop = null;
@@ -2666,6 +2676,8 @@ function showGoldShop(isInitial: boolean): void {
   shell.appendChild(modalRoot);
 
   const finishShop = (): void => {
+    cancelGoldShopLayoutRaf();
+    refreshGoldShop = null;
     goldShopStall3d?.dispose();
     goldShopStall3d = null;
     goldShopBunker3d?.dispose();
@@ -2712,6 +2724,14 @@ function showGoldShop(isInitial: boolean): void {
 
   goldShopStall3d = new ShopStall3D(bgHost);
   goldShopStall3d.start();
+
+  const queueRenderShop = (): void => {
+    if (goldShopLayoutRafId !== 0) return;
+    goldShopLayoutRafId = requestAnimationFrame(() => {
+      goldShopLayoutRafId = 0;
+      renderShop();
+    });
+  };
 
   const renderShop = (): void => {
     hideGameTooltip();
@@ -2877,7 +2897,7 @@ function showGoldShop(isInitial: boolean): void {
         if (!Number.isFinite(i) || i < 0 || i >= party.length) return;
         idx = i;
         goldShopHeroIndex = idx;
-        renderShop();
+        queueRenderShop();
       });
     });
     const prevHost = panel.querySelector("#bunker-preview-host");
@@ -2948,7 +2968,7 @@ function showGoldShop(isInitial: boolean): void {
       else footMsg.textContent = "Não foi possível reembolsar.";
     });
   };
-  refreshGoldShop = renderShop;
+  refreshGoldShop = queueRenderShop;
   renderShop();
 }
 
@@ -7055,6 +7075,8 @@ function render(): void {
     model.phase !== "shop_initial" &&
     model.phase !== "shop_wave"
   ) {
+    cancelGoldShopLayoutRaf();
+    refreshGoldShop = null;
     goldShopStall3d?.dispose();
     goldShopStall3d = null;
     goldShopBunker3d?.dispose();
