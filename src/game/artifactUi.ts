@@ -112,6 +112,16 @@ export function pickChoiceRarity(id: string): ArtifactRarity | null {
   return defOr(id)?.rarity ?? null;
 }
 
+/** Texto do Tônico na run: substitui `{valor}` pela mana extra (50% × regen vida × acúmulos). */
+function describeTonicoForRun(stacks: number, u: Unit | undefined): string {
+  const tpl =
+    defOr("tonico")?.description ??
+    "Receba {valor} de regeneração de mana adicional, equivalente a 50% da sua regeneração de vida.";
+  if (!u) return tpl;
+  const bonus = Math.floor(u.regenVida * 0.5 * Math.max(1, stacks));
+  return tpl.replace("{valor}", String(bonus));
+}
+
 /** Efeito resumido no nível de stack `s` (≥1). */
 export function describeArtifactAtStack(
   id: string,
@@ -122,11 +132,8 @@ export function describeArtifactAtStack(
   switch (id) {
     case "trevo":
       return `+${25 * n}% XP recebida (acúmulos somam).`;
-    case "tonico": {
-      const rv = u?.regenVida ?? 0;
-      const bonus = Math.floor(rv * 0.5 * n);
-      return `+${bonus} mana por turno (metade da regen vida × ${n} acúmulo(s); base regen ${rv}).`;
-    }
+    case "tonico":
+      return describeTonicoForRun(n, u);
     case "motor_morte":
       return `Ao matar: salto ao inimigo mais próximo; próximo básico +${10 * n}% dano.`;
     case "maos_venenosas":
@@ -205,6 +212,14 @@ export function artifactStackCounterLabel(id: string, stacks: number): string {
 export function artifactCodexAllTiersHtml(id: string, u?: Unit): string {
   if (id === "_pick_gold" || id === "_pick_restore") {
     return `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(pickChoiceDisplayName(id))}</div><div class="artifact-tt-cur">${escapeHtml(describeArtifactAtStack(id, 1, u))}</div></div>`;
+  }
+  if (id === "tonico") {
+    const d = defOr(id);
+    const name = d?.name ?? id;
+    const desc =
+      d?.description ??
+      "Receba {valor} de regeneração de mana adicional, equivalente a 50% da sua regeneração de vida.";
+    return `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(name)}</div><div class="artifact-tt-cur">${escapeHtml(desc)}</div></div>`;
   }
   const d = defOr(id);
   const name = d?.name ?? id;

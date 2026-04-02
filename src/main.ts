@@ -2537,9 +2537,10 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
         const cur = hNow?.artifacts[artId] ?? 0;
         const cap = getArtifactMaxStacks(artId);
         const state = `<p class="artifact-tt-sandbox-state"><strong>Acúmulos:</strong> ${cur}/${cap}</p>`;
-        const flavor = def?.description
-          ? `<p class="artifact-tt-sandbox-flavor">${escapeHtml(def.description)}</p>`
-          : "";
+        const flavor =
+          def?.description && artId !== "tonico"
+            ? `<p class="artifact-tt-sandbox-flavor">${escapeHtml(def.description)}</p>`
+            : "";
         return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--wide-artifact">${state}${flavor}${artifactCodexAllTiersHtml(artId, hNow ?? hero)}</div>`;
       });
     });

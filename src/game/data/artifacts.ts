@@ -32,7 +32,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Tônico",
     rarity: "common",
     description:
-      "Ganha metade da sua regen de vida como regen de mana por acúmulo (50% por stack).",
+      "Receba {valor} de regeneração de mana adicional, equivalente a 50% da sua regeneração de vida.",
   },
   {
     id: "maos_venenosas",
