@@ -871,70 +871,92 @@ export class GameRenderer {
   }
 
   /**
-   * Silhueta de asa (plano XY): raiz junto ao corpo (0,0), vão para +X.
-   * Cada asa usa geometria clonada para `dispose` seguro.
+   * Referência: duas “pétalas” por lado, mesmo pivô na lateral do corpo —
+   * superior grande (borda superior convexa, inferior mais recta, ponta aguda);
+   * inferior menor, ligeiramente por baixo, mais horizontal.
+   * Plano XY: charneira em (0,0), vão para +X (espelhar com scale.x negativo no lado esquerdo).
    */
-  private createGoldenWingSilhouetteGeometry(): THREE.BufferGeometry {
+  private createGoldenWingUpperLobeGeometry(): THREE.BufferGeometry {
     const sh = new THREE.Shape();
-    sh.moveTo(0.02, 0.06);
-    sh.quadraticCurveTo(0.06, 0.52, 0.28, 0.88);
-    sh.quadraticCurveTo(0.52, 1.12, 0.88, 0.98);
-    sh.quadraticCurveTo(1.18, 0.72, 1.38, 0.28);
-    sh.quadraticCurveTo(1.52, -0.22, 1.28, -0.62);
-    sh.quadraticCurveTo(1.02, -0.95, 0.62, -0.82);
-    sh.quadraticCurveTo(0.32, -0.68, 0.14, -0.38);
-    sh.quadraticCurveTo(0.04, -0.14, 0.02, 0.06);
+    sh.moveTo(0, 0);
+    sh.lineTo(0.035, 0.08);
+    sh.bezierCurveTo(0.32, 0.78, 0.72, 1.05, 1.08, 0.9);
+    sh.lineTo(0.98, 0.38);
+    sh.quadraticCurveTo(0.42, 0.04, 0, 0);
     sh.closePath();
-    return new THREE.ShapeGeometry(sh, 20);
+    return new THREE.ShapeGeometry(sh, 18);
+  }
+
+  private createGoldenWingLowerLobeGeometry(): THREE.BufferGeometry {
+    const sh = new THREE.Shape();
+    sh.moveTo(0, 0);
+    sh.lineTo(0.045, -0.05);
+    sh.bezierCurveTo(0.52, 0.05, 0.95, -0.12, 1.12, -0.36);
+    sh.lineTo(0.88, -0.34);
+    sh.quadraticCurveTo(0.38, -0.14, 0, 0);
+    sh.closePath();
+    return new THREE.ShapeGeometry(sh, 16);
   }
 
   private buildGoldenFlyingWingsGroup(): THREE.Group {
     const root = new THREE.Group();
     root.userData.role = "flyingWings";
-    /** Desligado do torso: conjunto atrás e um pouco acima. */
-    root.position.set(0, 0.34, -0.62);
+    /** Atrás do torso; alinhado ~altura média como no desenho. */
+    root.position.set(0, 0.36, -0.58);
 
-    const addWing = (side: -1 | 1): THREE.Group => {
+    const solidMat = new THREE.MeshStandardMaterial({
+      color: 0xf5d24a,
+      emissive: 0xffe9a8,
+      emissiveIntensity: 0.62,
+      metalness: 0.88,
+      roughness: 0.12,
+      side: THREE.DoubleSide,
+    });
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0xfff2c8,
+      transparent: true,
+      opacity: 0.38,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    const addWingSide = (side: -1 | 1): THREE.Group => {
       const pivot = new THREE.Group();
-      const spread = 0.52;
-      pivot.position.set(side * spread, 1.02, 0.05);
-      pivot.rotation.set(-0.12, side * -0.5, side * 0.06);
+      const spread = 0.5;
+      pivot.position.set(side * spread, 1.0, 0.06);
+      pivot.rotation.set(-0.08, side * -0.46, side * 0.05);
 
-      const solidMat = new THREE.MeshStandardMaterial({
-        color: 0xf5d24a,
-        emissive: 0xffe9a8,
-        emissiveIntensity: 0.62,
-        metalness: 0.88,
-        roughness: 0.12,
-        side: THREE.DoubleSide,
-      });
-      const solidGeo = this.createGoldenWingSilhouetteGeometry();
-      const solid = new THREE.Mesh(solidGeo, solidMat);
-      solid.scale.set(side * 1.12, 1.38, 1);
-      solid.position.set(side * 0.04, -0.06, 0.04);
-      solid.userData.wingPulse = true;
+      const addLobePair = (
+        geoFn: () => THREE.BufferGeometry,
+        scaleX: number,
+        scaleY: number,
+        posY: number,
+        zSolid: number,
+        zGlow: number,
+      ): void => {
+        const g0 = geoFn();
+        const solid = new THREE.Mesh(g0.clone(), solidMat);
+        solid.scale.set(side * scaleX, scaleY, 1);
+        solid.position.set(0, posY, zSolid);
+        solid.userData.wingPulse = true;
+        const glow = new THREE.Mesh(g0.clone(), glowMat);
+        glow.scale.set(side * scaleX * 1.1, scaleY * 1.06, 1);
+        glow.position.set(0, posY, zGlow);
+        glow.userData.wingPulse = true;
+        g0.dispose();
+        pivot.add(glow);
+        pivot.add(solid);
+      };
 
-      const glowMat = new THREE.MeshBasicMaterial({
-        color: 0xfff2c8,
-        transparent: true,
-        opacity: 0.38,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-      const glowGeo = this.createGoldenWingSilhouetteGeometry();
-      const glow = new THREE.Mesh(glowGeo, glowMat);
-      glow.scale.set(side * 1.24, 1.48, 1);
-      glow.position.set(side * 0.04, -0.06, -0.05);
-      glow.userData.wingPulse = true;
+      addLobePair(() => this.createGoldenWingUpperLobeGeometry(), 1.14, 1.36, 0.02, 0.04, -0.05);
+      addLobePair(() => this.createGoldenWingLowerLobeGeometry(), 1.02, 1.18, -0.05, 0.025, -0.055);
 
-      pivot.add(glow);
-      pivot.add(solid);
       return pivot;
     };
 
-    const pivotL = addWing(-1);
-    const pivotR = addWing(1);
+    const pivotL = addWingSide(-1);
+    const pivotR = addWingSide(1);
     root.add(pivotL);
     root.add(pivotR);
     root.userData.wingPivotL = pivotL;
