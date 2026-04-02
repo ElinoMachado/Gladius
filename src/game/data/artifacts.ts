@@ -53,6 +53,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Sylfid",
     rarity: "common",
     description: "+15% potencial de cura e escudo por acúmulo.",
+    pickBonusPerStack: { potencialCuraEscudo: 15 },
   },
   {
     id: "garra_ferro",

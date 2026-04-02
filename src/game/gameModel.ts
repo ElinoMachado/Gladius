@@ -3254,6 +3254,7 @@ export class GameModel {
   /**
    * Seda vampira: só em cura por roubo de vida. % da cura em HP vira dano bruto em inimigos do mesmo bioma
    * (20% × acúmulos, máx. 10). O dano usa `suppressLifesteal` para não gerar novo roubo de vida.
+   * No hex “hub” (castelo), o bioma do herói não coincide com os setores — contam-se todos os inimigos.
    */
   private applySedaVampiraSplash(hero: Unit, healHp: number): void {
     if (!hero.isPlayer || healHp <= 0) return;
@@ -3261,11 +3262,11 @@ export class GameModel {
     if (s <= 0) return;
     const rawSplash = roundToCombatDecimals(healHp * 0.2 * s);
     if (rawSplash <= 0) return;
-    const bio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
+    const heroBio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
     for (const e of this.enemies()) {
       if (e.hp <= 0) continue;
       const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
-      if (eb !== bio) continue;
+      if (heroBio !== "hub" && eb !== heroBio) continue;
       this.dealDamage(hero, e, rawSplash, false, false, false, {
         suppressLifesteal: true,
       });
