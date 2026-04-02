@@ -913,7 +913,7 @@ function enemyInspectPrimaryRows(u: Unit, m: GameModel): [string, string][] {
       ? `${Math.round(m.crystalDropChanceForKill(killer, u) * 1000) / 10}%`
       : "—";
   const rows: [string, string][] = [
-    ["HP", `${u.hp} / ${u.maxHp}`],
+    ["HP", `${formatTooltipNumber(u.hp)} / ${formatTooltipNumber(u.maxHp)}`],
     ["Dano", String(u.dano)],
     ["Defesa", String(effDef)],
     ["Movimento", String(movPool)],
@@ -5302,7 +5302,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     cells.unshift({
       icon: "def",
       label: "Bunker (estrutura)",
-      value: `${B.hp}/${B.maxHp} · def ${B.defesa}`,
+      value: `${formatTooltipNumber(B.hp)}/${formatTooltipNumber(B.maxHp)} · def ${formatTooltipNumber(B.defesa)}`,
       tooltipValue: `PV e defesa do bunker; inimigos reduzem esta vida antes da sua.`,
       statCategory: "defense",
     });
@@ -6150,7 +6150,7 @@ function showCombatHUD(): void {
         : 0;
     lolShieldFill.style.transform = `scaleX(${shR})`;
     lolShieldTxt.textContent =
-      h.shieldGGBlue > 0 ? String(h.shieldGGBlue) : "0";
+      h.shieldGGBlue > 0 ? formatTooltipNumber(h.shieldGGBlue) : "0";
     if (bunkHud && bunkHere && lolHpFillHero && lolHpTxtHero && lolHpFillBunker && lolHpTxtBunker) {
       const B = bunkHere;
       lolHpSingleWrap.hidden = true;
@@ -6181,12 +6181,12 @@ function showCombatHUD(): void {
       const hpR =
         h.maxHp > 0 ? Math.max(0, Math.min(1, h.hp / h.maxHp)) : 0;
       lolHpFill.style.transform = `scaleX(${hpR})`;
-      lolHpTxt.textContent = `${h.hp} / ${h.maxHp}`;
+      lolHpTxt.textContent = `${formatTooltipNumber(h.hp)} / ${formatTooltipNumber(h.maxHp)}`;
     }
     const manaR =
       h.maxMana > 0 ? Math.max(0, Math.min(1, h.mana / h.maxMana)) : 0;
     lolManaFill.style.transform = `scaleX(${manaR})`;
-    lolManaTxt.textContent = `${h.mana} / ${h.maxMana}`;
+    lolManaTxt.textContent = `${formatTooltipNumber(h.mana)} / ${formatTooltipNumber(h.maxMana)}`;
     const turnRegen = computeHeroEffectiveTurnRegen(h, model);
     const hpRegLine = `+${formatTooltipNumber(turnRegen.hp)} por turno.`;
     const manaRegLine = `+${formatTooltipNumber(turnRegen.mana)} por turno.`;
