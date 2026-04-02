@@ -32,8 +32,10 @@ const BIOME_HEX_COLOR: Record<BiomeId, number> = {
  * Raio centro→vértice no grid axial (vizinhos a distância √3·HEX_SIZE; mesh com o mesmo raio encosta sem folga).
  */
 const HEX_SIZE = 2.18;
-/** Heróis com `flying`: elevação acima do plano do hex (visual + alinhamento a animações). */
-const HERO_FLY_FLOAT_Y = 0.3;
+/** Heróis com `flying`: altura base acima do hex (~4× a elevação inicial). */
+const HERO_FLY_BASE_Y = 1.2;
+/** Oscilação vertical (flutuar) em torno da base. */
+const HERO_FLY_BOB_AMP = 0.22;
 const ARENA_HEX_RADIUS = 25;
 /** Borda do pan: extensão do grid + folga (sem o anel decorativo removido). */
 const COLISEUM_XZ_MAX = HEX_SIZE * Math.sqrt(3) * ARENA_HEX_RADIUS + 10;
@@ -856,38 +858,81 @@ export class GameRenderer {
     }
   }
 
+  /** Altura Y total no ar: base + vai-e-vem (flutuar). */
+  private heroFlyTotalY(nowMs: number, unitId: string, baseY: number): number {
+    if (baseY <= 0) return 0;
+    let h = 0;
+    for (let i = 0; i < unitId.length; i++) {
+      h = (h * 31 + unitId.charCodeAt(i)) | 0;
+    }
+    const phase = nowMs * 0.00185 + (h & 0x1ff) * 0.012;
+    return baseY + HERO_FLY_BOB_AMP * Math.sin(phase);
+  }
+
   private buildGoldenFlyingWingsGroup(): THREE.Group {
     const root = new THREE.Group();
     root.userData.role = "flyingWings";
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xe8c547,
-      emissive: 0x332208,
-      emissiveIntensity: 0.22,
-      metalness: 0.68,
-      roughness: 0.32,
-      side: THREE.DoubleSide,
-    });
-    const geo = new THREE.PlaneGeometry(0.42, 0.58);
-    const wx = 0.24;
-    const wy = 1.08;
-    const wz = -0.14;
-    const flap = 0.42;
-    const left = new THREE.Mesh(geo, mat);
-    left.position.set(-wx, wy, wz);
-    left.rotation.set(-0.12, -flap, 0.08);
-    root.add(left);
-    const right = new THREE.Mesh(geo, mat.clone());
-    right.position.set(wx, wy, wz);
-    right.rotation.set(-0.12, flap, -0.08);
-    root.add(right);
+    /** Desligado do torso: conjunto atrás e um pouco acima. */
+    root.position.set(0, 0.34, -0.62);
+
+    const w = 1.14;
+    const h = 1.52;
+    const geoMain = new THREE.PlaneGeometry(w, h);
+
+    const addWing = (side: -1 | 1): THREE.Group => {
+      const pivot = new THREE.Group();
+      const spread = 0.58;
+      pivot.position.set(side * spread, 1.05, 0.06);
+      pivot.rotation.set(-0.1, side * -0.52, side * 0.07);
+
+      const solidMat = new THREE.MeshStandardMaterial({
+        color: 0xf5d24a,
+        emissive: 0xffe9a8,
+        emissiveIntensity: 0.62,
+        metalness: 0.88,
+        roughness: 0.12,
+        side: THREE.DoubleSide,
+      });
+      const solid = new THREE.Mesh(geoMain, solidMat);
+      solid.position.z = 0.03;
+      solid.userData.wingPulse = true;
+
+      const glowGeo = new THREE.PlaneGeometry(w * 1.18, h * 1.2);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0xfff2c8,
+        transparent: true,
+        opacity: 0.38,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const glow = new THREE.Mesh(glowGeo, glowMat);
+      glow.position.z = -0.06;
+      glow.userData.wingPulse = true;
+
+      pivot.add(glow);
+      pivot.add(solid);
+      return pivot;
+    };
+
+    const pivotL = addWing(-1);
+    const pivotR = addWing(1);
+    root.add(pivotL);
+    root.add(pivotR);
+    root.userData.wingPivotL = pivotL;
+    root.userData.wingPivotR = pivotR;
     return root;
   }
 
-  /** Voo de herói: offset Y, asas douradas; `heroFlyBaseY` para movimento e ultimate. */
-  private updateHeroFlyingVisual(g: THREE.Group, u: Unit): void {
-    const flyY =
-      u.isPlayer && u.hp > 0 && u.flying ? HERO_FLY_FLOAT_Y : 0;
-    g.userData.heroFlyBaseY = flyY;
+  /** Voo de herói: offset Y base em `heroFlyBaseY`; asas douradas (animação em sync). */
+  private updateHeroFlyingVisual(
+    g: THREE.Group,
+    u: Unit,
+    nowMs: number,
+  ): void {
+    const baseY =
+      u.isPlayer && u.hp > 0 && u.flying ? HERO_FLY_BASE_Y : 0;
+    g.userData.heroFlyBaseY = baseY;
 
     const wantWings = u.isPlayer && u.hp > 0 && u.flying;
     let wings = g.userData.flyingWingsRoot as THREE.Group | undefined;
@@ -904,6 +949,25 @@ export class GameRenderer {
       g.userData.flyingWingsRoot = wings;
       g.add(wings);
     }
+
+    const t = nowMs * 0.0011;
+    const flap = 0.11 * Math.sin(t * 2.05);
+    const pulse = 0.5 + 0.5 * Math.sin(t * 3.15);
+    const pivotL = wings.userData.wingPivotL as THREE.Group | undefined;
+    const pivotR = wings.userData.wingPivotR as THREE.Group | undefined;
+    if (pivotL && pivotR) {
+      pivotL.rotation.z = -0.07 + flap;
+      pivotR.rotation.z = 0.07 - flap;
+    }
+    wings.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh) || !obj.userData.wingPulse) return;
+      const m = obj.material;
+      if (m instanceof THREE.MeshStandardMaterial) {
+        m.emissiveIntensity = 0.48 + 0.62 * pulse;
+      } else if (m instanceof THREE.MeshBasicMaterial) {
+        m.opacity = 0.26 + 0.36 * pulse;
+      }
+    });
   }
 
   private updateUnitMoveAnims(dt: number): void {
@@ -926,7 +990,12 @@ export class GameRenderer {
       const p1 = axialToWorld(v.q, v.r, HEX_SIZE);
       a.t += dt;
       const p = Math.min(1, a.t / a.segSeconds);
-      const flyY = Number(g.userData.heroFlyBaseY) || 0;
+      const now = performance.now();
+      const flyY = this.heroFlyTotalY(
+        now,
+        id,
+        Number(g.userData.heroFlyBaseY) || 0,
+      );
       g.position.set(
         THREE.MathUtils.lerp(p0.x, p1.x, p),
         flyY,
@@ -1470,10 +1539,14 @@ export class GameRenderer {
         g.add(body);
         g.userData.modelKey = mk;
       }
-      this.updateHeroFlyingVisual(g, u);
+      this.updateHeroFlyingVisual(g, u, now);
       if (!this.unitMoveAnims.has(u.id)) {
         const { x, z } = axialToWorld(u.q, u.r, HEX_SIZE);
-        const flyY = Number(g.userData.heroFlyBaseY) || 0;
+        const flyY = this.heroFlyTotalY(
+          now,
+          u.id,
+          Number(g.userData.heroFlyBaseY) || 0,
+        );
         const ju = this.heroUltJumpById.get(u.id);
         if (ju) {
           ju.baseX = x;
@@ -2380,7 +2453,11 @@ export class GameRenderer {
         continue;
       }
       const elapsed = now - ju.startMs;
-      const fy = Number(g.userData.heroFlyBaseY) || 0;
+      const fy = this.heroFlyTotalY(
+        now,
+        id,
+        Number(g.userData.heroFlyBaseY) || 0,
+      );
       if (elapsed >= ju.durationMs) {
         g.position.set(ju.baseX, fy, ju.baseZ);
         this.heroUltJumpById.delete(id);
