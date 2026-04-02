@@ -178,6 +178,11 @@ export function describeArtifactAtStack(
       return `Ao matar: cura +${5 * n} em você e em cada aliado.`;
     case "seda_vampira":
       return `Sempre que se curar com roubo de vida, cause ${20 * n}% da sua cura como dano a todos inimigos no bioma.`;
+    case "escudo_residual": {
+      const caps = [100, 250, 400, 600, 900, 1500];
+      const cap = caps[Math.min(n, caps.length) - 1] ?? 1500;
+      return `Com vida cheia, cura por roubo de vida vira escudo até ${cap} (só este efeito conta para o teto).`;
+    }
     case "fio_cruel":
       return `+${3 * n}% chance de cristal ao eliminar inimigos.`;
     case "crystal_extra":
@@ -264,6 +269,7 @@ export function artifactCardFigureSvg(artifactId: string): string {
     curandeiro_batalha: `<path fill="#43a047" d="M24 8v32M8 24h32" stroke="#2e7d32" stroke-width="4"/><circle cx="24" cy="24" r="10" fill="none" stroke="#66bb6a" stroke-width="2"/>`,
     sylfid: `<path fill="#26a69a" d="M14 36 Q24 6 34 36 Q24 28 14 36"/><circle cx="24" cy="22" r="6" fill="#b2dfdb"/>`,
     escudo_sangue: `<path fill="#c62828" d="M24 8 L38 14 V28 Q24 38 10 28 V14 Z" stroke="#5d1010" stroke-width="1"/><path fill="#ff8a80" d="M24 14 L32 18 V26 Q24 32 16 26 V18 Z"/>`,
+    escudo_residual: `<path fill="#1565c0" d="M24 8 L38 14 V28 Q24 38 10 28 V14 Z" stroke="#0d47a1" stroke-width="1"/><path fill="#81d4fa" d="M24 14 L32 18 V26 Q24 32 16 26 V18 Z"/><path fill="none" stroke="#e3f2fd" stroke-width="1" d="M18 22h12M24 16v14"/>`,
     lamina_magica: `<path fill="#7e57c2" d="M14 34 L24 8 L34 34 Z" stroke="#311b92"/><path fill="#b39ddb" d="M22 16h4v12h-4z"/><circle cx="24" cy="30" r="3" fill="#ffd54f"/>`,
     _pick_gold: `<circle cx="24" cy="24" r="14" fill="#c9a227" stroke="#6a5018"/><circle cx="24" cy="22" r="9" fill="#e8c84a"/><ellipse cx="24" cy="19" rx="6" ry="2.5" fill="#f5d76e"/>`,
     _pick_restore: `<path fill="#43a047" d="M24 8v32M8 24h32" stroke="#1b5e20" stroke-width="3"/><circle cx="24" cy="24" r="12" fill="none" stroke="#66bb6a" stroke-width="2"/>`,

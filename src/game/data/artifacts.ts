@@ -239,11 +239,11 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     pickBonusPerStack: { defesa: 4 },
   },
   {
-    id: "fonte_dual",
-    name: "Fonte dual",
+    id: "escudo_residual",
+    name: "Escudo residual",
     rarity: "rare",
-    description: "+2 regen de vida e +2 regen de mana por acúmulo.",
-    pickBonusPerStack: { regenVida: 2, regenMana: 2 },
+    description:
+      "Com vida cheia, a cura por roubo de vida vira escudo azul até 100 (teto sobe por acúmulo: 100 / 250 / 400 / 600 / 900 / 1500).",
   },
   {
     id: "vendaval_arcana",

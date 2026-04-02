@@ -184,6 +184,9 @@ export const BUNKER_COMBAT_FLOAT_ID = "__bunker__";
 /** Teto do A* na aproximação inimiga. `movimento * 2` impedia caminhos longos (mapa raio ~25), fazendo-os “parados” até o herói chegar perto. */
 const ENEMY_APPROACH_PATHFIND_MAX = 100;
 
+/** Artefato Escudo residual: teto do escudo vindo de roubo com vida cheia (acúmulos 1–6). */
+const ESCUDO_RESIDUAL_CAP_BY_STACK = [100, 250, 400, 600, 900, 1500] as const;
+
 export interface RunSetup {
   heroes: HeroClassId[];
   /** Um bioma inicial por herói (mesma ordem) */
@@ -992,6 +995,7 @@ export class GameModel {
       u.pistoleiroBonusDanoWave = 0;
       u.curandeiroDanoWave = 0;
       u.shieldGGBlue = 0;
+      u.escudoResidualTagged = 0;
       if ((u.furiaGiganteTurns ?? 0) > 0 || u.furiaExtraMaxHp) {
         const extra = u.furiaExtraMaxHp ?? 0;
         if (extra > 0) {
@@ -1867,6 +1871,7 @@ export class GameModel {
       const absorbed = Math.min(u.shieldGGBlue, d);
       shieldAbsorb = absorbed;
       u.shieldGGBlue -= absorbed;
+      this.reduceEscudoResidualTagged(u, absorbed);
       dmgHp = d - absorbed;
     }
     u.hp = Math.max(0, u.hp - dmgHp);
@@ -1964,6 +1969,7 @@ export class GameModel {
       h.ouro += total;
       h.ouroWave = 0;
       h.shieldGGBlue = 0;
+      h.escudoResidualTagged = 0;
     }
     const essences: { id: ForgeEssenceId; n: number }[] = [];
     for (const id of Object.keys(this.waveEssencesGained) as ForgeEssenceId[]) {
@@ -2851,6 +2857,7 @@ export class GameModel {
       const absorbed = Math.min(tgt.shieldGGBlue, dmgVsShield);
       shieldAbsorb = absorbed;
       tgt.shieldGGBlue -= absorbed;
+      this.reduceEscudoResidualTagged(tgt, absorbed);
       dmg -= absorbed;
       const stacks = src.artifacts["escudo_sangue"] ?? 0;
       if (stacks > 0 && absorbed > 0) {
@@ -2908,15 +2915,37 @@ export class GameModel {
       const ls = roundToCombatDecimals((dmg * src.lifesteal) / 100);
       if (ls > 0) {
         const h0 = src.hp;
-        src.hp = Math.min(src.maxHp, src.hp + ls);
-        const g = src.hp - h0;
-        if (g > 0) {
-          this.pushCombatFloat({
-            unitId: src.id,
-            kind: "heal",
-            amount: g,
-          });
-          this.applySedaVampiraSplash(src, g);
+        const erStacks = src.isPlayer ? (src.artifacts["escudo_residual"] ?? 0) : 0;
+        const erCap =
+          erStacks > 0 && h0 >= src.maxHp
+            ? this.escudoResidualCapFromStacks(erStacks)
+            : 0;
+        if (erCap > 0) {
+          const tagged = src.escudoResidualTagged ?? 0;
+          const room = Math.max(0, erCap - tagged);
+          const add = Math.min(ls, room);
+          if (add > 0) {
+            src.shieldGGBlue = roundToCombatDecimals(src.shieldGGBlue + add);
+            src.escudoResidualTagged = roundToCombatDecimals(tagged + add);
+            this.pushCombatFloat({
+              unitId: src.id,
+              kind: "shield_gain",
+              amount: add,
+              targetIsPlayer: src.isPlayer,
+              floatHex: { q: src.q, r: src.r },
+            });
+          }
+        } else {
+          src.hp = Math.min(src.maxHp, src.hp + ls);
+          const g = src.hp - h0;
+          if (g > 0) {
+            this.pushCombatFloat({
+              unitId: src.id,
+              kind: "heal",
+              amount: g,
+            });
+            this.applySedaVampiraSplash(src, g);
+          }
         }
       }
     }
@@ -3276,6 +3305,23 @@ export class GameModel {
         suppressLifesteal: true,
       });
     }
+  }
+
+  /** Consome a parcela “marcada” do escudo quando o escudo azul absorve dano. */
+  private reduceEscudoResidualTagged(u: Unit, shieldAbsorbed: number): void {
+    if (shieldAbsorbed <= 0) return;
+    const t = u.escudoResidualTagged ?? 0;
+    if (t <= 0) return;
+    u.escudoResidualTagged = roundToCombatDecimals(
+      Math.max(0, t - Math.min(shieldAbsorbed, t)),
+    );
+  }
+
+  /** Teto do escudo gerado pelo artefato Escudo residual (0 se sem acúmulos). */
+  private escudoResidualCapFromStacks(stacks: number): number {
+    const s = Math.min(6, Math.max(0, Math.floor(stacks)));
+    if (s <= 0) return 0;
+    return ESCUDO_RESIDUAL_CAP_BY_STACK[s - 1]!;
   }
 
   /**

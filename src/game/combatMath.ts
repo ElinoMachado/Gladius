@@ -25,6 +25,11 @@ export function snapPlayerVitality(u: Unit): void {
   u.maxMana = Math.max(0, roundToCombatDecimals(u.maxMana));
   u.mana = roundToCombatDecimals(Math.max(0, Math.min(u.maxMana, u.mana)));
   u.shieldGGBlue = roundToCombatDecimals(Math.max(0, u.shieldGGBlue));
+  if (u.escudoResidualTagged != null && u.escudoResidualTagged > 0) {
+    u.escudoResidualTagged = roundToCombatDecimals(
+      Math.max(0, Math.min(u.escudoResidualTagged, u.shieldGGBlue)),
+    );
+  }
 }
 
 /**

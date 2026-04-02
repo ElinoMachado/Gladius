@@ -113,6 +113,11 @@ export interface Unit extends CoreStats {
   immobileThisTurn: boolean;
   /** Escudo azul (GG); não passa de wave para wave (zerado ao fechar a wave). */
   shieldGGBlue: number;
+  /**
+   * Parte do escudo azul gerada pelo artefato Escudo residual (roubo com vida cheia).
+   * Usado para respeitar o teto por acúmulo sem limitar escudo de outras fontes.
+   */
+  escudoResidualTagged?: number;
   goldDrainReduction: number;
   /** Ouro atual do herói: bolsa persistente, gasta na loja entre waves. Não é drenado no combate. */
   ouro: number;
