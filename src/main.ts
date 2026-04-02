@@ -1658,6 +1658,7 @@ function showForge(): void {
 
 function showMainMenu(): void {
   model.devSandboxMode = false;
+  model.sandboxShopJumpWave = null;
   hideGameTooltip();
   disposeMenu3dPreviews();
   mainMenuSword3d?.dispose();
@@ -1707,6 +1708,7 @@ function showMainMenu(): void {
           break;
         case "new":
           model.devSandboxMode = false;
+          model.sandboxShopJumpWave = null;
           model.phase = "setup_heroes";
           setup.slots = [null, null, null];
           setup.biomes = [];
@@ -1716,6 +1718,7 @@ function showMainMenu(): void {
         case "dev-sandbox":
           if (!import.meta.env.DEV) break;
           model.devSandboxMode = true;
+          model.sandboxShopJumpWave = null;
           model.phase = "setup_heroes";
           setup.slots = [null, null, null];
           setup.biomes = [];
@@ -2359,7 +2362,30 @@ function showGoldShop(isInitial: boolean): void {
         ? "Reembolsar alterações da loja (custo: 0 Cristais)"
         : `Reembolsar alterações da loja por ${refundCost} Cristais`;
     const refundBtnInner = `<span class="shop-refund-btn__inner"><span class="shop-refund-btn__label">Reembolsar</span><span class="shop-refund-btn__crystal-line" aria-hidden="true">${metaCrystalIconSvgHtml()}<span class="shop-refund-btn__crystal-num">${refundCost}</span><span class="shop-refund-btn__crystal-suffix"> cristais</span></span></span>`;
-    const startBtnLabel = isInitial ? "Começar wave 1" : "Próxima wave";
+    const defaultCombatWave = isInitial ? 1 : model.wave + 1;
+    const sandboxTargetWave = model.devSandboxMode
+      ? model.sandboxShopJumpWave != null
+        ? model.sandboxShopJumpWave
+        : Math.max(1, Math.min(FINAL_VICTORY_WAVE, defaultCombatWave))
+      : 0;
+    const sandboxWaveJumpHtml = model.devSandboxMode
+      ? `<div class="shop-sandbox-next-wave">
+      <label for="shop-sandbox-wave-sel" class="shop-sandbox-next-wave__label">Sandbox — wave do próximo combate</label>
+      <select id="shop-sandbox-wave-sel" class="shop-sandbox-next-wave__sel" aria-label="Escolher wave (1 a ${FINAL_VICTORY_WAVE})">
+        ${Array.from({ length: FINAL_VICTORY_WAVE }, (_, i) => {
+          const w = i + 1;
+          return `<option value="${w}"${w === sandboxTargetWave ? " selected" : ""}>${w}</option>`;
+        }).join("")}
+      </select>
+    </div>`
+      : "";
+    const startBtnLabel = model.devSandboxMode
+      ? isInitial
+        ? `Começar wave ${sandboxTargetWave}`
+        : `Ir para wave ${sandboxTargetWave}`
+      : isInitial
+        ? "Começar wave 1"
+        : "Próxima wave";
     const goldBagsHtml = party
       .map((ph, i) => {
         const active = i === idx;
@@ -2417,6 +2443,7 @@ function showGoldShop(isInitial: boolean): void {
         </div>
         <div class="shop-footer">
           <p id="shop-footer-msg" class="shop-footer-msg" role="status" hidden></p>
+          ${sandboxWaveJumpHtml}
           <p class="shop-footer-crystals" aria-live="polite">Cristais: <strong>${model.meta.crystals}</strong></p>
           <div class="shop-footer__actions">
             <button type="button" class="btn shop-refund-btn" id="shop-refund" ${!canRefund ? "disabled" : ""} aria-label="${escapeHtml(refundAria)}">${refundBtnInner}</button>
@@ -2443,6 +2470,19 @@ function showGoldShop(isInitial: boolean): void {
         /* `emit` → `render` → `refreshGoldShop`; evitar segundo `renderShop` aqui (WebGL). */
       });
     });
+    const waveSel = panel.querySelector(
+      "#shop-sandbox-wave-sel",
+    ) as HTMLSelectElement | null;
+    if (waveSel && model.devSandboxMode) {
+      waveSel.addEventListener("change", () => {
+        const v = Number(waveSel.value);
+        if (!Number.isFinite(v)) return;
+        model.setSandboxShopJumpWaveChoice(
+          v,
+          Math.max(1, Math.min(FINAL_VICTORY_WAVE, defaultCombatWave)),
+        );
+      });
+    }
     if (model.devSandboxMode) {
       panel.querySelectorAll("[data-sandbox-artifact]").forEach((node) => {
         const btn = node as HTMLElement;

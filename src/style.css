@@ -5601,6 +5601,38 @@ body.enemy-inspect--dragging-body {
   color: #a898c0;
 }
 
+.shop-sandbox-next-wave {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem 0.65rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(48, 28, 62, 0.35);
+  border: 1px solid rgba(180, 140, 220, 0.32);
+  max-width: 100%;
+}
+
+.shop-sandbox-next-wave__label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #c8b0e8;
+}
+
+.shop-sandbox-next-wave__sel {
+  font: inherit;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.28rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(180, 160, 200, 0.45);
+  background: rgba(22, 18, 30, 0.95);
+  color: #e8e0f0;
+  min-width: 4.5rem;
+}
+
 .shop-sandbox-artifacts__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
