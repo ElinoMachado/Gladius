@@ -923,10 +923,10 @@ export class GameRenderer {
 
     const addWingSide = (side: -1 | 1): THREE.Group => {
       const pivot = new THREE.Group();
-      /* Pivôs mais juntos; rotação Y invertida relativamente à versão anterior (asas para trás). */
-      const spread = 0.38;
+      /* Pivôs perto da coluna + maior abertura em Y: asas mais abertas e silhueta mais junta. */
+      const spread = 0.26;
       pivot.position.set(side * spread, 1.0, 0.06);
-      pivot.rotation.set(-0.13, side * 0.3, side * 0.04);
+      pivot.rotation.set(-0.11, side * 0.44, side * 0.04);
 
       const addLobePair = (
         geoFn: () => THREE.BufferGeometry,
