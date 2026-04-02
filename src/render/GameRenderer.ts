@@ -923,9 +923,10 @@ export class GameRenderer {
 
     const addWingSide = (side: -1 | 1): THREE.Group => {
       const pivot = new THREE.Group();
-      const spread = 0.5;
+      /* Pivôs mais juntos; rotação Y invertida relativamente à versão anterior (asas para trás). */
+      const spread = 0.38;
       pivot.position.set(side * spread, 1.0, 0.06);
-      pivot.rotation.set(-0.08, side * -0.46, side * 0.05);
+      pivot.rotation.set(-0.13, side * 0.3, side * 0.04);
 
       const addLobePair = (
         geoFn: () => THREE.BufferGeometry,
@@ -995,13 +996,13 @@ export class GameRenderer {
 
   private applyGoldenWingFlapAndPulse(wings: THREE.Group, nowMs: number): void {
     const t = nowMs * 0.0011;
-    const flap = 0.11 * Math.sin(t * 2.05);
     const pulse = 0.5 + 0.5 * Math.sin(t * 3.15);
     const pivotL = wings.userData.wingPivotL as THREE.Group | undefined;
     const pivotR = wings.userData.wingPivotR as THREE.Group | undefined;
     if (pivotL && pivotR) {
-      pivotL.rotation.z = -0.07 + flap;
-      pivotR.rotation.z = 0.07 - flap;
+      const f = 0.085 * Math.sin(t * 2.05);
+      pivotL.rotation.z = 0.06 - f;
+      pivotR.rotation.z = -0.06 + f;
     }
     wings.traverse((obj) => {
       if (!(obj instanceof THREE.Mesh) || !obj.userData.wingPulse) return;
