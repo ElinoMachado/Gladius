@@ -202,10 +202,14 @@ import {
 
 /** Paginação do strip de artefatos no combate (20 por página). */
 const COMBAT_ARTIFACT_PAGE_SIZE = 20;
+/** Paginação dos artefatos na loja de ouro (6 por página). */
+const GOLD_SHOP_ARTIFACT_PAGE_SIZE = 6;
 /** Paginação da ordem de turnos (10 por página). */
 const COMBAT_TURN_ORDER_PAGE_SIZE = 10;
 let combatArtifactStripPage = 0;
 let combatArtifactStripSig = "";
+let goldShopArtifactPage = 0;
+let goldShopArtifactSig = "";
 let combatTurnOrderPage = 0;
 let combatTurnOrderUserAdjusted = false;
 let combatLastTurnFocusKey = "";
@@ -2488,6 +2492,83 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
   }
 }
 
+function mountGoldShopArtifactStrip(panel: HTMLElement, h: Unit): void {
+  const wrap = panel.querySelector(
+    "#shop-hero-artifacts-wrap",
+  ) as HTMLElement | null;
+  const strip = panel.querySelector(
+    "#shop-hero-artifacts-strip",
+  ) as HTMLElement | null;
+  const btnUp = panel.querySelector(
+    "#shop-artifacts-up",
+  ) as HTMLButtonElement | null;
+  const btnDown = panel.querySelector(
+    "#shop-artifacts-down",
+  ) as HTMLButtonElement | null;
+  if (!wrap || !strip) return;
+
+  const arts = Object.entries(h.artifacts).filter(
+    ([id, n]) => n > 0 && isArtifactVisibleInHud(id),
+  );
+  arts.sort(([a], [b]) => a.localeCompare(b));
+  const artSig = `${h.id}|${arts.map(([id, n]) => `${id}:${n}`).join(",")}`;
+  if (artSig !== goldShopArtifactSig) {
+    goldShopArtifactSig = artSig;
+    goldShopArtifactPage = 0;
+  }
+  const maxPage = Math.max(
+    0,
+    Math.ceil(arts.length / GOLD_SHOP_ARTIFACT_PAGE_SIZE) - 1,
+  );
+  goldShopArtifactPage = Math.min(goldShopArtifactPage, maxPage);
+
+  const showPager = arts.length > GOLD_SHOP_ARTIFACT_PAGE_SIZE;
+  wrap.classList.toggle("shop-hero-artifacts-wrap--paged", showPager);
+  if (btnUp) {
+    btnUp.hidden = !showPager;
+    btnUp.disabled = goldShopArtifactPage <= 0;
+    btnUp.onclick = () => {
+      goldShopArtifactPage = Math.max(0, goldShopArtifactPage - 1);
+      mountGoldShopArtifactStrip(panel, h);
+    };
+  }
+  if (btnDown) {
+    btnDown.hidden = !showPager;
+    btnDown.disabled = goldShopArtifactPage >= maxPage;
+    btnDown.onclick = () => {
+      goldShopArtifactPage = Math.min(maxPage, goldShopArtifactPage + 1);
+      mountGoldShopArtifactStrip(panel, h);
+    };
+  }
+
+  if (arts.length === 0) {
+    strip.innerHTML =
+      '<span class="shop-hero-artifacts-empty">Nenhum artefato</span>';
+    return;
+  }
+  const a0 = goldShopArtifactPage * GOLD_SHOP_ARTIFACT_PAGE_SIZE;
+  const pageArts = arts.slice(a0, a0 + GOLD_SHOP_ARTIFACT_PAGE_SIZE);
+  const cards = pageArts
+    .map(([id, stacks]) => {
+      const cnt = artifactStackCounterLabel(id, stacks);
+      const fig = artifactCardInnerHtml(id);
+      return `<div class="artifact-mini-card" data-artifact-id="${escapeHtml(id)}" tabindex="0" role="img" aria-label="Artefato">${fig}<span class="artifact-mini-card__cnt">${cnt}</span></div>`;
+    })
+    .join("");
+  const rangeHint =
+    showPager && arts.length > 0
+      ? `<div class="shop-hero-artifacts-page-hint" aria-hidden="true">${a0 + 1}–${Math.min(a0 + pageArts.length, arts.length)}/${arts.length}</div>`
+      : "";
+  strip.innerHTML = `${rangeHint}<div class="shop-hero-artifacts-cards">${cards}</div>`;
+  strip.querySelectorAll("[data-artifact-id]").forEach((node) => {
+    const el = node as HTMLElement;
+    const aid = el.dataset.artifactId!;
+    bindGameTooltip(el, () =>
+      artifactTooltipHtml(aid, h.artifacts[aid] ?? 0, h, { showNext: true }),
+    );
+  });
+}
+
 function showGoldShop(isInitial: boolean): void {
   const stayInShop =
     (model.phase === "shop_wave" && prevPhase === "shop_wave") ||
@@ -2496,6 +2577,8 @@ function showGoldShop(isInitial: boolean): void {
     refreshGoldShop();
     return;
   }
+  goldShopArtifactPage = 0;
+  goldShopArtifactSig = "";
   refreshGoldShop = null;
   hideGameTooltip();
   goldShopBunker3d?.dispose();
@@ -2673,6 +2756,14 @@ function showGoldShop(isInitial: boolean): void {
                 <p class="shop-hero-stats-head">Habilidades</p>
                 <div id="gold-shop-hero-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do herói"></div>
               </div>
+              <div class="shop-hero-artifacts-section">
+                <p class="shop-hero-stats-head">Artefatos</p>
+                <div class="shop-hero-artifacts-wrap" id="shop-hero-artifacts-wrap">
+                  <button type="button" class="shop-hero-artifacts-pager shop-hero-artifacts-pager--up" id="shop-artifacts-up" aria-label="Artefatos anteriores" hidden>▲</button>
+                  <div id="shop-hero-artifacts-strip" class="shop-hero-artifacts-strip" aria-label="Artefatos do herói"></div>
+                  <button type="button" class="shop-hero-artifacts-pager shop-hero-artifacts-pager--down" id="shop-artifacts-down" aria-label="Artefatos seguintes" hidden>▼</button>
+                </div>
+              </div>
             </div>
           </div>
           ${bunkerSide}
@@ -2780,6 +2871,7 @@ function showGoldShop(isInitial: boolean): void {
       heroStatsEl.innerHTML =
         '<p class="shop-hero-stats-fallback">Sem classe — sem pré-visualização 3D.</p>';
     }
+    mountGoldShopArtifactStrip(panel, h);
     const footMsg = panel.querySelector("#shop-footer-msg") as HTMLElement | null;
     panel.querySelector("#shop-start")!.addEventListener("click", () => {
       if (footMsg) {
