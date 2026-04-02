@@ -7928,6 +7928,13 @@ select.forge-biome-sel option:disabled {
   color: #c8e8a8;
 }
 
+.wave-summary-overlay__time {
+  margin: 0 0 0.75rem;
+  font-size: 0.98rem;
+  color: #9ec8e8;
+  font-variant-numeric: tabular-nums;
+}
+
 .wave-summary-overlay__line {
   margin: 0.35rem 0;
   font-size: 0.92rem;

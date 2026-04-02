@@ -204,6 +204,11 @@ export type WaveEndLootSummary = {
   essences: { id: ForgeEssenceId; n: number }[];
   /** XP total ganho na wave (após multiplicadores), soma de todos os heróis. */
   xpTotal: number;
+  /**
+   * Tempo de sessão desde sair da loja inicial até fechar esta wave (ms).
+   * Contabilizado com `performance.now()`; não inclui tempo na loja inicial.
+   */
+  runElapsedMs: number;
 };
 
 export type CombatFloatKind =
@@ -409,6 +414,8 @@ export class GameModel {
   private waveXpGained = 0;
   private waveEssencesGained: Partial<Record<ForgeEssenceId, number>> = {};
   private waveLootSummaryPending: WaveEndLootSummary | null = null;
+  /** Início da contagem de tempo de sessão (após `finishInitialShop`); `null` antes da primeira entrada em combate. */
+  private runPlaySessionPerfMsStart: number | null = null;
   /** Cópia de `meta.essences` ao iniciar a run; revertida ao sair com forfeit. */
   private metaEssencesAtRunStart: Partial<
     Record<ForgeEssenceId, number>
@@ -590,6 +597,7 @@ export class GameModel {
     this.waveLootSummaryPending = null;
     this.pendingWaveSummaryNext = null;
     this.waveXpGained = 0;
+    this.runPlaySessionPerfMsStart = null;
 
     this.playerTurnJustStarted = false;
     this.inEnemyPhase = false;
@@ -868,6 +876,7 @@ export class GameModel {
     this.waveEssencesGained = {};
     this.waveLootSummaryPending = null;
     this.waveXpGained = 0;
+    this.runPlaySessionPerfMsStart = null;
     this.logLines = [];
     this.duel = null;
     this.clearCombatSchedule();
@@ -942,6 +951,9 @@ export class GameModel {
   }
 
   finishInitialShop(): void {
+    if (this.runPlaySessionPerfMsStart == null) {
+      this.runPlaySessionPerfMsStart = performance.now();
+    }
     this.phase = "combat";
     this.startWave(1);
   }
@@ -1955,12 +1967,17 @@ export class GameModel {
       const n = this.waveEssencesGained[id];
       if (n && n > 0) essences.push({ id, n });
     }
+    const runElapsedMs =
+      this.runPlaySessionPerfMsStart != null
+        ? Math.max(0, Math.floor(performance.now() - this.runPlaySessionPerfMsStart))
+        : 0;
     this.waveLootSummaryPending = {
       wave: this.wave,
       goldLines,
       crystalsGained: this.waveCrystalsGained,
       essences,
       xpTotal: this.waveXpGained,
+      runElapsedMs,
     };
     this.waveCrystalsGained = 0;
     this.waveXpGained = 0;

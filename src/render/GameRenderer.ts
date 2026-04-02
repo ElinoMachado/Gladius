@@ -1641,7 +1641,7 @@ export class GameRenderer {
   setMovementOverlay(keys: Set<string>): void {
     this.disposeOverlayGroup(this.moveOverlayGroup);
     this.moveOverlayGroup = keys.size
-      ? this.buildHexOverlay(keys, 0x3399ff, 0.38, 0.1)
+      ? this.buildHexOverlay(keys, 0x3399ff, 0.24, 0.1)
       : null;
     if (this.moveOverlayGroup) this.arenaRoot.add(this.moveOverlayGroup);
   }

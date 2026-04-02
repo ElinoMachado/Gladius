@@ -1798,6 +1798,14 @@ function showMainMenu(): void {
   });
 }
 
+function formatRunElapsedHhMmSs(ms: number): string {
+  const totalSec = Math.floor(Math.max(0, ms) / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
 function showWaveSummaryOverlay(): void {
   const summary = model.peekWaveLootSummary();
   hideGameTooltip();
@@ -1812,6 +1820,9 @@ function showWaveSummaryOverlay(): void {
     `<p class="wave-summary-overlay__wave-tag">Wave ${summary.wave}</p>`,
   );
   lines.push(`<p class="wave-summary-overlay__xp">XP total (wave): <strong>${summary.xpTotal}</strong></p>`);
+  lines.push(
+    `<p class="wave-summary-overlay__time">Tempo de sessão: <strong>${formatRunElapsedHhMmSs(summary.runElapsedMs)}</strong></p>`,
+  );
   for (const g of summary.goldLines) {
     if (g.bonus > 0) {
       lines.push(
