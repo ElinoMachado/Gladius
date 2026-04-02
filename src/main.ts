@@ -150,6 +150,8 @@ import {
   playInputError,
   playUiClick,
   playWeaponsCock,
+  playTeleportWhoosh,
+  playLightningStrike,
   resume as resumeWebAudio,
 } from "./audio/combatSounds";
 import { setArenaCombatMusicFromWave, stopArenaAmbient } from "./audio/arenaAmbient";
@@ -417,6 +419,21 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
         }, PISOTEAR_FIRST_DAMAGE_MS + i * PISOTEAR_STAGGER_MS);
       }
       break;
+    case "golpe_relampago_teleport":
+      playTeleportWhoosh();
+      break;
+    case "golpe_relampago_hero_charge":
+      view.triggerGolpeRelampagoHeroElectrify(h.heroId);
+      break;
+    case "golpe_relampago_lightning": {
+      const delay = Math.max(0, h.delayMs);
+      window.setTimeout(() => {
+        playLightningStrike();
+        view.spawnGolpeRelampagoLightningOnUnit(h.targetId);
+        view.triggerGolpeRelampagoHeroElectrify(h.heroId);
+      }, delay);
+      break;
+    }
     default:
       break;
   }

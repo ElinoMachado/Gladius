@@ -371,3 +371,83 @@ export function playWeaponsCock(): void {
   o.start(t + 0.03);
   o.stop(t + 0.19);
 }
+
+/** Salto curto tipo teleporte / deslize (Golpe Relâmpago). */
+export function playTeleportWhoosh(): void {
+  const c = ctx();
+  if (!c) return;
+  resume();
+  const t = c.currentTime;
+  const o = c.createOscillator();
+  const g = c.createGain();
+  o.type = "sine";
+  o.frequency.setValueAtTime(420, t);
+  o.frequency.exponentialRampToValueAtTime(2200, t + 0.07);
+  o.frequency.exponentialRampToValueAtTime(800, t + 0.16);
+  g.gain.setValueAtTime(0.001, t);
+  g.gain.exponentialRampToValueAtTime(0.11, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  o.connect(g);
+  connectToSfxOut(c, g);
+  o.start(t);
+  o.stop(t + 0.22);
+  const n = c.createBufferSource();
+  const nlen = Math.floor(c.sampleRate * 0.12);
+  const buf = c.createBuffer(1, nlen, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < nlen; i++) {
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (nlen * 0.25)) * 0.45;
+  }
+  n.buffer = buf;
+  const hp = c.createBiquadFilter();
+  hp.type = "bandpass";
+  hp.frequency.value = 2400;
+  hp.Q.value = 0.6;
+  const gn = c.createGain();
+  gn.gain.setValueAtTime(0.001, t + 0.04);
+  gn.gain.exponentialRampToValueAtTime(0.09, t + 0.055);
+  gn.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+  n.connect(hp);
+  hp.connect(gn);
+  connectToSfxOut(c, gn);
+  n.start(t + 0.04);
+  n.stop(t + 0.17);
+}
+
+/** Trovão / impacto de relâmpago no alvo. */
+export function playLightningStrike(): void {
+  const c = ctx();
+  if (!c) return;
+  resume();
+  const t = c.currentTime;
+  const crack = c.createBufferSource();
+  const n = Math.floor(c.sampleRate * 0.09);
+  const buf = c.createBuffer(1, n, c.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (n * 0.12));
+  }
+  crack.buffer = buf;
+  const bp = c.createBiquadFilter();
+  bp.type = "highpass";
+  bp.frequency.value = 900;
+  const g1 = c.createGain();
+  g1.gain.setValueAtTime(0.26, t);
+  g1.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+  crack.connect(bp);
+  bp.connect(g1);
+  connectToSfxOut(c, g1);
+  crack.start(t);
+  crack.stop(t + 0.1);
+  const o = c.createOscillator();
+  const g2 = c.createGain();
+  o.type = "square";
+  o.frequency.setValueAtTime(95, t);
+  o.frequency.exponentialRampToValueAtTime(28, t + 0.35);
+  g2.gain.setValueAtTime(0.14, t);
+  g2.gain.exponentialRampToValueAtTime(0.01, t + 0.38);
+  o.connect(g2);
+  connectToSfxOut(c, g2);
+  o.start(t);
+  o.stop(t + 0.4);
+}

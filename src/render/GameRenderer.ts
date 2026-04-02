@@ -16,7 +16,7 @@ import {
   sumNextPoisonTickDamage,
 } from "../game/dotInstances";
 
-export type HitFlashTone = "normal" | "blood" | "heal_swirl";
+export type HitFlashTone = "normal" | "blood" | "heal_swirl" | "electric_chain";
 import { BIOME_LABELS } from "../game/data/biomes";
 import { enemyTierFromId, waveConfigFromIndex } from "../game/data/enemies";
 import type { BiomeId } from "../game/types";
@@ -145,6 +145,11 @@ export class GameRenderer {
   private readonly comicPowBursts: {
     sprite: THREE.Sprite;
     baseScale: THREE.Vector3;
+    t: number;
+    T: number;
+  }[] = [];
+  private readonly golpeRelampagoBolts: {
+    group: THREE.Group;
     t: number;
     T: number;
   }[] = [];
@@ -404,7 +409,14 @@ export class GameRenderer {
   ): void {
     const now = performance.now();
     const cur = this.hitFlashState.get(unitId);
-    const dur = tone === "heal_swirl" ? 2000 : tone === "blood" ? 280 : 240;
+    const dur =
+      tone === "heal_swirl"
+        ? 2000
+        : tone === "blood"
+          ? 280
+          : tone === "electric_chain"
+            ? 520
+            : 240;
     const until = Math.max(cur?.until ?? 0, now + dur);
     this.hitFlashState.set(unitId, { until, playerVictim, tone });
   }
@@ -582,6 +594,8 @@ export class GameRenderer {
       this.flashEmissiveScratch.setHex(0xaa1520);
     } else if (tone === "heal_swirl") {
       this.flashEmissiveScratch.setHex(0x44dd88);
+    } else if (tone === "electric_chain") {
+      this.flashEmissiveScratch.setHex(0x88ddff);
     } else {
       this.flashEmissiveScratch.setHex(playerVictim ? 0x5599ff : 0xff7733);
     }
@@ -595,7 +609,8 @@ export class GameRenderer {
         const m = obj.material;
         if (m instanceof THREE.MeshStandardMaterial) {
           m.emissive.copy(this.flashEmissiveScratch);
-          m.emissiveIntensity = intensity * 1.35;
+          m.emissiveIntensity =
+            intensity * (tone === "electric_chain" ? 2.15 : 1.35);
         }
       }
     });
@@ -985,14 +1000,21 @@ export class GameRenderer {
         continue;
       }
       const baseDur =
-        st.tone === "heal_swirl" ? 2000 : st.tone === "blood" ? 280 : 240;
+        st.tone === "heal_swirl"
+          ? 2000
+          : st.tone === "blood"
+            ? 280
+            : st.tone === "electric_chain"
+              ? 520
+              : 240;
       const phase = (st.until - now) / baseDur;
-      this.applyUnitHitFlashMaterials(
-        g,
-        phase * phase,
-        st.playerVictim,
-        st.tone,
-      );
+      let int = phase * phase;
+      if (st.tone === "electric_chain") {
+        int =
+          0.35 +
+          0.65 * (0.5 + 0.5 * Math.sin(now * 0.055 + phase * 6.2));
+      }
+      this.applyUnitHitFlashMaterials(g, int, st.playerVictim, st.tone);
     }
   }
 
@@ -2372,6 +2394,58 @@ export class GameRenderer {
     this.spawnComicPowBurst(g.position.x, 1.12, g.position.z);
   }
 
+  /** Herói brilha com energia enquanto o Golpe Relâmpago encadeia (extensível por novas chamadas). */
+  triggerGolpeRelampagoHeroElectrify(heroId: string): void {
+    this.triggerUnitHitFlash(heroId, true, "electric_chain");
+  }
+
+  /** Raio do céu até à cabeça do alvo (Golpe Relâmpago). */
+  spawnGolpeRelampagoLightningOnUnit(targetId: string): void {
+    const g = this.unitMeshes.get(targetId);
+    if (!g) return;
+    const x = g.position.x;
+    const z = g.position.z;
+    const yHit = g.position.y + 1.2;
+    const ySky = 9.4;
+    const mkLine = (
+      color: number,
+      baseOpacity: number,
+      spread: number,
+    ): THREE.Line => {
+      const n = 10;
+      const pts: THREE.Vector3[] = [];
+      for (let i = 0; i <= n; i++) {
+        const u = i / n;
+        const y = THREE.MathUtils.lerp(ySky, yHit, u);
+        const w = (1 - u) * spread;
+        pts.push(
+          new THREE.Vector3(
+            x + (Math.random() - 0.5) * w,
+            y,
+            z + (Math.random() - 0.5) * w,
+          ),
+        );
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity: baseOpacity,
+        depthWrite: false,
+      });
+      (mat.userData as { baseOp?: number }).baseOp = baseOpacity;
+      const line = new THREE.Line(geo, mat);
+      line.renderOrder = 19;
+      return line;
+    };
+    const group = new THREE.Group();
+    group.add(mkLine(0xffffff, 0.98, 0.55));
+    group.add(mkLine(0x99eeff, 0.78, 0.62));
+    group.add(mkLine(0x3366cc, 0.55, 0.48));
+    this.arenaRoot.add(group);
+    this.golpeRelampagoBolts.push({ group, t: 0, T: 0.32 });
+  }
+
   setDuelFlameAura(unitId: string, on: boolean): void {
     if (!on) {
       const grp = this.duelFlameByUnit.get(unitId);
@@ -2739,6 +2813,28 @@ export class GameRenderer {
         if (m.map) m.map.dispose();
         m.dispose();
         this.comicPowBursts.splice(i, 1);
+      }
+    }
+    for (let i = this.golpeRelampagoBolts.length - 1; i >= 0; i--) {
+      const b = this.golpeRelampagoBolts[i]!;
+      b.t += dt;
+      const u = Math.min(1, b.t / b.T);
+      b.group.traverse((ch) => {
+        if (ch instanceof THREE.Line) {
+          const m = ch.material as THREE.LineBasicMaterial;
+          const bo = (m.userData as { baseOp?: number }).baseOp ?? 1;
+          m.opacity = Math.max(0, bo * (1 - u));
+        }
+      });
+      if (u >= 1) {
+        b.group.traverse((ch) => {
+          if (ch instanceof THREE.Line) {
+            ch.geometry.dispose();
+            (ch.material as THREE.Material).dispose();
+          }
+        });
+        this.arenaRoot.remove(b.group);
+        this.golpeRelampagoBolts.splice(i, 1);
       }
     }
     for (let i = this.mortarShots.length - 1; i >= 0; i--) {

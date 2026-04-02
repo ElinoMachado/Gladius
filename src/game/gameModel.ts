@@ -180,7 +180,15 @@ export type CombatVfxHint =
       heroId: string;
       targetIds: string[];
     }
-  | { kind: "pisotear_chain"; heroId: string; targetIds: string[] };
+  | { kind: "pisotear_chain"; heroId: string; targetIds: string[] }
+  | { kind: "golpe_relampago_teleport"; heroId: string }
+  | { kind: "golpe_relampago_hero_charge"; heroId: string }
+  | {
+      kind: "golpe_relampago_lightning";
+      heroId: string;
+      targetId: string;
+      delayMs: number;
+    };
 
 /** Id sintético para números flutuantes de dano no bunker (HUD / canvas). */
 export const BUNKER_COMBAT_FLOAT_ID = "__bunker__";
@@ -3357,6 +3365,14 @@ export class GameModel {
           ],
           segmentMs: GOLPE_RELAMPAGO_MOVE_MS,
         };
+        this.pendingCombatVfxQueue.push({
+          kind: "golpe_relampago_teleport",
+          heroId: killer.id,
+        });
+        this.pendingCombatVfxQueue.push({
+          kind: "golpe_relampago_hero_charge",
+          heroId: killer.id,
+        });
       }
       this.emit();
       return;
@@ -3373,7 +3389,15 @@ export class GameModel {
         segmentMs: GOLPE_RELAMPAGO_MOVE_MS,
       };
       delayBeforeStrike = GOLPE_RELAMPAGO_MOVE_MS;
+      this.pendingCombatVfxQueue.push({
+        kind: "golpe_relampago_teleport",
+        heroId: killer.id,
+      });
     }
+    this.pendingCombatVfxQueue.push({
+      kind: "golpe_relampago_hero_charge",
+      heroId: killer.id,
+    });
 
     this.emit();
     this.queueCombat(delayBeforeStrike, () => {
@@ -3437,6 +3461,12 @@ export class GameModel {
         toId: tgt.id,
         style: "bullet",
       });
+      this.pendingCombatVfxQueue.push({
+        kind: "golpe_relampago_lightning",
+        heroId: att.id,
+        targetId: tgt.id,
+        delayMs: BASIC_PISTOL_FLIGHT_MS,
+      });
       this.queueCombat(BASIC_PISTOL_FLIGHT_MS, applyDamage);
       this.emit();
       return;
@@ -3448,11 +3478,24 @@ export class GameModel {
         toId: tgt.id,
         style: "magic",
       });
+      this.pendingCombatVfxQueue.push({
+        kind: "golpe_relampago_lightning",
+        heroId: att.id,
+        targetId: tgt.id,
+        delayMs: BASIC_MAGIC_FLIGHT_MS,
+      });
       this.queueCombat(BASIC_MAGIC_FLIGHT_MS, applyDamage);
       this.emit();
       return;
     }
-    applyDamage();
+    this.pendingCombatVfxQueue.push({
+      kind: "golpe_relampago_lightning",
+      heroId: att.id,
+      targetId: tgt.id,
+      delayMs: 0,
+    });
+    this.queueCombat(0, applyDamage);
+    this.emit();
   }
 
   /** Mãos venenosas: adiciona 2 instâncias de dano (3×acúmulos cada); soma à fila existente. */
