@@ -1,4 +1,5 @@
 import "./style.css";
+import { APP_VERSION_LABEL } from "./version";
 import {
   BUNKER_COMBAT_FLOAT_ID,
   GameModel,
@@ -1774,6 +1775,7 @@ function showMainMenu(): void {
     : "";
   const s = el(`
     <div class="main-menu-screen">
+      <div class="main-menu-version" aria-hidden="true">${APP_VERSION_LABEL}</div>
       <div class="main-menu-bg" id="main-menu-bg" aria-hidden="true"></div>
       <div class="main-menu-content">
         <header class="main-menu-header">

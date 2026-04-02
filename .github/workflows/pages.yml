@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -27,7 +27,20 @@ jobs:
           node-version: "20"
           cache: npm
       - run: npm ci
+      # Patch SemVer no deploy: o bundle usa a versão já incrementada; commit [skip ci] mantém o repo alinhado.
+      - run: npm version patch --no-git-tag-version
       - run: npm run build
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --staged --quiet; then
+            echo "No package version changes to commit"
+          else
+            git commit -m "chore: bump version for Pages deploy [skip ci]"
+            git push
+          fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
