@@ -571,6 +571,55 @@ let pendingCombat: PendingCombat = null;
 /** Evita acumular `keydown` de combate a cada `render()` / `showCombatHUD()`. */
 let combatHotkeysAbort: AbortController | null = null;
 
+const SANDBOX_PANEL_POS_KEY = "gladius-sandbox-panel-pos";
+const SANDBOX_PANEL_VISIBLE_KEY = "gladius-sandbox-panel-visible";
+
+function readSandboxPanelPos(): { left: number; top: number } | null {
+  try {
+    const s = localStorage.getItem(SANDBOX_PANEL_POS_KEY);
+    if (!s) return null;
+    const j = JSON.parse(s) as { left?: unknown; top?: unknown };
+    if (typeof j.left !== "number" || typeof j.top !== "number") return null;
+    return { left: j.left, top: j.top };
+  } catch {
+    return null;
+  }
+}
+
+function writeSandboxPanelPos(p: { left: number; top: number }): void {
+  try {
+    localStorage.setItem(SANDBOX_PANEL_POS_KEY, JSON.stringify(p));
+  } catch {
+    /* ignore */
+  }
+}
+
+let combatSandboxPanelVisible =
+  typeof sessionStorage !== "undefined" &&
+  sessionStorage.getItem(SANDBOX_PANEL_VISIBLE_KEY) !== "0";
+
+function applyCombatSandboxPanelVisibility(): void {
+  document
+    .getElementById("combat-sandbox-panel")
+    ?.classList.toggle(
+      "combat-sandbox-panel--hidden",
+      !combatSandboxPanelVisible,
+    );
+}
+
+function toggleCombatSandboxPanelVisibility(): void {
+  combatSandboxPanelVisible = !combatSandboxPanelVisible;
+  try {
+    sessionStorage.setItem(
+      SANDBOX_PANEL_VISIBLE_KEY,
+      combatSandboxPanelVisible ? "1" : "0",
+    );
+  } catch {
+    /* ignore */
+  }
+  applyCombatSandboxPanelVisibility();
+}
+
 /** Menu Esc durante a run (pausa + sair com confirmação). */
 let runPauseOpen = false;
 let runPauseStep: "menu" | "confirm" = "menu";
@@ -2227,8 +2276,8 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
   }).join("");
   const gridInner = hero ? sandboxArtifactTilesHtml(hero) : "";
   const heroLabelText = hero ? escapeHtml(hero.name) : "—";
-  const panel = el(`<aside class="combat-sandbox-panel" aria-label="Ferramentas de teste sandbox">
-    <div class="combat-sandbox-panel__head">Sandbox</div>
+  const panel = el(`<aside class="combat-sandbox-panel" id="combat-sandbox-panel" aria-label="Ferramentas de teste sandbox">
+    <div class="combat-sandbox-panel__head combat-sandbox-panel__drag-handle" title="Arrastar · tecla A mostrar/ocultar">Sandbox</div>
     <p class="combat-sandbox-panel__pill">Ouro/cristais/essências amplos · sem CDR · ultimate pronta</p>
     <div class="combat-sandbox-panel__row">
       <label class="combat-sandbox-panel__wave-label" for="combat-sandbox-wave-sel">Recomeçar na wave</label>
@@ -2246,6 +2295,95 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     </section>
   </aside>`);
   uiRoot.appendChild(panel);
+  const savedPos = readSandboxPanelPos();
+  if (savedPos) {
+    panel.style.left = `${savedPos.left}px`;
+    panel.style.top = `${savedPos.top}px`;
+    panel.style.transform = "none";
+  } else {
+    panel.style.left = "50%";
+    panel.style.top = "50%";
+    panel.style.transform = "translate(-50%, -50%)";
+  }
+  panel.classList.toggle(
+    "combat-sandbox-panel--hidden",
+    !combatSandboxPanelVisible,
+  );
+
+  const dragHandle = panel.querySelector(
+    ".combat-sandbox-panel__drag-handle",
+  ) as HTMLElement;
+  let sandboxDragOx = 0;
+  let sandboxDragOy = 0;
+  let sandboxDragging = false;
+  const onSandboxDragMove = (ev: PointerEvent): void => {
+    if (!sandboxDragging) return;
+    let left = ev.clientX - sandboxDragOx;
+    let top = ev.clientY - sandboxDragOy;
+    const rect = panel.getBoundingClientRect();
+    const pw = rect.width;
+    const ph = rect.height;
+    left = Math.max(8, Math.min(window.innerWidth - pw - 8, left));
+    top = Math.max(8, Math.min(window.innerHeight - ph - 8, top));
+    panel.style.left = `${left}px`;
+    panel.style.top = `${top}px`;
+    panel.style.transform = "none";
+  };
+  const onSandboxDragEnd = (ev: PointerEvent): void => {
+    if (!sandboxDragging) return;
+    sandboxDragging = false;
+    window.removeEventListener("pointermove", onSandboxDragMove);
+    window.removeEventListener("pointerup", onSandboxDragEnd);
+    window.removeEventListener("pointercancel", onSandboxDragEnd);
+    try {
+      dragHandle.releasePointerCapture(ev.pointerId);
+    } catch {
+      /* já libertado */
+    }
+    const r = panel.getBoundingClientRect();
+    writeSandboxPanelPos({ left: r.left, top: r.top });
+  };
+  dragHandle.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (e.button !== 0 || sandboxDragging) return;
+      e.preventDefault();
+      sandboxDragging = true;
+      const r = panel.getBoundingClientRect();
+      sandboxDragOx = e.clientX - r.left;
+      sandboxDragOy = e.clientY - r.top;
+      dragHandle.setPointerCapture(e.pointerId);
+      window.addEventListener("pointermove", onSandboxDragMove, { signal });
+      window.addEventListener("pointerup", onSandboxDragEnd, { signal });
+      window.addEventListener("pointercancel", onSandboxDragEnd, { signal });
+    },
+    { signal },
+  );
+
+  document.addEventListener(
+    "keydown",
+    (ev) => {
+      if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      if (ev.key !== "a" && ev.key !== "A") return;
+      const t = ev.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      if (!import.meta.env.DEV || !model.devSandboxMode) return;
+      if (model.phase !== "combat") return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      toggleCombatSandboxPanelVisibility();
+    },
+    { capture: true, signal },
+  );
+
   const sel = panel.querySelector(
     "#combat-sandbox-wave-sel",
   ) as HTMLSelectElement;
@@ -2457,7 +2595,7 @@ function showGoldShop(isInitial: boolean): void {
         </button>`;
       })
       .join("");
-    const bunkerShop = model.bunkerForShop();
+    const bunkerShop = model.bunkerForHeroHomeBiome(h);
     const bunkerSide = bunkerShop
       ? `<div class="shop-bunker-viz shop-hero-viz" aria-label="Bunker da arena">${goldShopBunkerSectionHtml(bunkerShop, h)}</div>`
       : "";
@@ -4950,7 +5088,7 @@ function showCombatHUD(): void {
   uiRoot.innerHTML = "";
   const sandboxHudHtml =
     import.meta.env.DEV && model.devSandboxMode
-      ? `<div class="hud-block hud-sandbox-pill" role="note">Sandbox — painel à direita: recomeçar wave e artefatos (esq./dir.)</div>`
+      ? `<div class="hud-block hud-sandbox-pill" role="note">Sandbox — painel ao centro (arrastar pelo título) · <kbd class="hud-sandbox-kbd">A</kbd> mostrar/ocultar · artefatos esq./dir.</div>`
       : "";
   const hud = el(`
     <div class="hud">

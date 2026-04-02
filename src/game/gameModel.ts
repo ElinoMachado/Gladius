@@ -507,13 +507,21 @@ export class GameModel {
     return null;
   }
 
-  /** Primeiro bunker (tiros/minas usam o do hex do herói). Loja: tier partilhado. */
+  /** Primeiro bunker na ordem dos biomas (legado / fallback). */
   bunkerForShop(): BunkerState | null {
     for (const id of COMBAT_BIOMES) {
       const b = this.bunkers[id];
       if (b) return b;
     }
     return null;
+  }
+
+  /** Bunker do bioma que o herói escolheu na run (loja: reparar / evoluir / pré-visualização). */
+  bunkerForHeroHomeBiome(hero: Unit): BunkerState | null {
+    if (!hero.isPlayer) return null;
+    const biome = this.heroHomeBiome(hero);
+    if (biome === "hub") return null;
+    return this.bunkers[biome] ?? null;
   }
 
   /** Heróis registados como ocupantes de bunkers vivos (estrutura com PV > 0). */
@@ -4280,9 +4288,11 @@ export class GameModel {
   buyBunkerEvolve(heroId: string): boolean {
     const u = this.units.find((x) => x.id === heroId);
     if (!u || !u.isPlayer) return false;
-    const list = this.allBunkerStates();
-    if (list.length === 0) return false;
-    const t = list[0]!.tier;
+    const biome = this.heroHomeBiome(u);
+    if (biome === "hub") return false;
+    const b = this.bunkers[biome];
+    if (!b) return false;
+    const t = b.tier;
     if (t >= 2) return false;
     const cost = BUNKER_EVOLVE_COSTS[t as 0 | 1];
     let c = cost;
@@ -4291,13 +4301,13 @@ export class GameModel {
     u.ouro -= c;
     const nt = (t + 1) as 1 | 2;
     const st = bunkerStatsForTier(nt);
-    for (const b of list) {
-      b.tier = nt;
-      b.maxHp = st.maxHp;
-      b.defesa = st.defesa;
-      b.hp = st.maxHp;
-    }
-    this.log(`Bunkers evoluíram (nível ${nt}).`);
+    b.tier = nt;
+    b.maxHp = st.maxHp;
+    b.defesa = st.defesa;
+    b.hp = st.maxHp;
+    this.log(
+      `Bunker do bioma ${BIOME_LABELS[biome]} evoluiu (nível ${nt}).`,
+    );
     this.emit();
     return true;
   }

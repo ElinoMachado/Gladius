@@ -7625,11 +7625,26 @@ select.forge-biome-sel option:disabled {
   background: rgba(12, 36, 52, 0.75);
 }
 
+.hud-sandbox-pill .hud-sandbox-kbd {
+  display: inline-block;
+  font: inherit;
+  font-size: 0.85em;
+  font-weight: 800;
+  padding: 0.08em 0.35em;
+  border-radius: 4px;
+  border: 1px solid rgba(160, 210, 255, 0.55);
+  background: rgba(20, 50, 72, 0.9);
+  color: #e0f4ff;
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+
 /* Sandbox DEV: wave + artefatos durante o combate */
 .combat-sandbox-panel {
   position: fixed;
-  top: 0.65rem;
-  right: 0.5rem;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 115;
   width: min(300px, 42vw);
   max-height: min(88vh, 640px);
@@ -7646,6 +7661,10 @@ select.forge-biome-sel option:disabled {
   box-sizing: border-box;
 }
 
+.combat-sandbox-panel--hidden {
+  display: none !important;
+}
+
 .combat-sandbox-panel__head {
   font-size: 0.72rem;
   font-weight: 800;
@@ -7653,6 +7672,19 @@ select.forge-biome-sel option:disabled {
   text-transform: uppercase;
   color: #8ecfff;
   margin: 0 0 0.35rem;
+}
+
+.combat-sandbox-panel__drag-handle {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  padding: 0.15rem 0.2rem;
+  margin: -0.15rem -0.2rem 0.2rem;
+  border-radius: 6px;
+}
+
+.combat-sandbox-panel__drag-handle:active {
+  cursor: grabbing;
 }
 
 .combat-sandbox-panel__pill {
