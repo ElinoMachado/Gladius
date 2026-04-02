@@ -201,7 +201,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Golpe Relâmpago",
     rarity: "rare",
     description:
-      "Ao eliminar um inimigo: teleporta ao mais próximo e +10% de dano no próximo básico por acúmulo.",
+      "Ao eliminar um inimigo: salta ao vizinho do inimigo vivo mais próximo no bioma do teu hex (no hub, qualquer inimigo) e um básico imediato com +10% de dano por acúmulo; se matar, pode repetir. Se após o salto não houver alcance, só o próximo básico ganha o bônus.",
   },
   {
     id: "duro_pedra",

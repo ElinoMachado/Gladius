@@ -139,7 +139,7 @@ export function describeArtifactAtStack(
     case "tonico":
       return describeTonicoForRun(n, u);
     case "motor_morte":
-      return `Ao matar: salto ao inimigo mais próximo; próximo básico +${10 * n}% dano.`;
+      return `Ao matar: salto ao vizinho do inimigo mais próximo no bioma do teu hex (hub = todos), básico imediato +${10 * n}% dano; se matar, encadeia. Sem alcance após salto: só o próximo básico leva o bônus.`;
     case "maos_venenosas":
       return `Ao causar dano: +2 instâncias de veneno. Causa ${3 * n} de dano. Este efeito é acumulável e ignora a defesa.`;
     case "ronin":

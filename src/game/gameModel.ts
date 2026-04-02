@@ -3152,18 +3152,7 @@ export class GameModel {
           }
         }
       }
-      const motor = killer.artifacts["motor_morte"] ?? 0;
-      if (motor > 0) {
-        const near = this.nearestEnemyTo(killer, victim.id);
-        if (near) {
-          const jump = this.nearestFreeHexAdjacentToUnit(killer, near);
-          if (jump) {
-            killer.q = jump.q;
-            killer.r = jump.r;
-          }
-          killer.motorMorteNextBasicPct = 10 * motor;
-        }
-      }
+      this.applyGolpeRelampagoAfterKill(killer, victim);
     }
   }
 
@@ -3261,18 +3250,71 @@ export class GameModel {
     return essenceDropTotalPercent(this.wave, this.effectiveSorte(killer));
   }
 
-  private nearestEnemyTo(u: Unit, excludeId: string): Unit | null {
+  /**
+   * Golpe Relâmpago: inimigo vivo mais próximo no mesmo bioma do herói (hex atual).
+   * No hub, contam todos os inimigos (como Seda vampira).
+   */
+  private nearestEnemyToInHeroBiome(hero: Unit, excludeId: string): Unit | null {
+    const heroBio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
     let best: Unit | null = null;
     let d = Infinity;
     for (const e of this.enemies()) {
-      if (e.id === excludeId) continue;
-      const dist = hexDistance({ q: u.q, r: u.r }, { q: e.q, r: e.r });
+      if (e.id === excludeId || e.hp <= 0) continue;
+      if (heroBio !== "hub") {
+        const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
+        if (eb !== heroBio) continue;
+      }
+      const dist = hexDistance({ q: hero.q, r: hero.r }, { q: e.q, r: e.r });
       if (dist < d) {
         d = dist;
         best = e;
       }
     }
     return best;
+  }
+
+  /**
+   * Golpe Relâmpago (motor_morte): após eliminar, salta ao vizinho do inimigo mais próximo
+   * no mesmo bioma e dispara um básico imediato com o bônus %; se matar, pode encadear.
+   * Se após o salto ainda não houver alcance, mantém só o bônus no próximo básico manual.
+   */
+  private applyGolpeRelampagoAfterKill(killer: Unit, victim: Unit): void {
+    if (this.phase !== "combat" || this.duel) return;
+    const motor = killer.artifacts["motor_morte"] ?? 0;
+    if (motor <= 0 || killer.hp <= 0) return;
+    const near = this.nearestEnemyToInHeroBiome(killer, victim.id);
+    if (!near) return;
+
+    const jump = this.nearestFreeHexAdjacentToUnit(killer, near);
+    if (jump) {
+      killer.q = jump.q;
+      killer.r = jump.r;
+    }
+
+    const alc = this.effectiveAlcanceForHero(killer);
+    const distToTarget = hexDistance(
+      { q: killer.q, r: killer.r },
+      { q: near.q, r: near.r },
+    );
+    const bonusPct = 10 * motor;
+    if (distToTarget > alc) {
+      killer.motorMorteNextBasicPct = bonusPct;
+      return;
+    }
+
+    killer.motorMorteNextBasicPct = bonusPct;
+    const raw = this.computeBasicAttackRawDamage(killer);
+    killer.motorMorteNextBasicPct = 0;
+
+    const t2 = this.units.find((u) => u.id === near.id);
+    if (!t2 || t2.isPlayer || t2.hp <= 0) return;
+
+    this.strike(killer, t2, raw);
+    this.flushCombatLevelUp(killer);
+    if (this.phase === "combat") {
+      this.tryResolveWaveClearAfterCombatResume();
+    }
+    this.emit();
   }
 
   /** Mãos venenosas: adiciona 2 instâncias de dano (3×acúmulos cada); soma à fila existente. */
