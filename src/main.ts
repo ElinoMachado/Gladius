@@ -631,6 +631,8 @@ let runPauseStep: "menu" | "confirm" = "menu";
 let runPauseEl: HTMLElement | null = null;
 /** Inimigo selecionado para painel de atributos (combate). */
 let combatInspectEnemyId: string | null = null;
+/** Inimigo sob o rato: pré-visualização de movimento (hexes âmbar). */
+let combatHoverEnemyId: string | null = null;
 /** Herói cujo loadout LOL está em foco (pode ≠ turno atual). */
 let combatLolInspectHeroId: string | null = null;
 
@@ -698,6 +700,8 @@ function goldShopStatIcon(id: GoldShopId): StatIconId {
       return "regen_mp";
     case "defesa":
       return "def";
+    case "penetracao":
+      return "pen";
     case "heal_shield":
       return "pot";
     case "xp_pct":
@@ -1026,6 +1030,7 @@ function resetCombatSelection(): void {
   movePreviewActive = false;
   pendingCombat = null;
   combatInspectEnemyId = null;
+  combatHoverEnemyId = null;
   combatLolInspectHeroId = null;
 }
 
@@ -1054,11 +1059,48 @@ function applyCombatOverlays(): void {
   }
   view.setMovementOverlay(moveKeys);
   view.setAttackOverlay(atkKeys);
-  const enemyInspectKeys =
-    combatInspectEnemyId != null
-      ? model.enemyMovementPreviewKeys(combatInspectEnemyId)
+  const hoverMoveKeys =
+    combatHoverEnemyId != null
+      ? model.enemyMovementPreviewKeys(combatHoverEnemyId)
       : new Set<string>();
-  view.setEnemyInspectMovementOverlay(enemyInspectKeys);
+  const inspectAtkKeys =
+    combatInspectEnemyId != null
+      ? model.enemyAttackPreviewKeys(combatInspectEnemyId)
+      : new Set<string>();
+  view.setEnemyInspectMovementOverlay(hoverMoveKeys);
+  view.setEnemyInspectAttackOverlay(inspectAtkKeys);
+}
+
+/** Atualiza inimigo sob o rato e hexes de movimento (âmbar) na arena. */
+function updateCombatEnemyHoverFromCanvas(ev: MouseEvent): void {
+  if (model.phase !== "combat" || model.inEnemyPhase) {
+    if (combatHoverEnemyId !== null) {
+      combatHoverEnemyId = null;
+      applyCombatOverlays();
+    }
+    return;
+  }
+  const active = model.currentHero();
+  if (!active || active.hp <= 0) {
+    if (combatHoverEnemyId !== null) {
+      combatHoverEnemyId = null;
+      applyCombatOverlays();
+    }
+    return;
+  }
+  const r = canvas.getBoundingClientRect();
+  const ndcX = ((ev.clientX - r.left) / r.width) * 2 - 1;
+  const ndcY = -((ev.clientY - r.top) / r.height) * 2 + 1;
+  const uid = view.pickUnit(ndcX, ndcY);
+  let next: string | null = null;
+  if (uid) {
+    const u = model.units.find((x) => x.id === uid);
+    if (u && !u.isPlayer && u.hp > 0) next = uid;
+  }
+  if (next !== combatHoverEnemyId) {
+    combatHoverEnemyId = next;
+    applyCombatOverlays();
+  }
 }
 
 function el(html: string): HTMLElement {
@@ -6533,6 +6575,10 @@ function showCombatHUD(): void {
         positionGameTooltip(tip, ev.clientX, ev.clientY);
         tip.classList.add("game-ui-tooltip--visible");
         clearBunkerHoverHint();
+        if (combatHoverEnemyId !== null) {
+          combatHoverEnemyId = null;
+          applyCombatOverlays();
+        }
         return;
       }
       const r = canvas.getBoundingClientRect();
@@ -6552,15 +6598,24 @@ function showCombatHUD(): void {
         positionGameTooltip(tip, ev.clientX, ev.clientY);
         tip.classList.add("game-ui-tooltip--visible");
         updateBunkerHoverHint(ev);
+        if (combatHoverEnemyId !== null) {
+          combatHoverEnemyId = null;
+          applyCombatOverlays();
+        }
         return;
       }
       hideGameTooltip();
     }
     updateBunkerHoverHint(ev);
+    updateCombatEnemyHoverFromCanvas(ev);
   };
   canvas.onmouseleave = () => {
     clearBunkerHoverHint();
     hideGameTooltip();
+    if (combatHoverEnemyId !== null) {
+      combatHoverEnemyId = null;
+      applyCombatOverlays();
+    }
   };
 
   canvas.onclick = (ev) => {
@@ -7102,6 +7157,7 @@ model.subscribe(() => {
         movePreviewActive = true;
         pendingCombat = null;
         combatInspectEnemyId = null;
+        combatHoverEnemyId = null;
         applyCombatOverlays();
         combatHudNeedsRefresh = true;
       }

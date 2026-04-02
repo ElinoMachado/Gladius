@@ -287,6 +287,7 @@ type ShopHeroSnapshot = {
   danoCritico: number;
   defesa: number;
   movimento: number;
+  penetracao: number;
   potencialCuraEscudo: number;
   artifacts: Record<string, number>;
 };
@@ -4415,6 +4416,7 @@ export class GameModel {
       if (!shopNumEq(u.danoCritico, sh.danoCritico)) return true;
       if (u.defesa !== sh.defesa) return true;
       if (u.movimento !== sh.movimento) return true;
+      if (u.penetracao !== sh.penetracao) return true;
       if (u.potencialCuraEscudo !== sh.potencialCuraEscudo) return true;
       if (!shopArtifactsEq(u.artifacts, sh.artifacts)) return true;
     }
@@ -4480,6 +4482,7 @@ export class GameModel {
       danoCritico: u.danoCritico,
       defesa: u.defesa,
       movimento: u.movimento,
+      penetracao: u.penetracao,
       potencialCuraEscudo: u.potencialCuraEscudo,
       artifacts: { ...u.artifacts },
     };
@@ -4529,6 +4532,7 @@ export class GameModel {
       u.danoCritico = sh.danoCritico;
       u.defesa = sh.defesa;
       u.movimento = sh.movimento;
+      u.penetracao = sh.penetracao;
       u.potencialCuraEscudo = sh.potencialCuraEscudo;
       u.artifacts = { ...sh.artifacts };
     }
@@ -4634,6 +4638,14 @@ export class GameModel {
       if (k !== here) out.add(k);
     }
     return out;
+  }
+
+  /** Hexes onde o inimigo pode atacar à distância (anel 1..alcance), para pré-visualização na UI. */
+  enemyAttackPreviewKeys(enemyId: string): Set<string> {
+    const e = this.units.find((u) => u.id === enemyId);
+    if (!e || e.isPlayer || e.hp <= 0) return new Set();
+    const alc = this.effectiveAlcanceForEnemy(e);
+    return this.hexKeysInRing(e.q, e.r, 1, Math.max(1, alc));
   }
 
   effectiveAlcanceForHero(h: Unit): number {

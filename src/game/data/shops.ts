@@ -9,6 +9,7 @@ export type GoldShopId =
   | "crit_chance"
   | "crit_dmg"
   | "defesa"
+  | "penetracao"
   | "movimento"
   | "heal_shield"
   | "xp_pct";
@@ -86,6 +87,14 @@ export const GOLD_SHOP: GoldShopItem[] = [
     cost: 35,
     apply: (u) => {
       u.defesa += 10;
+    },
+  },
+  {
+    id: "penetracao",
+    label: "Penetração +1",
+    cost: 5,
+    apply: (u) => {
+      u.penetracao += 1;
     },
   },
   {
