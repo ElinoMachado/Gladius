@@ -8,6 +8,12 @@ export interface DamageContext {
   rochosoCritAdd?: number;
 }
 
+/** Mesma regra que `formatTooltipNumber`: 2 casas decimais (alinhamento combate ↔ UI). */
+export function roundToCombatDecimals(n: number): number {
+  if (!Number.isFinite(n)) return n;
+  return Math.round(n * 100) / 100;
+}
+
 /** Acima de 100% não aumenta a probabilidade de crítico (excesso só serve a efeitos como Ronin). */
 export function rollCrit(chancePercent: number): boolean {
   const p = Math.min(100, Math.max(0, chancePercent));
@@ -64,9 +70,9 @@ export function computeMitigatedDamage(
   defense: number,
   penetration: number,
 ): number {
-  const raw = Math.floor(rawDamage);
+  const raw = roundToCombatDecimals(rawDamage);
   const reduction = damageReductionFractionFromDefense(defense, penetration);
-  const mitigated = Math.floor(raw * (1 - reduction));
+  const mitigated = roundToCombatDecimals(raw * (1 - reduction));
   return Math.max(1, mitigated);
 }
 
@@ -79,7 +85,7 @@ export function applyCritMultiplier(
 ): number {
   if (!isCrit) return mitigated;
   const m = critDamageMult + rochosoCritAdd;
-  return Math.max(1, Math.floor(mitigated * m));
+  return Math.max(1, roundToCombatDecimals(mitigated * m));
 }
 
 export type EffectiveDefenseBiomeOpts = {

@@ -1,10 +1,13 @@
-import { damageReductionPercentFromDefense } from "../game/combatMath";
+import {
+  damageReductionPercentFromDefense,
+  roundToCombatDecimals,
+} from "../game/combatMath";
 import type { StatIconId } from "./statIcons";
 
 /** PT: arredonda a 2 casas e mostra sempre duas casas decimais (vírgula). */
 export function formatTooltipNumber(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  const r = Math.round(n * 100) / 100;
+  const r = roundToCombatDecimals(n);
   return r.toFixed(2).replace(".", ",");
 }
 

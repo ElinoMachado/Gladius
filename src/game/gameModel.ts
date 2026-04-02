@@ -20,6 +20,7 @@ import {
   effectiveDefenseForBiome,
   effectiveAlcanceForBiome,
   biomeVolcanicDamage,
+  roundToCombatDecimals,
   unitIgnoresTerrain,
   rulerMovementBonus,
 } from "./combatMath";
@@ -1495,12 +1496,12 @@ export class GameModel {
   }
 
   private rainhaEndTurn(priest: Unit): void {
-    const dmgRaw =
-      Math.floor(
-        heroDanoPlusRoninOverflow(priest) *
-          (1 + priest.potencialCuraEscudo / 100) *
-          2,
-      ) + this.artifactGarraFerroRawBonus(priest);
+    const dmgRaw = roundToCombatDecimals(
+      heroDanoPlusRoninOverflow(priest) *
+        (1 + priest.potencialCuraEscudo / 100) *
+        2 +
+        this.tooltipGarraFerroRawPreview(priest),
+    );
     let healed = 0;
     for (const e of [...this.enemies()]) {
       if (e.hp <= 0) continue;
@@ -1600,6 +1601,7 @@ export class GameModel {
       this.healUnit(ally, heal, priest, {
         overflowToShieldHalf: true,
         overflowShieldRatio: sentencaShieldOverflowRatio(priest.weaponLevel),
+        effectiveHealIncludesPotencial: true,
       });
     }
     this.log(`${priest.name}: Sentença (${BIOME_LABELS[priestBio]}).`);
@@ -2023,15 +2025,7 @@ export class GameModel {
   }
 
   /** Dano bruto do ataque básico (antes de crítico/defesa). Inclui bônus do motor da morte se ativo. */
-  /** Garra de ferro: % da defesa viram dano bruto (30% por acúmulo, máx. 6). */
-  private artifactGarraFerroRawBonus(u: Unit): number {
-    if (!u.isPlayer) return 0;
-    const s = Math.min(6, u.artifacts["garra_ferro"] ?? 0);
-    if (s <= 0) return 0;
-    return Math.floor(u.defesa * 0.3 * s);
-  }
-
-  /** Mesma fórmula da Garra, sem `floor` — só para tooltips (arredondar no UI a 2 casas). */
+  /** Parcela contínua da Garra de ferro (30% defesa por acúmulo, máx. 6); o total bruto arredonda a 2 casas. */
   tooltipGarraFerroRawPreview(u: Unit): number {
     if (!u.isPlayer) return 0;
     const s = Math.min(6, u.artifacts["garra_ferro"] ?? 0);
@@ -2040,61 +2034,30 @@ export class GameModel {
   }
 
   computeBasicAttackRawDamage(h: Unit): number {
-    let raw =
-      heroDanoPlusRoninOverflow(h) +
-      h.pistoleiroBonusDanoWave +
-      h.curandeiroDanoWave;
-    if (h.heroClass === "gladiador" && h.ultimateId === "campeao") {
-      raw = Math.floor(raw * (1 + 0.05 * h.gladiadorKills));
-    }
-    if (h.ultimateId === "estrategista_nato") {
-      const ouroTotal = h.ouro + h.ouroWave;
-      raw = Math.floor(raw * (1 + Math.min(2, ouroTotal * 0.005)));
-    }
-    if (h.motorMorteNextBasicPct > 0) {
-      raw = Math.floor(raw * (1 + h.motorMorteNextBasicPct / 100));
-    }
-    return raw + this.artifactGarraFerroRawBonus(h);
+    return roundToCombatDecimals(this.tooltipPreviewBasicAttackRawDamage(h));
   }
 
   computeAtirarTodoLadoDamagePerHit(h: Unit): number {
-    const mult = atirarDamageMult(h.weaponLevel);
-    return (
-      Math.floor(
-        (heroDanoPlusRoninOverflow(h) + h.pistoleiroBonusDanoWave) * mult,
-      ) + this.artifactGarraFerroRawBonus(h)
-    );
+    return roundToCombatDecimals(this.tooltipPreviewAtirarDamagePerHit(h));
   }
 
   computeDuelGladiatorHitDamage(h: Unit): number {
-    const mult = ateMorteDamageMult(h.weaponLevel);
-    return (
-      Math.floor(heroDanoPlusRoninOverflow(h) * mult) +
-      this.artifactGarraFerroRawBonus(h)
-    );
+    return roundToCombatDecimals(this.tooltipPreviewDuelGladiatorHitDamage(h));
   }
 
   computeSentencaDamagePerEnemy(h: Unit): number {
-    const mult = sentencaDamageMult(h.weaponLevel);
-    return (
-      Math.floor(heroDanoPlusRoninOverflow(h) * mult) +
-      this.artifactGarraFerroRawBonus(h)
-    );
+    return roundToCombatDecimals(this.tooltipPreviewSentencaDamagePerEnemy(h));
   }
 
   computeSentencaHealParty(h: Unit): number {
-    const mult = sentencaHealMult(h.weaponLevel);
-    return Math.floor(heroDanoPlusRoninOverflow(h) * mult);
+    return roundToCombatDecimals(this.tooltipPreviewSentencaHealEffective(h));
   }
 
   computeEspecialistaDestruicaoRaw(h: Unit): number {
-    return (
-      Math.floor(heroDanoPlusRoninOverflow(h) * 7) +
-      this.artifactGarraFerroRawBonus(h)
-    );
+    return roundToCombatDecimals(this.tooltipPreviewEspecialistaDestruicaoRaw(h));
   }
 
-  /** Cadeia contínua (sem `floor` intermédios) para tooltips — combate continua a usar `compute*`. */
+  /** Cadeia contínua (sem `floor` intermédios); `compute*` e tooltips aplicam `roundToCombatDecimals` no total. */
   tooltipPreviewBasicAttackRawDamage(h: Unit): number {
     let raw =
       heroDanoPlusRoninOverflow(h) +
@@ -2335,7 +2298,7 @@ export class GameModel {
               ring
             )
               continue;
-            const raw = Math.floor(baseDano * mult);
+            const raw = roundToCombatDecimals(baseDano * mult);
             this.dealDamage(
               att,
               e,
@@ -2373,7 +2336,7 @@ export class GameModel {
         heroDanoPlusRoninOverflow(h) +
         h.pistoleiroBonusDanoWave +
         h.curandeiroDanoWave;
-      const raw = Math.floor(baseDano * 10);
+      const raw = roundToCombatDecimals(baseDano * 10);
       if (!this.devSandboxMode) h.skillCd[skillId] = bunkerTiroCooldownWaves();
       this.pendingCombatVfxQueue.push({
         kind: "bunker_mortar",
@@ -2467,9 +2430,10 @@ export class GameModel {
       if (mc > 0 && h.maxMana > 0 && h.mana < mc) return false;
       const maxD = pisotearMaxHexDistance(h.weaponLevel);
       const mult = pisotearDamageMult(h.weaponLevel);
-      const raw =
-        Math.floor(heroDanoPlusRoninOverflow(h) * mult) +
-        this.artifactGarraFerroRawBonus(h);
+      const raw = roundToCombatDecimals(
+        heroDanoPlusRoninOverflow(h) * mult +
+          this.tooltipGarraFerroRawPreview(h),
+      );
       const targets = [...this.enemies()].filter((e) => {
         if (e.hp <= 0) return false;
         const d = hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r });
@@ -2649,7 +2613,7 @@ export class GameModel {
       att.isPlayer &&
       forgeSynergyTier(att.forgeLoadout, "vulcanico") >= 3
     ) {
-      const splash = Math.max(1, Math.floor(hpDmg * 0.5));
+      const splash = Math.max(1, roundToCombatDecimals(hpDmg * 0.5));
       for (const e of this.enemies()) {
         if (e.id === def.id || e.hp <= 0) continue;
         this.dealDamage(att, e, splash, false, false, false);
@@ -2782,7 +2746,7 @@ export class GameModel {
     );
     let dmg = mit;
     if (useBunkerDefense) {
-      dmg = Math.max(1, Math.floor(dmg * BUNKER_DAMAGE_TAKEN_MULT));
+      dmg = Math.max(1, roundToCombatDecimals(dmg * BUNKER_DAMAGE_TAKEN_MULT));
     }
     let shieldAbsorb = 0;
     if (tgt.shieldGGBlue > 0) {
@@ -2845,7 +2809,7 @@ export class GameModel {
       }
     }
     if (canProc && src.lifesteal > 0) {
-      const ls = Math.floor((dmg * src.lifesteal) / 100);
+      const ls = roundToCombatDecimals((dmg * src.lifesteal) / 100);
       if (ls > 0) {
         const h0 = src.hp;
         src.hp = Math.min(src.maxHp, src.hp + ls);
@@ -3189,7 +3153,7 @@ export class GameModel {
   private applyPoison(att: Unit, tgt: Unit, raw: number): void {
     const s = att.artifacts["maos_venenosas"] ?? 0;
     if (s <= 0) return;
-    const per = Math.floor(raw * 0.25 * s);
+    const per = roundToCombatDecimals(raw * 0.25 * s);
     const turns = 3 + s;
     tgt.poison = { turns, perTurn: per };
   }
@@ -3199,7 +3163,7 @@ export class GameModel {
     if (!hero.isPlayer || healHp <= 0) return;
     const s = Math.min(10, hero.artifacts["seda_vampira"] ?? 0);
     if (s <= 0) return;
-    const rawSplash = Math.floor(healHp * 0.2 * s);
+    const rawSplash = roundToCombatDecimals(healHp * 0.2 * s);
     if (rawSplash <= 0) return;
     const bio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
     for (const e of this.enemies()) {
@@ -3218,10 +3182,14 @@ export class GameModel {
       overflowToShieldHalf?: boolean;
       overflowShieldRatio?: number;
       skipWeaponUltMeter?: boolean;
+      /** `base` já inclui potencial de cura (ex. Sentença). */
+      effectiveHealIncludesPotencial?: boolean;
     },
   ): void {
     const pct = 1 + src.potencialCuraEscudo / 100;
-    const amt = Math.floor(base * pct);
+    const amt = opts?.effectiveHealIncludesPotencial
+      ? roundToCombatDecimals(base)
+      : roundToCombatDecimals(base * pct);
     const shieldRatio = opts?.overflowShieldRatio ?? 0.5;
     if (opts?.overflowToShieldHalf) {
       const space = Math.max(0, target.maxHp - target.hp);
@@ -3238,7 +3206,12 @@ export class GameModel {
       }
       const over = amt - toHp;
       if (over > 0) {
-        const sh = Math.floor(over * shieldRatio);
+        const sh =
+          opts?.effectiveHealIncludesPotencial && space <= 0
+            ? roundToCombatDecimals(
+                this.tooltipPreviewSentencaHealEffective(src) * shieldRatio,
+              )
+            : roundToCombatDecimals(over * shieldRatio);
         if (sh > 0) {
           target.shieldGGBlue += sh;
           this.pushCombatFloat({
@@ -3321,13 +3294,12 @@ export class GameModel {
     const potMult = 1 + h.potencialCuraEscudo / 100;
     for (const ally of this.getParty()) {
       if (ally.hp <= 0) continue;
-      const manaPart = Math.floor(ally.maxMana * mm);
-      const shieldRaw = flat + manaPart;
-      ally.shieldGGBlue += Math.floor(shieldRaw * potMult);
+      const shieldRaw = flat + ally.maxMana * mm;
+      ally.shieldGGBlue += roundToCombatDecimals(shieldRaw * potMult);
       ally.paraisoRegenBonus = {
         turns: regT,
-        bonusHp: Math.floor(reg * potMult),
-        bonusMana: Math.floor(reg * potMult),
+        bonusHp: roundToCombatDecimals(reg * potMult),
+        bonusMana: roundToCombatDecimals(reg * potMult),
       };
     }
     if (!this.devSandboxMode) this.resetWeaponUltCharge(h);
@@ -3342,7 +3314,7 @@ export class GameModel {
       heroDanoPlusRoninOverflow(h) +
       h.pistoleiroBonusDanoWave +
       h.curandeiroDanoWave;
-    const raw = Math.floor(base * mult);
+    const raw = roundToCombatDecimals(base * mult);
     const targets = [...this.enemies()].filter((e) => e.hp > 0);
     const targetIds = targets.map((t) => t.id);
     this.pendingCombatVfxQueue.push({
@@ -3369,8 +3341,8 @@ export class GameModel {
         if (crit && dealt > 0 && tg.hp > 0) {
           const T = furacaoBleedTurns(att.weaponLevel);
           const pct = furacaoBleedPct(att.weaponLevel);
-          const total = Math.max(1, Math.floor(dealt * pct));
-          const per = Math.max(1, Math.floor(total / T));
+          const total = Math.max(1, roundToCombatDecimals(dealt * pct));
+          const per = Math.max(0.01, roundToCombatDecimals(total / T));
           tg.bleed = { turns: T, perTurn: per };
         }
         this.emit();
@@ -3397,11 +3369,11 @@ export class GameModel {
   private castFuriaGigante(h: Unit): boolean {
     if (h.furiaGiganteTurns && h.furiaGiganteTurns > 0) return false;
     h.furiaSavedDano = h.dano;
-    const extra = Math.floor(h.maxHp * 0.5);
+    const extra = roundToCombatDecimals(h.maxHp * 0.5);
     h.furiaExtraMaxHp = extra;
     h.maxHp += extra;
     h.hp += extra;
-    h.dano = Math.max(1, Math.floor(h.maxHp * 0.1));
+    h.dano = Math.max(0.01, roundToCombatDecimals(h.maxHp * 0.1));
     h.furiaGiganteTurns = 3;
     if (!this.devSandboxMode) this.resetWeaponUltCharge(h);
     this.log(`${h.name}: Fúria do gigante!`);
