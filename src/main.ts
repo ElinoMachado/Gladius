@@ -2460,6 +2460,11 @@ function manaCostBadgeText(cost: number): string {
   return String(Math.round(cost));
 }
 
+/** Inteiros em linhas de tooltip (nível arma, mana, ondas de CD). */
+function tipInt(n: number): string {
+  return String(Math.round(n));
+}
+
 /** Botão quadrado de skill: ícone + tecla + mana; nome no tooltip/`aria-label`. */
 function combatSquareSkillHtml(opts: {
   disabled: boolean;
@@ -2830,12 +2835,12 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const mul = atirarDamageMult(w);
     const approx = Math.floor(baseDano * mul);
     skillBlock = tipLines(sk.name, [
-      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
-      { label: "CDR:", value: `${formatTooltipNumber(cd)} onda(s)`, kind: "cdr" },
-      { label: "Mana:", value: formatTooltipNumber(0), kind: "mana" },
+      { label: "Nível arma:", value: tipInt(w), kind: "fx" },
+      { label: "CDR:", value: `${tipInt(cd)} onda(s)`, kind: "cdr" },
+      { label: "Mana:", value: tipInt(0), kind: "mana" },
       {
         label: "Dano:",
-        value: `${formatTooltipNumber(Math.round(mul * 100))}% do dano base (~${formatTooltipNumber(approx)} bruto por alvo no nível 1)`,
+        value: `${formatTooltipNumber(approx)} bruto por inimigo no alcance (referência nv. 1)`,
         kind: "dmg",
       },
     ]);
@@ -2845,12 +2850,12 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const mc = ateMorteManaCost(w);
     const approx = Math.floor(baseDano * mul);
     skillBlock = tipLines(sk.name, [
-      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
-      { label: "CDR:", value: `${formatTooltipNumber(cd)} onda(s)`, kind: "cdr" },
-      { label: "Mana:", value: formatTooltipNumber(mc), kind: "mana" },
+      { label: "Nível arma:", value: tipInt(w), kind: "fx" },
+      { label: "CDR:", value: `${tipInt(cd)} onda(s)`, kind: "cdr" },
+      { label: "Mana:", value: tipInt(mc), kind: "mana" },
       {
         label: "Dano:",
-        value: `${formatTooltipNumber(Math.round(mul * 100))}% do dano base no duelo (~${formatTooltipNumber(approx)} bruto por teu golpe no nv. 1)`,
+        value: `${formatTooltipNumber(approx)} bruto por teu golpe no duelo (referência nv. 1)`,
         kind: "dmg",
       },
     ]);
@@ -2861,23 +2866,27 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const hm = sentencaHealMult(w);
     const sh = sentencaShieldOverflowRatio(w);
     const approx = Math.floor(baseDano * dm);
+    const healBase = Math.floor(baseDano * hm);
+    const potPts = priestPassivePotencialPoints(1);
+    const healEff = Math.floor(healBase * (1 + potPts / 100));
+    const escudoExcesso = Math.floor(healEff * sh);
     skillBlock = tipLines(sk.name, [
-      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
-      { label: "CDR:", value: `${formatTooltipNumber(cd)} onda(s)`, kind: "cdr" },
-      { label: "Mana:", value: formatTooltipNumber(mc), kind: "mana" },
+      { label: "Nível arma:", value: tipInt(w), kind: "fx" },
+      { label: "CDR:", value: `${tipInt(cd)} onda(s)`, kind: "cdr" },
+      { label: "Mana:", value: tipInt(mc), kind: "mana" },
       {
         label: "Dano:",
-        value: `${formatTooltipNumber(Math.round(dm * 100))}% dano base inimigos no teu bioma (~${formatTooltipNumber(approx)} bruto/alvo no nv. 1)`,
+        value: `${formatTooltipNumber(approx)} bruto por inimigo (referência nv. 1)`,
         kind: "dmg",
       },
       {
-        label: "Cura aliados:",
-        value: `${formatTooltipNumber(Math.round(hm * 100))}% do dano causado (potencial cura/escudo multiplica a cura no combate)`,
+        label: "Cura:",
+        value: `${formatTooltipNumber(healEff)} PV por aliado (com passiva nv. 1)`,
         kind: "fx",
       },
       {
-        label: "Excesso → escudo:",
-        value: `${formatTooltipNumber(Math.round(sh * 100))}% da cura excedente`,
+        label: "Efeito:",
+        value: `Excesso de cura vira ${formatTooltipNumber(escudoExcesso)} PV em escudo por aliado`,
         kind: "fx",
       },
     ]);
@@ -2889,56 +2898,73 @@ function heroSetupWeaponAbilitiesTooltipHtml(
     const mm = paraisoManaShieldMult(w);
     const reg = paraisoRegenBonus(w);
     const regT = paraisoRegenTurns(w);
+    const potMult = 1 + priestPassivePotencialPoints(1) / 100;
+    const refMana = HEROES.sacerdotisa.maxMana;
+    const shieldTotal = Math.floor(
+      (flat + Math.floor(refMana * mm)) * potMult,
+    );
+    const effReg = Math.floor(reg * potMult);
     ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
-      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
+      { label: "Nível arma:", value: tipInt(w), kind: "fx" },
       {
         label: "Carga:",
-        value: `Acumula ao curar e aplicar escudo em aliados vivos (${formatTooltipNumber(th)} pontos no total; Sentença conta; o Paraíso não adiciona carga)`,
+        value: `Acumula ao curar e aplicar escudo em aliados vivos (${tipInt(th)} pontos no total; Sentença conta; o Paraíso não adiciona carga)`,
         kind: "cdr",
       },
       {
-        label: "Efeito:",
-        value: `Por aliado: escudo ⌊(fixo ${formatTooltipNumber(flat)} + ${formatTooltipNumber(Math.round(mm * 100))}% mana máx.) × (1 + potencial cura/escudo %)⌋; regen +${formatTooltipNumber(reg)} PV/mana base por ${formatTooltipNumber(regT)} turno(s) (ambos × potencial no combate)`,
+        label: "Escudo por aliado:",
+        value: `${formatTooltipNumber(shieldTotal)} PV`,
+        kind: "dmg",
+      },
+      {
+        label: "Regen:",
+        value: `${formatTooltipNumber(effReg)} PV e mana por turno, ${tipInt(regT)} turnos`,
         kind: "fx",
       },
     ]);
   } else if (cls === "pistoleiro") {
     const mul = furacaoDamageMult(w);
     const approx = Math.floor(baseDano * mul);
+    const bleTurns = furacaoBleedTurns(w);
+    const bleedPerTurn = Math.floor(approx * furacaoBleedPct(w));
     ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
-      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
+      { label: "Nível arma:", value: tipInt(w), kind: "fx" },
       {
         label: "Carga:",
-        value: `${formatTooltipNumber(th)} golpes que causem dano`,
+        value: `${tipInt(th)} golpes que causem dano`,
         kind: "cdr",
       },
       {
         label: "Dano:",
-        value: `${formatTooltipNumber(Math.round(mul * 100))}% dano base em toda a arena (~${formatTooltipNumber(approx)} bruto/alvo no nv. 1)`,
+        value: `${formatTooltipNumber(approx)} bruto por inimigo na arena (referência nv. 1)`,
         kind: "dmg",
       },
       {
-        label: "Crítico:",
-        value: `Sangramento ${formatTooltipNumber(Math.round(furacaoBleedPct(w) * 100))}% do dano em ${formatTooltipNumber(furacaoBleedTurns(w))} turno(s)`,
+        label: "Sangramento (crítico):",
+        value: `${formatTooltipNumber(bleedPerTurn)} bruto por turno, ${tipInt(bleTurns)} turno(s)`,
         kind: "fx",
       },
     ]);
   } else {
+    const maxHpRef = HEROES.gladiador.maxHp;
+    const pvBuff = Math.floor(maxHpRef * 0.5);
+    const danoTurn = Math.floor(maxHpRef * 0.1);
+    const pisoDmg = Math.floor(baseDano * pisotearDamageMult(w));
     ultBlock = tipLines(`Ultimate da arma — ${weaponUltNamePt(cls)}`, [
-      { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
+      { label: "Nível arma:", value: tipInt(w), kind: "fx" },
       {
         label: "Carga:",
-        value: `${formatTooltipNumber(th)} de dano sofrido (acumulado)`,
+        value: `${tipInt(th)} de dano sofrido (acumulado)`,
         kind: "cdr",
       },
       {
         label: "Efeito:",
-        value: `+${formatTooltipNumber(50)}% vida máxima e PV atuais, dano = ${formatTooltipNumber(10)}% da vida máxima atual, ${formatTooltipNumber(3)} turnos; desbloqueia Pisotear`,
+        value: `+${formatTooltipNumber(pvBuff)} PV máx. e PV atuais; ${formatTooltipNumber(danoTurn)} bruto por turno; ${tipInt(3)} turnos; desbloqueia Pisotear (referência nv. 1)`,
         kind: "fx",
       },
       {
         label: "Pisotear (na Fúria):",
-        value: `Mana ${formatTooltipNumber(pisotearManaCost(w))}, CDR ${formatTooltipNumber(pisotearCooldownWaves(w))} onda(s), alcance ${formatTooltipNumber(1)}–${formatTooltipNumber(pisotearMaxHexDistance(w))} hex, ${formatTooltipNumber(pisotearDamageMult(w))}× dano atual por alvo`,
+        value: `Mana ${tipInt(pisotearManaCost(w))}, CDR ${tipInt(pisotearCooldownWaves(w))} onda(s), alcance ${tipInt(1)}–${tipInt(pisotearMaxHexDistance(w))} hex, ${formatTooltipNumber(pisoDmg)} bruto por alvo`,
         kind: "fx",
       },
     ]);
@@ -2954,7 +2980,7 @@ function tooltipAbilityHtml(
   const body = lines
     .map(
       (L) =>
-        `<p class="game-ui-tooltip-line"><span class="tt-lbl">${escapeHtml(L.label)}</span> <span class="${tooltipLineClass(L.kind)}">${escapeHtml(L.value)}</span>.</p>`,
+        `<p class="game-ui-tooltip-line"><span class="tt-lbl">${escapeHtml(L.label)}</span> <span class="${tooltipLineClass(L.kind)}">${escapeHtml(L.value)}</span></p>`,
     )
     .join("");
   return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">${escapeHtml(title)}</div><div class="game-ui-tooltip-body">${body}</div></div>`;
@@ -3011,59 +3037,68 @@ function tooltipWeaponUltimate(h: Unit): string {
     const reg = paraisoRegenBonus(w);
     const regT = paraisoRegenTurns(w);
     const potMult = 1 + h.potencialCuraEscudo / 100;
-    const mmPct = formatTooltipNumber(Math.round(mm * 100));
     const effReg = Math.floor(reg * potMult);
+    const shieldTotalSelf = Math.floor(
+      (flat + Math.floor(h.maxMana * mm)) * potMult,
+    );
     return tooltipAbilityHtml(weaponUltNamePt(cls), [
-      {
-        label: "Nível da arma:",
-        value: formatTooltipNumber(w),
-        kind: "fx",
-      },
+      { label: "Nível da arma:", value: tipInt(w), kind: "fx" },
       {
         label: "Carga:",
-        value: `${formatTooltipNumber(pct)}% (somar ${formatTooltipNumber(th)} entre PV curados e escudo aplicado por ti em heróis vivos, você incluída; o Paraíso não adiciona carga)`,
+        value: `${tipInt(pct)}% (somar ${tipInt(th)} entre PV curados e escudo aplicado por ti em heróis vivos, incluída; o Paraíso não adiciona carga)`,
         kind: "cdr",
       },
       {
-        label: "Efeito:",
-        value: `Por aliado: escudo ⌊(fixo ${formatTooltipNumber(flat)} + ${mmPct}% da mana máx.) × ${formatTooltipNumber(potMult)}⌋ (potencial cura/escudo +${formatTooltipNumber(h.potencialCuraEscudo)}%); regen +${formatTooltipNumber(effReg)} PV/mana por ${formatTooltipNumber(regT)} turno(s)`,
+        label: "Escudo por aliado:",
+        value: `${formatTooltipNumber(shieldTotalSelf)} PV`,
+        kind: "dmg",
+      },
+      {
+        label: "Regen:",
+        value: `${formatTooltipNumber(effReg)} PV e mana por turno, ${tipInt(regT)} turnos`,
         kind: "fx",
       },
     ]);
   }
   if (cls === "pistoleiro") {
+    const base =
+      heroDanoPlusRoninOverflow(h) +
+      h.pistoleiroBonusDanoWave +
+      h.curandeiroDanoWave;
+    const rawF = Math.floor(base * furacaoDamageMult(w));
+    const bleTurns = furacaoBleedTurns(w);
+    const bleedPerTurn = Math.floor(rawF * furacaoBleedPct(w));
     return tooltipAbilityHtml(weaponUltNamePt(cls), [
-      {
-        label: "Nível da arma:",
-        value: formatTooltipNumber(w),
-        kind: "fx",
-      },
+      { label: "Nível da arma:", value: tipInt(w), kind: "fx" },
       {
         label: "Carga:",
-        value: `${formatTooltipNumber(pct)}% (${formatTooltipNumber(th)} golpes que causam dano)`,
+        value: `${tipInt(pct)}% (${tipInt(th)} golpes que causam dano)`,
         kind: "cdr",
       },
       {
         label: "Dano:",
-        value: `${formatTooltipNumber(Math.round(furacaoDamageMult(w) * 100))}% do dano base à arena inteira; crítico aplica sangramento`,
+        value: `${formatTooltipNumber(rawF)} bruto por inimigo na arena`,
         kind: "dmg",
+      },
+      {
+        label: "Sangramento (crítico):",
+        value: `${formatTooltipNumber(bleedPerTurn)} bruto por turno, ${tipInt(bleTurns)} turno(s)`,
+        kind: "fx",
       },
     ]);
   }
+  const danoFuria = Math.floor(h.maxHp * 0.1);
+  const pvBuff = Math.floor(h.maxHp * 0.5);
   return tooltipAbilityHtml(weaponUltNamePt(cls), [
-    {
-      label: "Nível da arma:",
-      value: formatTooltipNumber(w),
-      kind: "fx",
-    },
+    { label: "Nível da arma:", value: tipInt(w), kind: "fx" },
     {
       label: "Carga:",
-      value: `${formatTooltipNumber(pct)}% (${formatTooltipNumber(th)} dano sofrido)`,
+      value: `${tipInt(pct)}% (${tipInt(th)} dano sofrido)`,
       kind: "cdr",
     },
     {
       label: "Efeito:",
-      value: `+${formatTooltipNumber(50)}% vida máx., dano = ${formatTooltipNumber(10)}% vida máx. atual, ${formatTooltipNumber(3)} turnos; Até a morte → Pisotear`,
+      value: `+${formatTooltipNumber(pvBuff)} PV máx. e PV atuais; ${formatTooltipNumber(danoFuria)} bruto por turno; ${tipInt(3)} turnos; Até a morte → Pisotear`,
       kind: "fx",
     },
   ]);
@@ -3331,10 +3366,10 @@ function tooltipBasicAttack(h: Unit, m: GameModel): string {
   const arauto =
     h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos";
   const dmgLine = arauto
-    ? `${formatTooltipNumber(raw)} de dano bruto por inimigo no alcance (cada um: crítico/defesa separados)`
+    ? `${formatTooltipNumber(raw)} de dano bruto por inimigo no alcance (crítico/defesa por alvo)`
     : `${formatTooltipNumber(raw)} de dano bruto (crítico e defesa do alvo aplicam depois)`;
   return tooltipAbilityHtml("Ataque básico", [
-    { label: "Custo de mana:", value: formatTooltipNumber(0), kind: "mana" },
+    { label: "Custo de mana:", value: tipInt(0), kind: "mana" },
     { label: "CDR:", value: "—", kind: "cdr" },
     { label: "Alcance:", value: formatTooltipNumber(alc), kind: "range" },
     { label: "Dano:", value: dmgLine, kind: "dmg" },
@@ -3348,10 +3383,9 @@ function tooltipBasicAttack(h: Unit, m: GameModel): string {
 
 function cdrSkillValue(h: Unit, sk: SkillDef): string {
   const rest = h.skillCd[sk.id] ?? 0;
-  if (rest > 0)
-    return `${formatTooltipNumber(rest)} onda(s) até disponível`;
+  if (rest > 0) return `${tipInt(rest)} onda(s) até disponível`;
   if (sk.cooldownWaves <= 0) return "—";
-  return formatTooltipNumber(sk.cooldownWaves);
+  return tipInt(sk.cooldownWaves);
 }
 
 function tooltipSkillAtirar(h: Unit, m: GameModel, sk: SkillDef): string {
@@ -3362,20 +3396,20 @@ function tooltipSkillAtirar(h: Unit, m: GameModel, sk: SkillDef): string {
   const cdB = atirarCooldownWaves(w);
   const cdrStr =
     cdv > 0
-      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
-      : `${formatTooltipNumber(cdB)} onda(s)`;
+      ? `${tipInt(cdv)} onda(s) até disponível`
+      : `${tipInt(cdB)} onda(s)`;
   return tooltipAbilityHtml(sk.name, [
-    { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
+    { label: "Nível arma:", value: tipInt(w), kind: "fx" },
     {
       label: "Custo de mana:",
-      value: formatTooltipNumber(sk.manaCost ?? 0),
+      value: tipInt(sk.manaCost ?? 0),
       kind: "mana",
     },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
     { label: "Alcance:", value: formatTooltipNumber(alc), kind: "range" },
     {
       label: "Dano:",
-      value: `${formatTooltipNumber(per)} bruto por inimigo (${formatTooltipNumber(Math.round(atirarDamageMult(w) * 100))}% dano base)`,
+      value: `${formatTooltipNumber(per)} bruto por inimigo no alcance`,
       kind: "dmg",
     },
     {
@@ -3393,23 +3427,23 @@ function tooltipSkillAteMorte(h: Unit, m: GameModel, sk: SkillDef): string {
   const cdB = ateMorteCooldownWaves(w);
   const cdrStr =
     cdv > 0
-      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
+      ? `${tipInt(cdv)} onda(s) até disponível`
       : cdB <= 0
         ? "—"
-        : `${formatTooltipNumber(cdB)} onda(s)`;
+        : `${tipInt(cdB)} onda(s)`;
   const perWin = gladiadorDuelHpPerWin(h.level);
   return tooltipAbilityHtml(sk.name, [
-    { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
+    { label: "Nível arma:", value: tipInt(w), kind: "fx" },
     {
       label: "Custo de mana:",
-      value: formatTooltipNumber(ateMorteManaCost(w)),
+      value: tipInt(ateMorteManaCost(w)),
       kind: "mana",
     },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
-    { label: "Alcance:", value: formatTooltipNumber(1), kind: "range" },
+    { label: "Alcance:", value: tipInt(1), kind: "range" },
     {
       label: "Dano:",
-      value: `${formatTooltipNumber(gDmg)} bruto por teu golpe (${formatTooltipNumber(Math.round(ateMorteDamageMult(w) * 100))}% dano base)`,
+      value: `${formatTooltipNumber(gDmg)} bruto por teu golpe no duelo`,
       kind: "dmg",
     },
     {
@@ -3429,27 +3463,27 @@ function tooltipSkillPisotear(h: Unit, _m: GameModel): string {
   const cdB = pisotearCooldownWaves(w);
   const cdrStr =
     cdv > 0
-      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
+      ? `${tipInt(cdv)} onda(s) até disponível`
       : cdB <= 0
         ? "—"
-        : `${formatTooltipNumber(cdB)} onda(s)`;
+        : `${tipInt(cdB)} onda(s)`;
   const maxD = pisotearMaxHexDistance(w);
   return tooltipAbilityHtml("Pisotear", [
-    { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
+    { label: "Nível arma:", value: tipInt(w), kind: "fx" },
     {
       label: "Custo de mana:",
-      value: formatTooltipNumber(pisotearManaCost(w)),
+      value: tipInt(pisotearManaCost(w)),
       kind: "mana",
     },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
     {
       label: "Alcance:",
-      value: `Inimigos a ${formatTooltipNumber(1)}–${formatTooltipNumber(maxD)} hex`,
+      value: `Inimigos a ${tipInt(1)}–${tipInt(maxD)} hex`,
       kind: "range",
     },
     {
       label: "Dano:",
-      value: `${formatTooltipNumber(dmgApprox)} bruto por alvo (${formatTooltipNumber(pisotearDamageMult(w))}× dano atual)`,
+      value: `${formatTooltipNumber(dmgApprox)} bruto por alvo`,
       kind: "dmg",
     },
     {
@@ -3477,14 +3511,14 @@ function tooltipBunkerMinasCombat(h: Unit, m: GameModel): string {
   const cdv = h.skillCd["bunker_minas"] ?? 0;
   const cdrStr =
     cdv > 0
-      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
-      : formatTooltipNumber(cdBase);
+      ? `${tipInt(cdv)} onda(s) até disponível`
+      : tipInt(cdBase);
   return tooltipAbilityHtml("Minas terrestres (bunker)", [
-    { label: "Custo de mana:", value: formatTooltipNumber(0), kind: "mana" },
+    { label: "Custo de mana:", value: tipInt(0), kind: "mana" },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
     {
       label: "Alcance:",
-      value: `Até ${formatTooltipNumber(rings)} anel(is) em volta do bunker`,
+      value: `Até ${tipInt(rings)} anel(is) em volta do bunker`,
       kind: "range",
     },
     {
@@ -3511,10 +3545,10 @@ function tooltipBunkerTiroCombat(h: Unit, _m: GameModel): string {
   const raw = Math.floor(baseDano * 10);
   const cdrStr =
     cdv > 0
-      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
-      : formatTooltipNumber(cd);
+      ? `${tipInt(cdv)} onda(s) até disponível`
+      : tipInt(cd);
   return tooltipAbilityHtml("Tiro preciso", [
-    { label: "Custo de mana:", value: formatTooltipNumber(0), kind: "mana" },
+    { label: "Custo de mana:", value: tipInt(0), kind: "mana" },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
     { label: "Alcance:", value: "Qualquer inimigo no coliseu", kind: "range" },
     { label: "Dano:", value: `${formatTooltipNumber(raw)} bruto (morteiro)`, kind: "dmg" },
@@ -3537,17 +3571,18 @@ function tooltipSkillSentenca(h: Unit, m: GameModel, sk: SkillDef): string {
   const cdB = sentencaCooldownWaves(w);
   const cdrStr =
     cdv > 0
-      ? `${formatTooltipNumber(cdv)} onda(s) até disponível`
+      ? `${tipInt(cdv)} onda(s) até disponível`
       : cdB <= 0
         ? "—"
-        : `${formatTooltipNumber(cdB)} onda(s)`;
+        : `${tipInt(cdB)} onda(s)`;
   const mc = sentencaManaCost(w);
-  const shPct = Math.round(sentencaShieldOverflowRatio(w) * 100);
+  const shRatio = sentencaShieldOverflowRatio(w);
+  const escudoExcessoMax = Math.floor(healEff * shRatio);
   return tooltipAbilityHtml(sk.name, [
-    { label: "Nível arma:", value: formatTooltipNumber(w), kind: "fx" },
+    { label: "Nível arma:", value: tipInt(w), kind: "fx" },
     {
       label: "Custo de mana:",
-      value: formatTooltipNumber(mc),
+      value: tipInt(mc),
       kind: "mana",
     },
     { label: "CDR:", value: cdrStr, kind: "cdr" },
@@ -3558,17 +3593,17 @@ function tooltipSkillSentenca(h: Unit, m: GameModel, sk: SkillDef): string {
     },
     {
       label: "Dano:",
-      value: `${formatTooltipNumber(dPv)} bruto por inimigo (${formatTooltipNumber(Math.round(sentencaDamageMult(w) * 100))}% dano base)`,
+      value: `${formatTooltipNumber(dPv)} bruto por inimigo`,
       kind: "dmg",
     },
     {
-      label: "Cura (aliados):",
-      value: `${formatTooltipNumber(healEff)} PV por aliado (base ${formatTooltipNumber(healBase)} × ${formatTooltipNumber(potMult)} com potencial +${formatTooltipNumber(h.potencialCuraEscudo)}%)`,
+      label: "Cura:",
+      value: `${formatTooltipNumber(healEff)} PV por aliado`,
       kind: "fx",
     },
     {
       label: "Efeito:",
-      value: `Excesso de cura vira ${formatTooltipNumber(shPct)}% em escudo azul.`,
+      value: `Excesso de cura vira ${formatTooltipNumber(escudoExcessoMax)} PV em escudo por aliado`,
       kind: "fx",
     },
   ]);
@@ -3582,7 +3617,7 @@ function tooltipSkillById(h: Unit, m: GameModel, sk: SkillDef): string {
   return tooltipAbilityHtml(sk.name, [
     {
       label: "Custo de mana:",
-      value: formatTooltipNumber(sk.manaCost ?? 0),
+      value: tipInt(sk.manaCost ?? 0),
       kind: "mana",
     },
     { label: "CDR:", value: cdrSkillValue(h, sk), kind: "cdr" },
@@ -3596,7 +3631,7 @@ function tooltipEspecialista(h: Unit, m: GameModel): string {
   const alc = m.effectiveAlcanceForHero(h);
   const raw = m.computeEspecialistaDestruicaoRaw(h);
   return tooltipAbilityHtml("Especialista da destruição", [
-    { label: "Custo de mana:", value: formatTooltipNumber(0), kind: "mana" },
+    { label: "Custo de mana:", value: tipInt(0), kind: "mana" },
     { label: "CDR:", value: "—", kind: "cdr" },
     { label: "Alcance:", value: formatTooltipNumber(alc), kind: "range" },
     {
