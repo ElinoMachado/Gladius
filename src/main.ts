@@ -2455,6 +2455,11 @@ function ariaSkillLabel(name: string, cd: number): string {
   return cd > 0 ? `${name} (${cd} ondas de recarga)` : name;
 }
 
+/** Custo de mana no badge do ícone (inteiro; tooltips usam `formatTooltipNumber`). */
+function manaCostBadgeText(cost: number): string {
+  return String(Math.round(cost));
+}
+
 /** Botão quadrado de skill: ícone + tecla + mana; nome no tooltip/`aria-label`. */
 function combatSquareSkillHtml(opts: {
   disabled: boolean;
@@ -2547,7 +2552,7 @@ function mountGoldShopHeroSkillsRow(
   append(
     goldShopSkillChipHtml({
       iconHtml: basicAttackIconHtml(),
-      manaBadge: formatTooltipNumber(0),
+      manaBadge: manaCostBadgeText(0),
       ariaLabel: "Ataque básico",
     }),
     () => tooltipBasicAttack(h, m),
@@ -2558,9 +2563,9 @@ function mountGoldShopHeroSkillsRow(
   if (inBunker && bunk) {
     const cdM = cdEff(h.skillCd["bunker_minas"] ?? 0);
     append(
-        goldShopSkillChipHtml({
-          iconHtml: skillButtonIconHtml("bunker_minas"),
-          manaBadge: formatTooltipNumber(0),
+      goldShopSkillChipHtml({
+        iconHtml: skillButtonIconHtml("bunker_minas"),
+        manaBadge: manaCostBadgeText(0),
         ariaLabel: ariaSkillLabel("Minas terrestres", cdM),
         cdTurns: cdM > 0 ? cdM : undefined,
       }),
@@ -2571,7 +2576,7 @@ function mountGoldShopHeroSkillsRow(
       append(
         goldShopSkillChipHtml({
           iconHtml: skillButtonIconHtml("bunker_tiro_preciso"),
-          manaBadge: formatTooltipNumber(0),
+          manaBadge: manaCostBadgeText(0),
           ariaLabel: ariaSkillLabel("Tiro preciso", cdT),
           cdTurns: cdT > 0 ? cdT : undefined,
         }),
@@ -2587,7 +2592,7 @@ function mountGoldShopHeroSkillsRow(
         append(
           goldShopSkillChipHtml({
             iconHtml: skillButtonIconHtml("pisotear"),
-            manaBadge: formatTooltipNumber(mc),
+            manaBadge: manaCostBadgeText(mc),
             ariaLabel: ariaSkillLabel("Pisotear", cd),
             cdTurns: cd > 0 ? cd : undefined,
           }),
@@ -2606,7 +2611,7 @@ function mountGoldShopHeroSkillsRow(
         append(
           goldShopSkillChipHtml({
             iconHtml: skillButtonIconHtml("ate_a_morte"),
-            manaBadge: formatTooltipNumber(ateMorteManaCost(h.weaponLevel)),
+            manaBadge: manaCostBadgeText(ateMorteManaCost(h.weaponLevel)),
             ariaLabel: ariaSkillLabel(skA.name, cd),
             cdTurns: cd > 0 ? cd : undefined,
           }),
@@ -2621,7 +2626,7 @@ function mountGoldShopHeroSkillsRow(
           append(
             goldShopSkillChipHtml({
               iconHtml: skillButtonIconHtml(sk.id),
-              manaBadge: formatTooltipNumber(sm),
+              manaBadge: manaCostBadgeText(sm),
               ariaLabel: ariaSkillLabel(sk.name, cdS),
               cdTurns: cdS > 0 ? cdS : undefined,
             }),
@@ -2633,7 +2638,7 @@ function mountGoldShopHeroSkillsRow(
         append(
           goldShopSkillChipHtml({
             iconHtml: skillButtonIconHtml(sk.id),
-            manaBadge: formatTooltipNumber(sk.manaCost ?? 0),
+            manaBadge: manaCostBadgeText(sk.manaCost ?? 0),
             ariaLabel: ariaSkillLabel(sk.name, cd),
             cdTurns: cd > 0 ? cd : undefined,
           }),
@@ -2655,7 +2660,7 @@ function mountGoldShopHeroSkillsRow(
       append(
         goldShopSkillChipHtml({
           iconHtml: skillButtonIconHtml(wid),
-          manaBadge: formatTooltipNumber(0),
+          manaBadge: manaCostBadgeText(0),
           ariaLabel: wname,
           extraClass: `lol-skill-btn--weapon-ult ${ready ? "lol-skill-btn--weapon-ult--ready" : ""}`,
           extraStyle: `--weapon-ult-pct:${pct}`,
@@ -2672,7 +2677,7 @@ function mountGoldShopHeroSkillsRow(
       append(
         goldShopSkillChipHtml({
           iconHtml: skillButtonIconHtml("especialista_destruicao"),
-          manaBadge: formatTooltipNumber(0),
+          manaBadge: manaCostBadgeText(0),
           ariaLabel: ult.name,
         }),
         () => tooltipEspecialista(h, m),
@@ -5137,7 +5142,7 @@ function showCombatHUD(): void {
         iconHtml: basicAttackIconHtml(),
         hotkey: "Q",
         combatHotkey: "q",
-        manaBadge: formatTooltipNumber(0),
+        manaBadge: manaCostBadgeText(0),
         ariaLabel: "Ataque básico",
         selectKind: "basic",
       }),
@@ -5166,7 +5171,7 @@ function showCombatHUD(): void {
       const cdEff = model.devSandboxMode ? 0 : cd;
       const dis = cdEff > 0 || extraDisabled || !isViewingActive;
       const key = hotkeys[hotkeyIdx++] ?? "?";
-      const manaBadge = formatTooltipNumber(skillDef.manaCost ?? 0);
+      const manaBadge = manaCostBadgeText(skillDef.manaCost ?? 0);
       const b = el(
         combatSquareSkillHtml({
           disabled: dis,
@@ -5205,7 +5210,7 @@ function showCombatHUD(): void {
           hotkey: keyW,
           combatHotkey:
             keyW.length === 1 && keyW !== "?" ? keyW.toLowerCase() : undefined,
-          manaBadge: formatTooltipNumber(0),
+          manaBadge: manaCostBadgeText(0),
           ariaLabel: ariaSkillLabel("Minas terrestres", cdM),
           cdTurns: cdM > 0 ? cdM : undefined,
           selectKind: "skill",
@@ -5235,7 +5240,7 @@ function showCombatHUD(): void {
             hotkey: keyE,
             combatHotkey:
               keyE.length === 1 && keyE !== "?" ? keyE.toLowerCase() : undefined,
-            manaBadge: formatTooltipNumber(0),
+            manaBadge: manaCostBadgeText(0),
             ariaLabel: ariaSkillLabel("Tiro preciso", cdT),
             cdTurns: cdT > 0 ? cdT : undefined,
             selectKind: "skill",
@@ -5272,7 +5277,7 @@ function showCombatHUD(): void {
               hotkey: key,
               combatHotkey:
                 key.length === 1 && key !== "?" ? key.toLowerCase() : undefined,
-              manaBadge: formatTooltipNumber(mc),
+              manaBadge: manaCostBadgeText(mc),
               ariaLabel: ariaSkillLabel("Pisotear", cd),
               cdTurns: cd > 0 ? cd : undefined,
             }),
@@ -5316,7 +5321,7 @@ function showCombatHUD(): void {
             const dis =
               cdS > 0 || h.mana < sm || !isViewingActive;
             const key = hotkeys[hotkeyIdx++] ?? "?";
-            const manaBadge = formatTooltipNumber(sm);
+            const manaBadge = manaCostBadgeText(sm);
             const b = el(
               combatSquareSkillHtml({
                 disabled: dis,
@@ -5369,7 +5374,7 @@ function showCombatHUD(): void {
             hotkey: keyU,
             combatHotkey:
               keyU.length === 1 && keyU !== "?" ? keyU.toLowerCase() : undefined,
-            manaBadge: formatTooltipNumber(0),
+            manaBadge: manaCostBadgeText(0),
             ariaLabel: wname,
             extraClass: `lol-skill-btn--weapon-ult ${ready ? "lol-skill-btn--weapon-ult--ready" : ""}`,
             extraStyle: `--weapon-ult-pct:${pct}`,
@@ -5393,7 +5398,7 @@ function showCombatHUD(): void {
         const ult = HEROES.pistoleiro.ultimates.find(
           (u) => u.id === "especialista_destruicao",
         )!;
-        const manaUlt = formatTooltipNumber(0);
+        const manaUlt = manaCostBadgeText(0);
         const key = hotkeys[hotkeyIdx++] ?? "?";
         const bu = el(
           combatSquareSkillHtml({
