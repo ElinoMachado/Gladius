@@ -2413,6 +2413,18 @@ function showGoldShop(isInitial: boolean): void {
           </div>
         </div>
       </div>`;
+    if (bunkerShop) {
+      const bunkerStatsEl = panel.querySelector(
+        "#gold-shop-bunker-stats",
+      ) as HTMLElement | null;
+      if (bunkerStatsEl)
+        renderHeroStatsGrid(bunkerStatsEl, bunkerShopStatCells(bunkerShop));
+      const bunkerSkillsRow = panel.querySelector(
+        "#gold-shop-bunker-skills",
+      ) as HTMLElement | null;
+      if (bunkerSkillsRow)
+        mountGoldShopBunkerSkillsRow(bunkerSkillsRow, bunkerShop);
+    }
     panel.querySelectorAll("[data-item]").forEach((b) => {
       b.addEventListener("click", () => {
         const id = (b as HTMLElement).dataset.item!;
@@ -2451,32 +2463,9 @@ function showGoldShop(isInitial: boolean): void {
     panel.querySelector("#bunk-evolve")?.addEventListener("click", () => {
       model.buyBunkerEvolve(h.id);
     });
-    const bMinas = panel.querySelector(
-      '[data-bunker-tip="minas"]',
-    ) as HTMLElement | null;
-    const bShop = model.bunkerForShop();
-    if (bMinas && bShop) {
-      bindGameTooltip(bMinas, () =>
-        bunkerMinasShopTooltipHtml(bShop.tier),
-      );
-    }
-    const bTiro = panel.querySelector(
-      '[data-bunker-tip="tiro"]',
-    ) as HTMLElement | null;
-    if (bTiro) {
-      bindGameTooltip(bTiro, () => bunkerTiroUnlockedTooltipHtml());
-    }
-    const bTiroL = panel.querySelector(
-      '[data-bunker-tip="tiro-locked"]',
-    ) as HTMLElement | null;
-    if (bTiroL) {
-      bindGameTooltip(bTiroL, () => bunkerTiroLockedTooltipHtml());
-    }
     const bEv = panel.querySelector("#bunk-evolve") as HTMLElement | null;
-    if (bEv && bShop && bShop.tier < 2) {
-      bindGameTooltip(bEv, () =>
-        bunkerEvolveTooltipHtml(bShop.tier),
-      );
+    if (bEv && bunkerShop && bunkerShop.tier < 2) {
+      bindGameTooltip(bEv, () => bunkerEvolveTooltipHtml(bunkerShop.tier));
     }
     panel.querySelectorAll(".shop-hero-gold-bag").forEach((node) => {
       bindGameTooltip(node as HTMLElement, () => {
@@ -2499,9 +2488,9 @@ function showGoldShop(isInitial: boolean): void {
       });
     });
     const prevHost = panel.querySelector("#bunker-preview-host");
-    if (prevHost && bShop) {
+    if (prevHost && bunkerShop) {
       goldShopBunker3d = new BunkerPreview3D(prevHost as HTMLElement);
-      goldShopBunker3d.setTier(bShop.tier);
+      goldShopBunker3d.setTier(bunkerShop.tier);
       goldShopBunker3d.start();
     }
     const hero3dHost = panel.querySelector("#gold-shop-hero-3d") as HTMLElement;
@@ -3229,15 +3218,18 @@ function tooltipStatCell(label: string, value: string): string {
 function bunkerEvolveTooltipHtml(currentTier: 0 | 1 | 2): string {
   const nt = (currentTier + 1) as 1 | 2;
   const st = bunkerStatsForTier(nt);
-  const minas = describeBunkerMinasTier(nt);
-  let html = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Após evolução (bunker nv. ${bunkerDisplayLevel(nt)})</div>`;
-  html += `<p class="game-ui-tooltip-passive"><span class="tt-lbl">PV máx.:</span> ${st.maxHp} · <span class="tt-lbl">Defesa:</span> ${st.defesa}</p>`;
-  html += `<p class="game-ui-tooltip-line"><span class="tt-lbl">Minas terrestres:</span> ${escapeHtml(minas)}</p>`;
-  if (nt >= BUNKER_TIRO_MIN_TIER) {
-    html += `<p class="game-ui-tooltip-line"><span class="tt-lbl">Tiro preciso:</span> ${escapeHtml(describeBunkerTiroTier())}</p>`;
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Após evolução (bunker nv. ${bunkerDisplayLevel(nt)})</div><p class="game-ui-tooltip-passive"><span class="tt-lbl">PV máx.:</span> ${formatTooltipNumber(st.maxHp)} · <span class="tt-lbl">Defesa:</span> ${formatTooltipNumber(st.defesa)}</p></div>`;
+}
+
+/** Tooltip da loja: nível atual + próximo nível (ou bloqueado). */
+function bunkerTiroShopTooltipHtml(tier: 0 | 1 | 2): string {
+  if (tier >= BUNKER_TIRO_MIN_TIER) {
+    const cur = describeBunkerTiroTier();
+    return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Tiro preciso</div><p class="game-ui-tooltip-passive">Nv. ${bunkerDisplayLevel(tier)} — ${escapeHtml(cur)}</p><p class="game-ui-tooltip-line"><span class="tt-lbl">Próximo nível:</span> evolução máxima.</p></div>`;
   }
-  html += `</div>`;
-  return html;
+  const req = bunkerDisplayLevel(BUNKER_TIRO_MIN_TIER);
+  const nextDesc = describeBunkerTiroTier();
+  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--badged"><span class="game-ui-tooltip-badge">Bunker nv. ${req}</span><div class="game-ui-tooltip-title">Tiro preciso</div><p class="game-ui-tooltip-passive">Bloqueado neste nível do bunker.</p><p class="game-ui-tooltip-line"><span class="tt-lbl">Próximo nível (bunker nv. ${req}):</span> ${escapeHtml(nextDesc)}</p></div>`;
 }
 
 function bunkerMinasShopTooltipHtml(tier: 0 | 1 | 2): string {
@@ -3252,13 +3244,33 @@ function bunkerMinasShopTooltipHtml(tier: 0 | 1 | 2): string {
   return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Minas terrestres</div><p class="game-ui-tooltip-passive">Nv. ${bunkerDisplayLevel(tier)} — ${escapeHtml(cur)}</p>${nextBlock}</div>`;
 }
 
-function bunkerTiroLockedTooltipHtml(): string {
-  const req = bunkerDisplayLevel(BUNKER_TIRO_MIN_TIER);
-  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--badged"><span class="game-ui-tooltip-badge">Necessário bunker nv ${req}</span><div class="game-ui-tooltip-title">Tiro preciso</div><p class="game-ui-tooltip-passive">${escapeHtml(describeBunkerTiroTier())}</p></div>`;
-}
-
-function bunkerTiroUnlockedTooltipHtml(): string {
-  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Tiro preciso</div><p class="game-ui-tooltip-passive">${escapeHtml(describeBunkerTiroTier())}</p></div>`;
+function mountGoldShopBunkerSkillsRow(row: HTMLElement, bunk: BunkerState): void {
+  row.innerHTML = "";
+  const t = bunk.tier;
+  const tiroOk = t >= BUNKER_TIRO_MIN_TIER;
+  const append = (html: string, tip: () => string): void => {
+    const b = el(html);
+    b.addEventListener("click", (e) => e.preventDefault());
+    bindGameTooltip(b, tip);
+    row.appendChild(b);
+  };
+  append(
+    goldShopSkillChipHtml({
+      iconHtml: skillButtonIconHtml("bunker_minas"),
+      manaBadge: manaCostBadgeText(0),
+      ariaLabel: "Minas terrestres",
+    }),
+    () => bunkerMinasShopTooltipHtml(t),
+  );
+  append(
+    goldShopSkillChipHtml({
+      iconHtml: skillButtonIconHtml("bunker_tiro_preciso"),
+      manaBadge: manaCostBadgeText(0),
+      ariaLabel: "Tiro preciso",
+      extraClass: tiroOk ? undefined : "gold-shop-bunker-skill--locked",
+    }),
+    () => bunkerTiroShopTooltipHtml(t),
+  );
 }
 
 function goldShopBunkerSectionHtml(bunk: BunkerState, h: Unit): string {
@@ -3272,61 +3284,35 @@ function goldShopBunkerSectionHtml(bunk: BunkerState, h: Unit): string {
   }
   const canEv = t < 2 && h.ouro >= evCost;
   const disp = bunkerDisplayLevel(t);
-  const minasCur = describeBunkerMinasTier(t);
-  const minasNext =
-    t < 2
-      ? describeBunkerMinasTier((t + 1) as 1 | 2)
-      : "—";
-  const tiroOk = t >= BUNKER_TIRO_MIN_TIER;
-  const pvStr = `${formatTooltipNumber(bunk.hp)}/${formatTooltipNumber(bunk.maxHp)}`;
-  const defStr = formatTooltipNumber(bunk.defesa);
   const nvStr = `${disp}/3`;
+  const repairLabel = `Reparar ${formatTooltipNumber(missing)} ouro`;
+  const repairInner = `<span class="shop-bunker-action-btn__inner"><span class="shop-bunker-action-btn__label">Reparar</span><span class="shop-bunker-action-btn__cost">${formatTooltipNumber(missing)}</span>${combatGoldCoinSvgHtml("shop-bunker-action-btn__coin")}</span>`;
+  const evolveDisabled = t >= 2 || !canEv;
+  const evolveInner =
+    t >= 2
+      ? `<span class="shop-bunker-action-btn__inner shop-bunker-action-btn__inner--solo">Nível máximo</span>`
+      : `<span class="shop-bunker-action-btn__inner"><span class="shop-bunker-action-btn__label">Evoluir</span><span class="shop-bunker-action-btn__cost">${formatTooltipNumber(evCost)}</span>${combatGoldCoinSvgHtml("shop-bunker-action-btn__coin")}</span>`;
+  const evolveLabel =
+    t >= 2 ? "Nível máximo do bunker" : `Evoluir por ${formatTooltipNumber(evCost)} ouro`;
   return `<div class="shop-bunker-viz-layout">
     <div class="shop-bunker-viz-layout__preview">
       <div id="bunker-preview-host" class="gold-shop-hero-3d-host shop-bunker-viz-layout__3d-host" aria-hidden="true"></div>
     </div>
     <div class="shop-hero-stats-col shop-bunker-viz-layout__col">
       <p class="shop-hero-stats-head">Atributos do bunker</p>
-      <div class="shop-bunker-attr-grid" role="list" aria-label="Estado do bunker">
-        <div class="shop-bunker-attr-cell" role="listitem">
-          <span class="shop-bunker-attr-cell__lbl">Nível</span>
-          <span class="shop-bunker-attr-cell__val">${nvStr}</span>
-        </div>
-        <div class="shop-bunker-attr-cell" role="listitem">
-          <span class="shop-bunker-attr-cell__lbl">PV</span>
-          <span class="shop-bunker-attr-cell__val">${pvStr}</span>
-        </div>
-        <div class="shop-bunker-attr-cell" role="listitem">
-          <span class="shop-bunker-attr-cell__lbl">Defesa</span>
-          <span class="shop-bunker-attr-cell__val">${defStr}</span>
-        </div>
-        <div class="shop-bunker-attr-cell" role="listitem">
-          <span class="shop-bunker-attr-cell__lbl">CD minas</span>
-          <span class="shop-bunker-attr-cell__val">${bunkerMinasCooldownWaves(t)} onda(s)</span>
-        </div>
+      <div class="shop-bunker-level-row" role="group" aria-label="Nível do bunker">
+        <span class="shop-bunker-level-row__lbl">Nível</span>
+        <span class="shop-bunker-level-row__val">${nvStr}</span>
       </div>
+      <div id="gold-shop-bunker-stats" class="lol-stats-list gold-shop-hero-stats-grid" aria-label="PV e defesa do bunker"></div>
       <div class="shop-bunker-skills-block">
-        <p class="shop-hero-stats-head shop-bunker-skills-block__head">Funcionalidades</p>
-        <div class="shop-bunker-skills-row" role="group" aria-label="Habilidades do bunker">
-          <div class="shop-bunker-skill-tile" data-bunker-tip="minas" tabindex="0" role="img" aria-label="Minas terrestres">
-            <span class="shop-bunker-skill-tile__name">Minas</span>
-            <span class="shop-bunker-skill-tile__line">${escapeHtml(minasCur)}</span>
-            ${
-              t < 2
-                ? `<span class="shop-bunker-skill-tile__sub">${escapeHtml(minasNext)}</span>`
-                : `<span class="shop-bunker-skill-tile__sub shop-bunker-skill-tile__sub--max">Máx.</span>`
-            }
-          </div>
-          <div class="shop-bunker-skill-tile ${tiroOk ? "" : "shop-bunker-skill-tile--locked"}" data-bunker-tip="${tiroOk ? "tiro" : "tiro-locked"}" tabindex="0" role="img" aria-label="Tiro preciso">
-            <span class="shop-bunker-skill-tile__name">Tiro preciso</span>
-            <span class="shop-bunker-skill-tile__line">${escapeHtml(describeBunkerTiroTier())}</span>
-          </div>
-        </div>
+        <p class="shop-hero-stats-head shop-bunker-skills-block__head">Habilidades</p>
+        <div id="gold-shop-bunker-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do bunker"></div>
       </div>
       <p class="shop-bunker-viz-layout__hint">Reparar: 1 ouro por PV em falta. Evoluções: 300 ouro (1.ª), 500 ouro (2.ª).</p>
       <div class="shop-bunker-viz-layout__actions">
-        <button type="button" class="btn" id="bunk-repair" ${missing <= 0 || !canRepair ? "disabled" : ""}>Reparar (${formatTooltipNumber(missing)} ouro)</button>
-        <button type="button" class="btn" id="bunk-evolve" ${t >= 2 || !canEv ? "disabled" : ""}>${t >= 2 ? "Nível máximo" : `Evoluir (${formatTooltipNumber(evCost)} ouro)`}</button>
+        <button type="button" class="btn shop-bunker-action-btn" id="bunk-repair" ${missing <= 0 || !canRepair ? "disabled" : ""} aria-label="${escapeHtml(repairLabel)}">${repairInner}</button>
+        <button type="button" class="btn shop-bunker-action-btn" id="bunk-evolve" ${evolveDisabled ? "disabled" : ""} aria-label="${escapeHtml(evolveLabel)}">${evolveInner}</button>
       </div>
     </div>
   </div>`;
@@ -3340,6 +3326,25 @@ interface HeroStatCell {
   tooltipValue?: string;
   /** Tooltip rico (pairar); se omitido, usa `tooltipStatCell` com label/valor. */
   tooltipHtml?: string;
+}
+
+function bunkerShopStatCells(bunk: BunkerState): HeroStatCell[] {
+  const hpDisp = `${formatTooltipNumber(bunk.hp)}/${formatTooltipNumber(bunk.maxHp)}`;
+  const defDisp = formatTooltipNumber(bunk.defesa);
+  return [
+    {
+      icon: "max_hp",
+      label: "PV",
+      value: hpDisp,
+      tooltipHtml: tooltipStatCell("PV", hpDisp),
+    },
+    {
+      icon: "def",
+      label: "Defesa",
+      value: defDisp,
+      tooltipHtml: tooltipStatCell("Defesa", defDisp),
+    },
+  ];
 }
 
 type StatDeltaKind = "int" | "pct" | "mult" | "float";

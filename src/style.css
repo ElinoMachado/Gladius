@@ -4438,24 +4438,19 @@ body.enemy-inspect--dragging-body {
   min-width: 0;
 }
 
-.shop-bunker-attr-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.35rem 0.5rem;
-  margin-bottom: 0.45rem;
-}
-
-.shop-bunker-attr-cell {
+.shop-bunker-level-row {
   display: flex;
-  flex-direction: column;
-  gap: 0.06rem;
-  padding: 0.32rem 0.42rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.6rem;
+  margin-bottom: 0.38rem;
+  padding: 0.32rem 0.45rem;
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.22);
   border: 1px solid rgba(201, 162, 39, 0.22);
 }
 
-.shop-bunker-attr-cell__lbl {
+.shop-bunker-level-row__lbl {
   font-size: 0.62rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -4463,7 +4458,7 @@ body.enemy-inspect--dragging-body {
   color: #c9a85a;
 }
 
-.shop-bunker-attr-cell__val {
+.shop-bunker-level-row__val {
   font-size: 0.8rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -4480,54 +4475,9 @@ body.enemy-inspect--dragging-body {
   margin-bottom: 0.32rem !important;
 }
 
-.shop-bunker-skills-row {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.shop-bunker-skill-tile {
-  flex: 1 1 130px;
-  min-width: 118px;
-  padding: 0.4rem 0.48rem;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid rgba(120, 110, 100, 0.38);
-}
-
-.shop-bunker-skill-tile--locked {
-  opacity: 0.45;
-  filter: grayscale(0.25);
-}
-
-.shop-bunker-skill-tile__name {
-  display: block;
-  font-weight: 800;
-  font-size: 0.68rem;
-  margin-bottom: 0.1rem;
-  color: #e8c547;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.shop-bunker-skill-tile__line {
-  display: block;
-  font-size: 0.68rem;
-  color: #b8b0a0;
-  line-height: 1.32;
-}
-
-.shop-bunker-skill-tile__sub {
-  display: block;
-  font-size: 0.62rem;
-  margin-top: 0.15rem;
-  color: #7ec8ff;
-}
-
-.shop-bunker-skill-tile__sub--max {
-  color: #8a8580;
-  font-style: italic;
+.shop-screen__panel--gold .gold-shop-bunker-skill--locked {
+  opacity: 0.5;
+  filter: grayscale(0.2);
 }
 
 .shop-bunker-viz-layout__hint {
@@ -4539,8 +4489,45 @@ body.enemy-inspect--dragging-body {
 
 .shop-bunker-viz-layout__actions {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+}
+
+.shop-bunker-action-btn {
+  min-width: 0;
+}
+
+.shop-bunker-action-btn__inner {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.shop-bunker-action-btn__inner--solo {
+  display: block;
+  text-align: center;
+}
+
+.shop-bunker-action-btn__label {
+  font-weight: 700;
+}
+
+.shop-bunker-action-btn__cost {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-bunker-action-btn__coin {
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+  vertical-align: middle;
 }
 
 .shop-modal-overlay {
