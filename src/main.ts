@@ -662,6 +662,26 @@ function combatGoldCoinSvgHtml(extraSvgClass = ""): string {
 
 const COMBAT_LOG_VISIBLE_LS = "gladiadores-combat-log-visible";
 
+/** Não perguntar de novo se o jogador sai da 1.ª loja sem gastar ouro. */
+const LS_INITIAL_SHOP_SKIP_EMPTY_CONFIRM =
+  "gladiadores-initial-shop-skip-empty-confirm";
+
+function readSkipInitialShopEmptyConfirm(): boolean {
+  try {
+    return localStorage.getItem(LS_INITIAL_SHOP_SKIP_EMPTY_CONFIRM) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeSkipInitialShopEmptyConfirm(on: boolean): void {
+  try {
+    localStorage.setItem(LS_INITIAL_SHOP_SKIP_EMPTY_CONFIRM, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
 function readCombatLogVisible(): boolean {
   const s = localStorage.getItem(COMBAT_LOG_VISIBLE_LS);
   if (s === null) return true;
@@ -2229,6 +2249,63 @@ function showGoldShop(isInitial: boolean): void {
   );
   shell.appendChild(bgHost);
   shell.appendChild(panel);
+  const modalRoot = el(`<div id="shop-initial-empty-modal" class="shop-modal-overlay" hidden aria-hidden="true">
+    <div class="shop-modal" role="dialog" aria-modal="true" aria-labelledby="shop-empty-modal-title">
+      <h2 id="shop-empty-modal-title" class="shop-modal__title">Prosseguir sem compras?</h2>
+      <p class="shop-modal__body">Não gastaste ouro na loja (melhorias nem bunker). Queres mesmo <strong>começar a wave 1</strong> assim?</p>
+      <label class="shop-modal__check"><input type="checkbox" id="shop-empty-skip-future" /> Não mostrar esta pergunta novamente</label>
+      <div class="shop-modal__actions">
+        <button type="button" class="btn" id="shop-empty-cancel">Não, voltar</button>
+        <button type="button" class="btn btn-primary" id="shop-empty-confirm">Sim, continuar</button>
+      </div>
+    </div>
+  </div>`);
+  shell.appendChild(modalRoot);
+
+  const finishShop = (): void => {
+    goldShopStall3d?.dispose();
+    goldShopStall3d = null;
+    goldShopBunker3d?.dispose();
+    goldShopBunker3d = null;
+    goldShopHeroPreview3d?.dispose();
+    goldShopHeroPreview3d = null;
+    if (isInitial) model.finishInitialShop();
+    else model.finishWaveShop();
+    render();
+  };
+
+  const openEmptySpendConfirm = (): boolean => {
+    if (!isInitial) return false;
+    if (model.initialShopSessionTouched) return false;
+    if (readSkipInitialShopEmptyConfirm()) return false;
+    modalRoot.hidden = false;
+    modalRoot.setAttribute("aria-hidden", "false");
+    const cb = modalRoot.querySelector(
+      "#shop-empty-skip-future",
+    ) as HTMLInputElement | null;
+    if (cb) cb.checked = false;
+    return true;
+  };
+
+  const tryStartShop = (): void => {
+    if (openEmptySpendConfirm()) return;
+    finishShop();
+  };
+
+  modalRoot.querySelector("#shop-empty-confirm")!.addEventListener("click", () => {
+    const cb = modalRoot.querySelector(
+      "#shop-empty-skip-future",
+    ) as HTMLInputElement | null;
+    writeSkipInitialShopEmptyConfirm(!!cb?.checked);
+    modalRoot.hidden = true;
+    modalRoot.setAttribute("aria-hidden", "true");
+    finishShop();
+  });
+  modalRoot.querySelector("#shop-empty-cancel")!.addEventListener("click", () => {
+    modalRoot.hidden = true;
+    modalRoot.setAttribute("aria-hidden", "true");
+  });
+
   goldShopStall3d = new ShopStall3D(bgHost);
   goldShopStall3d.start();
 
@@ -2257,8 +2334,19 @@ function showGoldShop(isInitial: boolean): void {
     }).join("");
     const goldMultiHint =
       party.length > 1
-        ? `<p class="shop-hero-gold-multi-hint" role="note">Cada bolsa é <strong>só desse herói</strong> — clica numa bolsa ou usa os botões em baixo para trocar.</p>`
+        ? `<p class="shop-hero-gold-multi-hint" role="note">Cada bolsa é <strong>só desse herói</strong> — clica numa para ver a loja com esse herói.</p>`
         : "";
+    const refundCost = model.nextShopRefundCrystalCost();
+    const hasShopChanges = model.shopHasChangesFromSnapshot();
+    const canRefund =
+      hasShopChanges &&
+      (refundCost === 0 || model.meta.crystals >= refundCost);
+    const refundBtnLabel = !hasShopChanges
+      ? "Reembolsar"
+      : refundCost === 0
+        ? "Reembolsar (grátis)"
+        : `Reembolsar (${refundCost} cristais)`;
+    const startBtnLabel = isInitial ? "Começar wave 1" : "Próxima wave";
     const goldBagsHtml = party
       .map((ph, i) => {
         const active = i === idx;
@@ -2281,8 +2369,8 @@ function showGoldShop(isInitial: boolean): void {
       })
       .join("");
     const bunkerShop = model.bunkerForShop();
-    const bunkerMidCell = bunkerShop
-      ? `<div class="shop-mid-cell shop-mid-cell--bunker">${goldShopBunkerSectionHtml(bunkerShop, h)}</div>`
+    const bunkerSide = bunkerShop
+      ? `<div class="shop-bunker-viz shop-hero-viz" aria-label="Bunker da arena">${goldShopBunkerSectionHtml(bunkerShop, h)}</div>`
       : "";
     const sandboxMidCell = model.devSandboxMode
       ? `<div class="shop-mid-cell shop-mid-cell--sandbox">${goldShopSandboxArtifactsSectionHtml(h)}</div>`
@@ -2295,27 +2383,33 @@ function showGoldShop(isInitial: boolean): void {
           ${goldBagsHtml}
         </div>
         ${goldMultiHint}
-        <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
-          <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
-          <div class="shop-hero-stats-col">
-            <p class="shop-hero-stats-head">Atributos atuais</p>
-            <div id="gold-shop-hero-stats" class="lol-stats-list gold-shop-hero-stats-grid"></div>
-            <div id="gold-shop-hero-skills-wrap" class="gold-shop-hero-skills-wrap" hidden>
-              <p class="shop-hero-stats-head">Habilidades</p>
-              <div id="gold-shop-hero-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do herói"></div>
+        <div class="shop-hero-bunker-pair">
+          <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
+            <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
+            <div class="shop-hero-stats-col">
+              <p class="shop-hero-stats-head">Atributos atuais</p>
+              <div id="gold-shop-hero-stats" class="lol-stats-list gold-shop-hero-stats-grid"></div>
+              <div id="gold-shop-hero-skills-wrap" class="gold-shop-hero-skills-wrap" hidden>
+                <p class="shop-hero-stats-head">Habilidades</p>
+                <div id="gold-shop-hero-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do herói"></div>
+              </div>
             </div>
           </div>
+          ${bunkerSide}
         </div>
         <div class="shop-mid-row">
-          ${bunkerMidCell}
           ${sandboxMidCell}
           <div class="shop-mid-cell shop-mid-cell--gold">
             <div class="shop-grid">${list}</div>
           </div>
         </div>
-        <div class="shop-nav">
-          <button type="button" class="btn" id="shop-prev" ${idx < 1 ? "disabled" : ""}>Herói anterior</button>
-          <button type="button" class="btn btn-primary" id="shop-next">${idx < party.length - 1 ? "Próximo herói" : isInitial ? "Começar wave 1" : "Próxima wave"}</button>
+        <div class="shop-footer">
+          <p id="shop-footer-msg" class="shop-footer-msg" role="status" hidden></p>
+          <p class="shop-footer-crystals" aria-live="polite">Cristais meta: <strong>${model.meta.crystals}</strong>${refundCost > 0 ? ` · próximo reembolso: ${refundCost}` : ""}</p>
+          <div class="shop-footer__actions">
+            <button type="button" class="btn" id="shop-refund" ${!canRefund ? "disabled" : ""} aria-label="${escapeHtml(refundBtnLabel)}">${escapeHtml(refundBtnLabel)}</button>
+            <button type="button" class="btn btn-primary" id="shop-start">${escapeHtml(startBtnLabel)}</button>
+          </div>
         </div>
       </div>`;
     panel.querySelectorAll("[data-item]").forEach((b) => {
@@ -2439,27 +2533,31 @@ function showGoldShop(isInitial: boolean): void {
       heroStatsEl.innerHTML =
         '<p class="shop-hero-stats-fallback">Sem classe — sem pré-visualização 3D.</p>';
     }
-    panel.querySelector("#shop-prev")!.addEventListener("click", () => {
-      idx = Math.max(0, idx - 1);
-      goldShopHeroIndex = idx;
-      renderShop();
-    });
-    panel.querySelector("#shop-next")!.addEventListener("click", () => {
-      if (idx < party.length - 1) {
-        idx++;
-        goldShopHeroIndex = idx;
-        renderShop();
-      } else {
-        goldShopStall3d?.dispose();
-        goldShopStall3d = null;
-        goldShopBunker3d?.dispose();
-        goldShopBunker3d = null;
-        goldShopHeroPreview3d?.dispose();
-        goldShopHeroPreview3d = null;
-        if (isInitial) model.finishInitialShop();
-        else model.finishWaveShop();
-        render();
+    const footMsg = panel.querySelector("#shop-footer-msg") as HTMLElement | null;
+    panel.querySelector("#shop-start")!.addEventListener("click", () => {
+      if (footMsg) {
+        footMsg.hidden = true;
+        footMsg.textContent = "";
       }
+      tryStartShop();
+    });
+    panel.querySelector("#shop-refund")!.addEventListener("click", () => {
+      const r = model.tryShopRefund();
+      if (r === "ok") {
+        if (footMsg) {
+          footMsg.hidden = true;
+          footMsg.textContent = "";
+        }
+        return;
+      }
+      if (!footMsg) return;
+      footMsg.hidden = false;
+      if (r === "no_changes")
+        footMsg.textContent = "Nada para reembolsar — o estado já é o da abertura da loja.";
+      else if (r === "no_crystals")
+        footMsg.textContent =
+          "Cristais insuficientes: o próximo reembolso custa 5 cristais meta.";
+      else footMsg.textContent = "Não foi possível reembolsar.";
     });
   };
   refreshGoldShop = renderShop;
@@ -3179,34 +3277,55 @@ function goldShopBunkerSectionHtml(bunk: BunkerState, h: Unit): string {
       ? describeBunkerMinasTier((t + 1) as 1 | 2)
       : "—";
   const tiroOk = t >= BUNKER_TIRO_MIN_TIER;
-  return `<div class="shop-bunker">
-    <h3 class="shop-bunker__title">Bunker da arena</h3>
-    <div class="shop-bunker__layout">
-      <div class="shop-bunker__preview-wrap">
-        <div id="bunker-preview-host" class="shop-bunker__preview-host" aria-hidden="true"></div>
+  const pvStr = `${formatTooltipNumber(bunk.hp)}/${formatTooltipNumber(bunk.maxHp)}`;
+  const defStr = formatTooltipNumber(bunk.defesa);
+  const nvStr = `${disp}/3`;
+  return `<div class="shop-bunker-viz-layout">
+    <div class="shop-bunker-viz-layout__preview">
+      <div id="bunker-preview-host" class="gold-shop-hero-3d-host shop-bunker-viz-layout__3d-host" aria-hidden="true"></div>
+    </div>
+    <div class="shop-hero-stats-col shop-bunker-viz-layout__col">
+      <p class="shop-hero-stats-head">Atributos do bunker</p>
+      <div class="shop-bunker-attr-grid" role="list" aria-label="Estado do bunker">
+        <div class="shop-bunker-attr-cell" role="listitem">
+          <span class="shop-bunker-attr-cell__lbl">Nível</span>
+          <span class="shop-bunker-attr-cell__val">${nvStr}</span>
+        </div>
+        <div class="shop-bunker-attr-cell" role="listitem">
+          <span class="shop-bunker-attr-cell__lbl">PV</span>
+          <span class="shop-bunker-attr-cell__val">${pvStr}</span>
+        </div>
+        <div class="shop-bunker-attr-cell" role="listitem">
+          <span class="shop-bunker-attr-cell__lbl">Defesa</span>
+          <span class="shop-bunker-attr-cell__val">${defStr}</span>
+        </div>
+        <div class="shop-bunker-attr-cell" role="listitem">
+          <span class="shop-bunker-attr-cell__lbl">CD minas</span>
+          <span class="shop-bunker-attr-cell__val">${bunkerMinasCooldownWaves(t)} onda(s)</span>
+        </div>
       </div>
-      <div class="shop-bunker__meta">
-        <p class="shop-bunker__stats">Nv. ${disp}/3 · PV ${bunk.hp}/${bunk.maxHp} · Defesa ${bunk.defesa}</p>
-        <p class="shop-bunker__hint">Reparar: 1 ouro por PV perdido. Evoluções: 300 ouro (1ª), 500 ouro (2ª).</p>
-        <div class="shop-bunker__skills">
-          <div class="shop-bunker-skill" data-bunker-tip="minas" tabindex="0" role="img" aria-label="Minas terrestres">
-            <span class="shop-bunker-skill__name">Minas terrestres</span>
-            <span class="shop-bunker-skill__line">${escapeHtml(minasCur)}</span>
+      <div class="shop-bunker-skills-block">
+        <p class="shop-hero-stats-head shop-bunker-skills-block__head">Funcionalidades</p>
+        <div class="shop-bunker-skills-row" role="group" aria-label="Habilidades do bunker">
+          <div class="shop-bunker-skill-tile" data-bunker-tip="minas" tabindex="0" role="img" aria-label="Minas terrestres">
+            <span class="shop-bunker-skill-tile__name">Minas</span>
+            <span class="shop-bunker-skill-tile__line">${escapeHtml(minasCur)}</span>
             ${
               t < 2
-                ? `<span class="shop-bunker-skill__next"><span class="tt-lbl">Próximo:</span> ${escapeHtml(minasNext)}</span>`
-                : `<span class="shop-bunker-skill__next shop-bunker-skill__next--max">Evolução máxima</span>`
+                ? `<span class="shop-bunker-skill-tile__sub">${escapeHtml(minasNext)}</span>`
+                : `<span class="shop-bunker-skill-tile__sub shop-bunker-skill-tile__sub--max">Máx.</span>`
             }
           </div>
-          <div class="shop-bunker-skill ${tiroOk ? "" : "shop-bunker-skill--locked"}" data-bunker-tip="${tiroOk ? "tiro" : "tiro-locked"}" tabindex="0" role="img" aria-label="Tiro preciso">
-            <span class="shop-bunker-skill__name">Tiro preciso</span>
-            <span class="shop-bunker-skill__line">${escapeHtml(describeBunkerTiroTier())}</span>
+          <div class="shop-bunker-skill-tile ${tiroOk ? "" : "shop-bunker-skill-tile--locked"}" data-bunker-tip="${tiroOk ? "tiro" : "tiro-locked"}" tabindex="0" role="img" aria-label="Tiro preciso">
+            <span class="shop-bunker-skill-tile__name">Tiro preciso</span>
+            <span class="shop-bunker-skill-tile__line">${escapeHtml(describeBunkerTiroTier())}</span>
           </div>
         </div>
-        <div class="shop-bunker__actions">
-          <button type="button" class="btn" id="bunk-repair" ${missing <= 0 || !canRepair ? "disabled" : ""}>Reparar (${missing} ouro)</button>
-          <button type="button" class="btn" id="bunk-evolve" ${t >= 2 || !canEv ? "disabled" : ""}>${t >= 2 ? "Bunker no nível máximo" : `Evoluir bunker (${evCost} ouro)`}</button>
-        </div>
+      </div>
+      <p class="shop-bunker-viz-layout__hint">Reparar: 1 ouro por PV em falta. Evoluções: 300 ouro (1.ª), 500 ouro (2.ª).</p>
+      <div class="shop-bunker-viz-layout__actions">
+        <button type="button" class="btn" id="bunk-repair" ${missing <= 0 || !canRepair ? "disabled" : ""}>Reparar (${formatTooltipNumber(missing)} ouro)</button>
+        <button type="button" class="btn" id="bunk-evolve" ${t >= 2 || !canEv ? "disabled" : ""}>${t >= 2 ? "Nível máximo" : `Evoluir (${formatTooltipNumber(evCost)} ouro)`}</button>
       </div>
     </div>
   </div>`;

@@ -268,6 +268,55 @@ export function heroDanoPlusRoninFromBaseline(b: {
   return b.dano + roninOverflowFlatDamage(b.acertoCritico, b.artifacts);
 }
 
+type ShopHeroSnapshot = {
+  id: string;
+  ouro: number;
+  maxHp: number;
+  hp: number;
+  maxMana: number;
+  mana: number;
+  regenVida: number;
+  regenMana: number;
+  dano: number;
+  acertoCritico: number;
+  danoCritico: number;
+  defesa: number;
+  movimento: number;
+  potencialCuraEscudo: number;
+  artifacts: Record<string, number>;
+};
+
+type ShopBunkerSnapshot = {
+  biome: BiomeId;
+  q: number;
+  r: number;
+  hp: number;
+  maxHp: number;
+  defesa: number;
+  tier: 0 | 1 | 2;
+  occupantId: string | null;
+};
+
+type ShopRestoreSnapshot = {
+  heroes: ShopHeroSnapshot[];
+  bunkers: ShopBunkerSnapshot[];
+};
+
+function shopNumEq(a: number, b: number): boolean {
+  return Math.abs(a - b) < 1e-5;
+}
+
+function shopArtifactsEq(
+  a: Record<string, number>,
+  b: Record<string, number>,
+): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const k of keys) {
+    if ((a[k] ?? 0) !== (b[k] ?? 0)) return false;
+  }
+  return true;
+}
+
 export class GameModel {
   meta: MetaProgress;
   grid: Map<string, HexCell> = new Map();
@@ -364,6 +413,19 @@ export class GameModel {
   private metaEssencesAtRunStart: Partial<
     Record<ForgeEssenceId, number>
   > | null = null;
+
+  /** Estado da loja ao abrir (ouro, stats, bunker) para reembolso. */
+  private shopRestoreSnapshot: ShopRestoreSnapshot | null = null;
+  /**
+   * Reembolsos de loja já usados nesta run: o primeiro é grátis; os seguintes custam cristais meta.
+   */
+  runShopRefundUses = 0;
+  /**
+   * Visitas à loja: qualquer gasto ou alteração (ouro, bunker, sandbox) nesta abertura.
+   * Reposto em `captureShopSnapshot`; não é limpo no reembolso — evita o aviso “sair sem gastar”
+   * depois de comprar e reembolsar na mesma loja.
+   */
+  initialShopSessionTouched = false;
 
   constructor() {
     this.meta = loadMeta();
@@ -507,6 +569,7 @@ export class GameModel {
     } else if (next === "shop") {
       this.teleportPartyToHub();
       this.phase = "shop_wave";
+      this.captureShopSnapshot();
     }
     this.emit();
   }
@@ -866,6 +929,9 @@ export class GameModel {
     }
     this.pendingArtifacts = null;
     this.pendingUltimate = null;
+    this.runShopRefundUses = 0;
+    this.ensureBunkersPlaced();
+    this.captureShopSnapshot();
     this.phase = "shop_initial";
     this.currentHeroIndex = 0;
     this.rochosoTauntHeroId = null;
@@ -4128,6 +4194,8 @@ export class GameModel {
     if (!ok) return false;
     u.hp = Math.max(0, Math.min(u.hp, u.maxHp));
     u.mana = Math.max(0, Math.min(u.mana, u.maxMana));
+    if (this.phase === "shop_initial" || this.phase === "shop_wave")
+      this.initialShopSessionTouched = true;
     if (artifactId === "braco_forte") {
       const ch = this.currentHero();
       if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
@@ -4200,6 +4268,8 @@ export class GameModel {
     if (u.ouro < missing) return false;
     u.ouro -= missing;
     for (const b of list) b.hp = b.maxHp;
+    if (this.phase === "shop_initial" || this.phase === "shop_wave")
+      this.initialShopSessionTouched = true;
     this.log(`Bunkers reparados (${missing} ouro).`);
     this.emit();
     return true;
@@ -4225,6 +4295,8 @@ export class GameModel {
       b.defesa = st.defesa;
       b.hp = st.maxHp;
     }
+    if (this.phase === "shop_initial" || this.phase === "shop_wave")
+      this.initialShopSessionTouched = true;
     this.log(`Bunkers evoluíram (nível ${nt}).`);
     this.emit();
     return true;
@@ -4255,8 +4327,165 @@ export class GameModel {
     if (u.ouro < cost) return false;
     u.ouro -= cost;
     item.apply(u);
+    if (this.phase === "shop_initial" || this.phase === "shop_wave")
+      this.initialShopSessionTouched = true;
     this.emit();
     return true;
+  }
+
+  /** Cristais meta cobrados no próximo reembolso de loja (0 no primeiro uso da run). */
+  nextShopRefundCrystalCost(): number {
+    return this.runShopRefundUses === 0 ? 0 : 5;
+  }
+
+  /** Há diferença face ao snapshot da abertura desta visita à loja? */
+  shopHasChangesFromSnapshot(): boolean {
+    const snap = this.shopRestoreSnapshot;
+    if (!snap) return false;
+    const party = this.getParty();
+    if (party.length !== snap.heroes.length) return true;
+    for (const u of party) {
+      const sh = snap.heroes.find((h) => h.id === u.id);
+      if (!sh) return true;
+      if (u.ouro !== sh.ouro) return true;
+      if (u.maxHp !== sh.maxHp || u.hp !== sh.hp) return true;
+      if (u.maxMana !== sh.maxMana || u.mana !== sh.mana) return true;
+      if (u.regenVida !== sh.regenVida || u.regenMana !== sh.regenMana)
+        return true;
+      if (u.dano !== sh.dano) return true;
+      if (u.acertoCritico !== sh.acertoCritico) return true;
+      if (!shopNumEq(u.danoCritico, sh.danoCritico)) return true;
+      if (u.defesa !== sh.defesa) return true;
+      if (u.movimento !== sh.movimento) return true;
+      if (u.potencialCuraEscudo !== sh.potencialCuraEscudo) return true;
+      if (!shopArtifactsEq(u.artifacts, sh.artifacts)) return true;
+    }
+    const curBunkers = this.snapshotBunkersNow();
+    if (curBunkers.length !== snap.bunkers.length) return true;
+    const sortB = (xs: ShopBunkerSnapshot[]) =>
+      [...xs].sort((a, b) => a.biome.localeCompare(b.biome));
+    const a = sortB(snap.bunkers);
+    const b = sortB(curBunkers);
+    for (let i = 0; i < a.length; i++) {
+      const x = a[i]!;
+      const y = b[i]!;
+      if (
+        x.biome !== y.biome ||
+        x.q !== y.q ||
+        x.r !== y.r ||
+        x.hp !== y.hp ||
+        x.maxHp !== y.maxHp ||
+        x.defesa !== y.defesa ||
+        x.tier !== y.tier ||
+        x.occupantId !== y.occupantId
+      )
+        return true;
+    }
+    return false;
+  }
+
+  /**
+   * Reverte ouro, atributos e bunkers ao estado da abertura da loja.
+   * 1.º reembolso na run: grátis; seguintes: 5 cristais meta.
+   */
+  tryShopRefund():
+    | "ok"
+    | "no_snapshot"
+    | "no_changes"
+    | "no_crystals" {
+    if (!this.shopRestoreSnapshot) return "no_snapshot";
+    if (!this.shopHasChangesFromSnapshot()) return "no_changes";
+    const cost = this.nextShopRefundCrystalCost();
+    if (cost > 0 && this.meta.crystals < cost) return "no_crystals";
+    if (cost > 0) {
+      this.meta.crystals -= cost;
+      this.saveMeta();
+    }
+    this.applyShopSnapshot();
+    this.runShopRefundUses++;
+    this.emit();
+    return "ok";
+  }
+
+  private heroToShopSnapshot(u: Unit): ShopHeroSnapshot {
+    return {
+      id: u.id,
+      ouro: u.ouro,
+      maxHp: u.maxHp,
+      hp: u.hp,
+      maxMana: u.maxMana,
+      mana: u.mana,
+      regenVida: u.regenVida,
+      regenMana: u.regenMana,
+      dano: u.dano,
+      acertoCritico: u.acertoCritico,
+      danoCritico: u.danoCritico,
+      defesa: u.defesa,
+      movimento: u.movimento,
+      potencialCuraEscudo: u.potencialCuraEscudo,
+      artifacts: { ...u.artifacts },
+    };
+  }
+
+  private snapshotBunkersNow(): ShopBunkerSnapshot[] {
+    const out: ShopBunkerSnapshot[] = [];
+    for (const bi of COMBAT_BIOMES) {
+      const b = this.bunkers[bi];
+      if (!b) continue;
+      out.push({
+        biome: bi,
+        q: b.q,
+        r: b.r,
+        hp: b.hp,
+        maxHp: b.maxHp,
+        defesa: b.defesa,
+        tier: b.tier,
+        occupantId: b.occupantId,
+      });
+    }
+    return out;
+  }
+
+  private captureShopSnapshot(): void {
+    this.initialShopSessionTouched = false;
+    this.shopRestoreSnapshot = {
+      heroes: this.getParty().map((u) => this.heroToShopSnapshot(u)),
+      bunkers: this.snapshotBunkersNow(),
+    };
+  }
+
+  private applyShopSnapshot(): void {
+    const snap = this.shopRestoreSnapshot;
+    if (!snap) return;
+    for (const sh of snap.heroes) {
+      const u = this.units.find((x) => x.id === sh.id);
+      if (!u || !u.isPlayer) continue;
+      u.ouro = sh.ouro;
+      u.maxHp = sh.maxHp;
+      u.hp = sh.hp;
+      u.maxMana = sh.maxMana;
+      u.mana = sh.mana;
+      u.regenVida = sh.regenVida;
+      u.regenMana = sh.regenMana;
+      u.dano = sh.dano;
+      u.acertoCritico = sh.acertoCritico;
+      u.danoCritico = sh.danoCritico;
+      u.defesa = sh.defesa;
+      u.movimento = sh.movimento;
+      u.potencialCuraEscudo = sh.potencialCuraEscudo;
+      u.artifacts = { ...sh.artifacts };
+    }
+    for (const sb of snap.bunkers) {
+      this.bunkers[sb.biome] = {
+        q: sb.q,
+        r: sb.r,
+        hp: sb.hp,
+        maxHp: sb.maxHp,
+        defesa: sb.defesa,
+        tier: sb.tier,
+        occupantId: sb.occupantId,
+      };
+    }
   }
 
   /** Cristais: compra meta (fora de run) */
