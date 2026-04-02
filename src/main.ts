@@ -66,6 +66,7 @@ import {
   damageReductionPercentFromDefense,
   effectiveDefenseForBiome,
   effectiveAlcanceForBiome,
+  formatCombatFloatAmount,
   rulerMovementBonus,
   unitIgnoresTerrain,
 } from "./game/combatMath";
@@ -5073,8 +5074,9 @@ function spawnCombatFloat(
   const el = document.createElement("div");
   el.className = "combat-float";
   const poisonDot = ev.kind === "damage" && !!ev.poisonDot;
+  const amtStr = formatCombatFloatAmount(amount);
   const text =
-    ev.kind === "damage" && ev.crit && !poisonDot ? `${amount}!` : String(amount);
+    ev.kind === "damage" && ev.crit && !poisonDot ? `${amtStr}!` : amtStr;
   el.textContent = text;
   if (ev.kind === "damage") {
     if (poisonDot) {

@@ -14,6 +14,16 @@ export function roundToCombatDecimals(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Texto para números flutuantes no combate (floats DOM): no máximo 2 casas decimais,
+ * sem lixo de precisão IEEE (ex.: 12.300000000004).
+ */
+export function formatCombatFloatAmount(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  const r = roundToCombatDecimals(n);
+  return r.toFixed(2).replace(/\.?0+$/, "");
+}
+
 /** Acima de 100% não aumenta a probabilidade de crítico (excesso só serve a efeitos como Ronin). */
 export function rollCrit(chancePercent: number): boolean {
   const p = Math.min(100, Math.max(0, chancePercent));

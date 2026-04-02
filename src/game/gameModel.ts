@@ -838,8 +838,9 @@ export class GameModel {
   }
 
   private pushCombatFloat(ev: CombatFloatEvent): void {
-    if (ev.amount <= 0) return;
-    this.combatFloats.push(ev);
+    const amount = roundToCombatDecimals(ev.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    this.combatFloats.push({ ...ev, amount });
   }
 
   currentHero(): Unit | null {
