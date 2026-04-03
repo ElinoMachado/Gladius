@@ -22,7 +22,8 @@ export function enqueueCombatOutcome(
   id: string,
   fn: () => void,
 ): void {
-  if (queue.some((x) => x.id === id)) return;
+  const ix = queue.findIndex((x) => x.id === id);
+  if (ix >= 0) queue.splice(ix, 1);
   queue.push({ priority, id, fn });
   queue.sort((a, b) => a.priority - b.priority);
 }
