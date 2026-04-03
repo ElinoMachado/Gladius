@@ -1,8 +1,8 @@
 /**
  * Fila global de efeitos pós-combate que competem com o mesmo “momento” (ex.: fim de wave).
  * Ordem: primeiro esvazia-se `combatSchedule` (dano/VFX dos inimigos e projéteis); só depois
- * correm estes jobs, por prioridade crescente. Level-up / ultimate_pick interrompem o drain até
- * o jogador resolver (restante fica na fila).
+ * correm estes jobs, por prioridade crescente (`levelUpAfterCombat` antes de `waveClear`).
+ * Level-up / ultimate_pick interrompem o drain até o jogador resolver (restante fica na fila).
  */
 
 type OutcomeJob = { priority: number; id: string; fn: () => void };
@@ -11,7 +11,9 @@ const queue: OutcomeJob[] = [];
 
 /** Prioridades: menor número = corre primeiro (após schedule vazio). */
 export const combatOutcomePriority = {
-  /** Fecho de wave / resumo de loot (depois de dano e de level-up síncronos). */
+  /** Level-up pós-floats (antes do fecho de wave no mesmo tick). */
+  levelUpAfterCombat: 10,
+  /** Fecho de wave / resumo de loot. */
   waveClear: 20,
 } as const;
 

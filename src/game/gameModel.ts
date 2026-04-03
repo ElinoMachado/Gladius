@@ -113,7 +113,7 @@ import {
   FURACAO_ULT_TAIL_BUFFER_MS,
   GOLPE_RELAMPAGO_MOVE_MS,
   GOLPE_RELAMPAGO_WINDUP_MS,
-  POST_COMBAT_FLOAT_UI_DELAY_MS,
+  POST_COMBAT_FLOAT_LEVEL_UP_UI_DELAY_MS,
   POST_COMBAT_FLOAT_WAVE_STAGGER_AFTER_MS,
   PISOTEAR_FIRST_DAMAGE_MS,
   PISOTEAR_STAGGER_MS,
@@ -427,6 +427,8 @@ export class GameModel {
    */
   private killLevelUpFlushSuppressed = false;
   private pendingKillLevelUpFlushHeroIds = new Set<string>();
+  /** Heróis com XP de kill a processar após VFX + pausa (não bloqueia retorno síncrono do pick). */
+  private pendingCombatLevelUpHeroIds = new Set<string>();
   private waveCrystalsGained = 0;
   private waveXpGained = 0;
   private waveEssencesGained: Partial<Record<ForgeEssenceId, number>> = {};
@@ -632,6 +634,7 @@ export class GameModel {
     this.duelNextIsGladiatorStrike = true;
     this.killLevelUpFlushSuppressed = false;
     this.pendingKillLevelUpFlushHeroIds.clear();
+    this.pendingCombatLevelUpHeroIds.clear();
 
     this.pendingArtifacts = null;
     this.pendingUltimate = null;
@@ -900,6 +903,7 @@ export class GameModel {
     this.clearCombatSchedule();
     this.pendingCombatVfxQueue = [];
     clearCombatOutcomeQueue();
+    this.pendingCombatLevelUpHeroIds.clear();
     this.basicAttacksSpentThisTurn = 0;
     this.pendingSentencaPartyHeal = null;
     this.duelNextIsGladiatorStrike = true;
@@ -981,6 +985,7 @@ export class GameModel {
     this.clearCombatSchedule();
     this.pendingCombatVfxQueue = [];
     clearCombatOutcomeQueue();
+    this.pendingCombatLevelUpHeroIds.clear();
     this.pendingSentencaPartyHeal = null;
     this.duel = null;
     this.duelNextIsGladiatorStrike = true;
@@ -1794,7 +1799,8 @@ export class GameModel {
     this.currentHeroIndex = 0;
     if (this.enemies().every((x) => x.hp <= 0)) {
       const waveDelay =
-        POST_COMBAT_FLOAT_UI_DELAY_MS + POST_COMBAT_FLOAT_WAVE_STAGGER_AFTER_MS;
+        POST_COMBAT_FLOAT_LEVEL_UP_UI_DELAY_MS +
+        POST_COMBAT_FLOAT_WAVE_STAGGER_AFTER_MS;
       const runWaveClear = (): void => {
         if (this.hasLivingEnemies()) return;
         if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") {
@@ -4358,13 +4364,51 @@ export class GameModel {
     u.xp += gained;
   }
 
-  /** Sobe de nível após os números flutuantes de combate (evita menu a tapar o dano). */
+  /**
+   * Agenda level-up após a fila de combate esvaziar e uma pausa extra (cadeias de dano/VFX).
+   * `pickArtifact` / `pickUltimate` continuam a usar `checkLevelUp` imediato.
+   */
   private flushCombatLevelUp(hero: Unit): void {
     if (this.phase !== "combat" || !hero.isPlayer || hero.hp <= 0) return;
-    this.queueCombat(POST_COMBAT_FLOAT_UI_DELAY_MS, () => {
-      if (this.phase !== "combat" || !hero.isPlayer || hero.hp <= 0) return;
-      this.checkLevelUp(hero);
+    this.pendingCombatLevelUpHeroIds.add(hero.id);
+    enqueueCombatOutcome(
+      combatOutcomePriority.levelUpAfterCombat,
+      "level-up-after-combat",
+      () => this.processLevelUpAfterCombatOutcome(),
+    );
+  }
+
+  /** Espera `combatSchedule` vazio; depois aplica `POST_COMBAT_FLOAT_LEVEL_UP_UI_DELAY_MS` antes dos menus. */
+  private processLevelUpAfterCombatOutcome(): void {
+    if (this.phase !== "combat") return;
+    if (this.pendingCombatLevelUpHeroIds.size === 0) return;
+    if (this.hasPendingCombatSchedule()) {
+      enqueueCombatOutcome(
+        combatOutcomePriority.levelUpAfterCombat,
+        "level-up-after-combat",
+        () => this.processLevelUpAfterCombatOutcome(),
+      );
+      return;
+    }
+    this.queueCombat(POST_COMBAT_FLOAT_LEVEL_UP_UI_DELAY_MS, () => {
+      if (this.phase !== "combat") return;
+      this.pollPendingCombatLevelUp();
     });
+  }
+
+  /** Processa heróis pendentes por ordem da party até abrir pick ou esgotar fila. */
+  private pollPendingCombatLevelUp(): void {
+    if (this.phase !== "combat") return;
+    const orderedIds = this.partyOrder.filter((id) =>
+      this.pendingCombatLevelUpHeroIds.has(id),
+    );
+    for (const id of orderedIds) {
+      if (this.phase !== "combat") break;
+      if (!this.pendingCombatLevelUpHeroIds.has(id)) continue;
+      this.pendingCombatLevelUpHeroIds.delete(id);
+      const h = this.units.find((u) => u.id === id);
+      if (h && h.isPlayer && h.hp > 0) this.checkLevelUp(h);
+    }
   }
 
   checkLevelUp(u: Unit): void {
@@ -4594,6 +4638,7 @@ export class GameModel {
       if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
     }
     this.checkLevelUp(u);
+    this.pollPendingCombatLevelUp();
     if (this.phase === "combat") {
       this.tryResolveWaveClearAfterCombatResume(true);
     }
@@ -4616,6 +4661,7 @@ export class GameModel {
     this.pendingUltimate = null;
     this.phase = "combat";
     this.checkLevelUp(u);
+    this.pollPendingCombatLevelUp();
     if (this.phase === "combat") {
       this.tryResolveWaveClearAfterCombatResume(true);
     }

@@ -36,11 +36,16 @@ export const GOLPE_RELAMPAGO_MOVE_MS = 340;
 export const GOLPE_RELAMPAGO_WINDUP_MS = 240;
 
 /**
- * Após dano/cura em números flutuantes (CSS `.combat-float` ~0,92s + margem) antes de abrir level-up.
+ * Base alinhada a floats de combate (CSS `.combat-float` ~0,92s + margem).
  * Ver também `spawnCombatFloat` remove @ 950ms em main.ts.
  */
 export const POST_COMBAT_FLOAT_UI_DELAY_MS = 1050;
 /**
- * Fim de wave após o slot do level-up (ms a mais que o delay acima) para `checkLevelUp` correr primeiro.
+ * Depois de toda a fila de dano/VFX terminar: tempo extra antes de abrir level-up
+ * (cadeias tipo Golpe Relâmpago, artefatos multi-alvo).
+ */
+export const POST_COMBAT_FLOAT_LEVEL_UP_UI_DELAY_MS = 1750;
+/**
+ * Fim de wave após o slot do level-up (ms a mais) para o menu de nível abrir antes do resumo.
  */
 export const POST_COMBAT_FLOAT_WAVE_STAGGER_AFTER_MS = 80;
