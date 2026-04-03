@@ -14,16 +14,20 @@ function disposeObject3D(o: THREE.Object3D): void {
 }
 
 /**
- * Rotação Y do modelo para ficar de frente à câmara (eixo +Z → olhar para a origem).
- * Ajusta se o GLB vier com outra convenção (Blender/Mixamo).
+ * Rotação Y para a face principal virada à câmara (+Z).
+ * Capa: +90° costuma corrigir malha exportada “de perfil” (coluna estreita).
  */
 const PIECE_PREVIEW_YAW: Record<ForgeSlotKind, number> = {
   helmo: -Math.PI / 2,
-  capa: Math.PI,
+  capa: Math.PI / 2,
   manoplas: -Math.PI / 2,
 };
 
-const FIT_MARGIN = 1.18;
+const FIT_MARGIN_BY_KIND: Record<ForgeSlotKind, number> = {
+  helmo: 1.52,
+  capa: 1.58,
+  manoplas: 1.52,
+};
 
 /** Centra a AABB do objeto na origem do pai (correcto com rotação no filho). */
 function centerObjectOnOrigin(object: THREE.Object3D): void {
@@ -42,7 +46,8 @@ function centerObjectOnOrigin(object: THREE.Object3D): void {
 }
 
 /**
- * Câmara em +Z a olhar para a origem, distância para caber altura e largura do objeto.
+ * Câmara em +Z a olhar para a origem.
+ * Usa altura, largura e meia-diagonal da AABB para não cortar cantos no canvas quadrado/largo.
  */
 function fitCameraToObject(
   camera: THREE.PerspectiveCamera,
@@ -60,13 +65,19 @@ function fitCameraToObject(
 
   const distV = ((size.y / 2) * margin) / Math.tan(vFov / 2);
   const distH = ((size.x / 2) * margin) / Math.tan(hFov / 2);
-  const dist = Math.max(distV, distH, 0.22);
+  const halfDiag =
+    0.5 * Math.sqrt(size.x * size.x + size.y * size.y + size.z * size.z);
+  const distDiagV = (halfDiag * margin) / Math.tan(vFov / 2);
+  const distDiagH = (halfDiag * margin) / Math.tan(hFov / 2);
+  const distDiag = Math.max(distDiagV, distDiagH);
 
-  const elev = Math.min(size.y * 0.06, 0.14);
+  const dist = Math.max(distV, distH, distDiag, 0.32);
+
+  const elev = Math.min(size.y * 0.04, 0.1);
   camera.position.set(0, elev, dist);
-  camera.lookAt(0, size.y * 0.02, 0);
-  camera.near = Math.max(0.015, dist * 0.015);
-  camera.far = Math.max(48, dist * 5);
+  camera.lookAt(0, 0, 0);
+  camera.near = Math.max(0.012, dist * 0.012);
+  camera.far = Math.max(56, dist * 6);
   camera.updateProjectionMatrix();
 }
 
@@ -83,6 +94,7 @@ export class ForgePiecePreview3D {
   /** Luz pontual pulsante (cor do tier) para realçar bronze/prata/ouro. */
   private tierGlow: THREE.PointLight | null = null;
   private tierGlowBase = 0.9;
+  private previewKind: ForgeSlotKind = "helmo";
 
   constructor(host: HTMLElement) {
     this.host = host;
@@ -94,7 +106,7 @@ export class ForgePiecePreview3D {
     this.renderer.setClearColor(0x000000, 0);
     host.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(38, 1, 0.05, 64);
+    this.camera = new THREE.PerspectiveCamera(40, 1, 0.05, 64);
     this.camera.position.set(0, 0.08, 1.35);
     this.camera.lookAt(0, 0, 0);
 
@@ -118,6 +130,7 @@ export class ForgePiecePreview3D {
     biome: ForgeEssenceId | null,
     level: 1 | 2 | 3,
   ): void {
+    this.previewKind = kind;
     this.pivot.rotation.set(0, 0, 0);
     if (this.tierGlow) {
       this.scene.remove(this.tierGlow);
@@ -160,7 +173,11 @@ export class ForgePiecePreview3D {
       return;
     }
     this.pivot.updateMatrixWorld(true);
-    fitCameraToObject(this.camera, this.pivot, FIT_MARGIN);
+    fitCameraToObject(
+      this.camera,
+      this.pivot,
+      FIT_MARGIN_BY_KIND[this.previewKind],
+    );
   }
 
   private fit(): void {
