@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { cloneGladiadorBodyFromGlb } from "./gladiatorGlb";
 import { buildEnemyBody3D } from "./enemyModels3d";
 import { forgeVisualKey, resolveEquippedForgeLoadout } from "../game/forge";
 import type { ForgeEssenceId, ForgeHeroLoadout, HeroClassId } from "../game/types";
@@ -304,6 +305,16 @@ export function buildHeroBody(
   }
 
   if (heroClass === "gladiador") {
+    const glb = cloneGladiadorBodyFromGlb(accent);
+    if (glb) {
+      root.add(glb);
+      addForgeMeshes(root, heroClass, forgeLoadout, stdMat);
+      if (forma?.formaFinal && forma.ultimateId) {
+        applyFormaFinalAugment(root, heroClass, forma.ultimateId, accent, stdMat);
+      }
+      return root;
+    }
+
     const forgeResolved = resolveEquippedForgeLoadout(forgeLoadout ?? {});
     const hideHeadAdorn = !!forgeResolved.helmo;
 

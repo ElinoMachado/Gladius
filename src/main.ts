@@ -9,6 +9,7 @@ import {
   type CombatVfxHint,
 } from "./game/gameModel";
 import { GameRenderer } from "./render/GameRenderer";
+import { preloadGladiadorGlb } from "./render/gladiatorGlb";
 import { HeroPreview3D } from "./render/HeroPreview3D";
 import { MainMenuSword3D } from "./render/MainMenuSword3D";
 import { BiomePicker3D } from "./render/BiomePicker3D";
@@ -250,6 +251,10 @@ const model = new GameModel();
 const view = new GameRenderer(canvas);
 
 view.buildHexGrid(model.grid);
+
+preloadGladiadorGlb().then((ok) => {
+  if (ok) render();
+});
 
 type Setup = {
   /** Três slots; `null` = vazio. */
