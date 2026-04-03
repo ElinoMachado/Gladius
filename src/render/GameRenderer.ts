@@ -3935,8 +3935,6 @@ export class GameRenderer {
       "KeyE",
       "KeyX",
       "KeyZ",
-      "ShiftLeft",
-      "ShiftRight",
     ]) {
       this.keysDown.delete(c);
     }
@@ -3973,12 +3971,9 @@ export class GameRenderer {
       const iz =
         (this.keysDown.has("KeyS") ? 1 : 0) -
         (this.keysDown.has("KeyW") ? 1 : 0);
-      const shift =
-        this.keysDown.has("ShiftLeft") || this.keysDown.has("ShiftRight");
       const iy =
-        (this.keysDown.has("KeyX") ? 1 : 0) * (shift ? -1 : 1);
-      const izDepth =
-        (this.keysDown.has("KeyZ") ? 1 : 0) * (shift ? -1 : 1);
+        (this.keysDown.has("KeyX") ? 1 : 0) -
+        (this.keysDown.has("KeyZ") ? 1 : 0);
       let moved = false;
       if (ix !== 0 || iz !== 0) {
         this.editorScratchVec3.set(ix * sp, 0, iz * sp);
@@ -3989,28 +3984,19 @@ export class GameRenderer {
         this.arenaColiseumMount.position.y += iy * sp;
         moved = true;
       }
-      if (izDepth !== 0) {
-        this.editorScratchVec3.set(0, 0, izDepth * sp);
-        this.applyWorldDeltaToColiseumMountXZ(this.editorScratchVec3);
-        moved = true;
-      }
       if (moved) this.scheduleArenaLayoutPersist();
     } else if (this.layoutSubMode === "camera") {
       const sp = 34 * dt;
       const spY = 28 * dt;
-      const spZ = 28 * dt;
       const iw =
         (this.keysDown.has("KeyW") ? 1 : 0) -
         (this.keysDown.has("KeyS") ? 1 : 0);
       const id =
         (this.keysDown.has("KeyD") ? 1 : 0) -
         (this.keysDown.has("KeyA") ? 1 : 0);
-      const shift =
-        this.keysDown.has("ShiftLeft") || this.keysDown.has("ShiftRight");
-      const ixCam =
-        (this.keysDown.has("KeyX") ? 1 : 0) * (shift ? -1 : 1);
-      const izCam =
-        (this.keysDown.has("KeyZ") ? 1 : 0) * (shift ? -1 : 1);
+      const iyCam =
+        (this.keysDown.has("KeyX") ? 1 : 0) -
+        (this.keysDown.has("KeyZ") ? 1 : 0);
       const rot = 1.15 * dt;
       let moved = false;
       if (iw !== 0 || id !== 0) {
@@ -4029,12 +4015,8 @@ export class GameRenderer {
         this.orbitTarget.addScaledVector(right, id * sp);
         moved = true;
       }
-      if (ixCam !== 0) {
-        this.orbitTarget.y += ixCam * spY;
-        moved = true;
-      }
-      if (izCam !== 0) {
-        this.orbitTarget.z += izCam * spZ;
+      if (iyCam !== 0) {
+        this.orbitTarget.y += iyCam * spY;
         moved = true;
       }
       if (this.keysDown.has("KeyQ")) {
@@ -4063,8 +4045,6 @@ export class GameRenderer {
       "KeyX",
       "KeyZ",
     ]);
-    const layoutShiftCodes = new Set(["ShiftLeft", "ShiftRight"]);
-
     window.addEventListener("keydown", (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
       if (this.arenaLayoutEditActive && e.code === "Escape" && !e.repeat) {
@@ -4083,11 +4063,6 @@ export class GameRenderer {
         }
         return;
       }
-      if (layoutShiftCodes.has(e.code)) {
-        e.preventDefault();
-        this.keysDown.add(e.code);
-        return;
-      }
       if (layoutKeys.has(e.code)) {
         e.preventDefault();
         this.keysDown.add(e.code);
@@ -4095,7 +4070,6 @@ export class GameRenderer {
     });
     window.addEventListener("keyup", (e: KeyboardEvent) => {
       if (!this.arenaLayoutEditActive) return;
-      if (layoutShiftCodes.has(e.code)) this.keysDown.delete(e.code);
       if (layoutKeys.has(e.code)) this.keysDown.delete(e.code);
     });
 
