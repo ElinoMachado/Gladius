@@ -4094,6 +4094,29 @@ body.enemy-inspect--dragging-body {
   margin: 0.85rem 0 0;
 }
 
+.artifact-pick-actions--split {
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.artifact-pick-ban-btn--active {
+  border-color: rgba(220, 80, 80, 0.85) !important;
+  color: #ffb4b4;
+  box-shadow:
+    0 0 0 1px rgba(180, 40, 40, 0.35) inset,
+    0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.artifact-pick-card--ban-hover {
+  border-color: rgba(220, 60, 60, 0.95) !important;
+  box-shadow:
+    0 0 0 2px rgba(200, 50, 50, 0.55),
+    0 0 18px rgba(180, 30, 30, 0.45) !important;
+  transform: translateY(-1px);
+}
+
 .artifact-pick-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
@@ -4124,7 +4147,7 @@ body.enemy-inspect--dragging-body {
     box-shadow 0.15s ease;
 }
 
-.artifact-pick-card:hover {
+.artifact-pick-card:hover:not(.artifact-pick-card--ban-hover) {
   border-color: rgba(232, 200, 90, 0.75);
   transform: translateY(-2px);
   box-shadow:

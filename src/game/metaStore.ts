@@ -149,6 +149,8 @@ export const defaultMeta = (): MetaProgress => ({
   permGold: 0,
   permCrystalDrop: 0,
   initialCards: 0,
+  artifactRerollBonus: 0,
+  artifactBanBonus: 0,
   essences: starterEssencesMap(),
   forgeGlobalProgress: {},
   forgeByHeroSlot: [emptyForgeSlot(), emptyForgeSlot(), emptyForgeSlot()],
@@ -167,12 +169,25 @@ function applyTestForgeEssences(
   return out;
 }
 
+function clampMeta03(n: unknown): number {
+  const x =
+    typeof n === "number"
+      ? n
+      : typeof n === "string"
+        ? Number(n)
+        : NaN;
+  if (!Number.isFinite(x)) return 0;
+  return Math.max(0, Math.min(3, Math.floor(x)));
+}
+
 function buildMetaFromMainBlob(raw: string): MetaProgress {
   const o = JSON.parse(raw) as MetaProgress;
   const d = defaultMeta();
   return {
     ...d,
     ...o,
+    artifactRerollBonus: clampMeta03(o.artifactRerollBonus),
+    artifactBanBonus: clampMeta03(o.artifactBanBonus),
     essences: mergeEssencesFromSave(o.essences, d.essences),
     forgeGlobalProgress: sanitizeForgeGlobalProgress(
       o.forgeGlobalProgress ?? d.forgeGlobalProgress,

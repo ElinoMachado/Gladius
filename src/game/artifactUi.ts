@@ -99,11 +99,12 @@ export function randomArtifactChoicesForHero(
   count: number,
   sorte: number,
   exclude: Set<string> = new Set(),
-  opts?: { bypassRarityCaps?: boolean },
+  opts?: { bypassRarityCaps?: boolean; bannedIds?: Set<string> },
 ): string[] {
   const out: string[] = [];
   const picked = new Set(exclude);
   const bypass = opts?.bypassRarityCaps ?? false;
+  const banned = opts?.bannedIds;
 
   const tryPickOne = (): string | null => {
     const primary = rollArtifactRarity(sorte);
@@ -116,6 +117,7 @@ export function randomArtifactChoicesForHero(
         (a) =>
           a.rarity === tr &&
           !picked.has(a.id) &&
+          !(banned?.has(a.id)) &&
           canIncrementArtifactStack(u, a.id, { bypassRarityCaps: bypass }),
       );
       if (pool.length > 0) {
@@ -151,6 +153,17 @@ export function randomArtifactChoicesForHero(
     break;
   }
   return out;
+}
+
+/** Uma carta aleatória (ou null se o pool estiver esgotado com os excludes/bans atuais). */
+export function randomOneArtifactChoice(
+  u: Unit,
+  sorte: number,
+  exclude: Set<string>,
+  opts?: { bypassRarityCaps?: boolean; bannedIds?: Set<string> },
+): string | null {
+  const arr = randomArtifactChoicesForHero(u, 1, sorte, exclude, opts);
+  return arr[0] ?? null;
 }
 
 function defOr(id: string): ArtifactDef | undefined {

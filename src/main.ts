@@ -116,6 +116,10 @@ import type {
   ForgeSlotKind,
 } from "./game/types";
 import {
+  ARTIFACT_PICK_PAID_CHARGES_MAX,
+  ARTIFACT_PICK_PAID_CRYSTAL_COST,
+} from "./game/types";
+import {
   bleedInstanceCount,
   dotTickConsumeCount,
   hotInstanceCount,
@@ -2117,6 +2121,38 @@ function showCrystalShop(): void {
   grid.appendChild(icDiv);
   icDiv.querySelector("#btn-ic")!.addEventListener("click", () => {
     if (model.buyInitialCards()) render();
+  });
+
+  const rrBonus = m.artifactRerollBonus;
+  const rrBonusCost = model.nextArtifactRerollBonusCost();
+  const rrBonusCanBuy = rrBonusCost != null && m.crystals >= rrBonusCost;
+  const rrBonusBtn = rrBonusCost != null ? `${rrBonusCost} 💎` : "—";
+  const rrBonusAria =
+    rrBonusCost != null
+      ? `Comprar +1 rerol gratuito por escolha por ${rrBonusCost} cristais`
+      : "Número máximo de compras";
+  const rrDiv = el(
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">+1 rerol gratuito por escolha de artefatos (level-up): ${rrBonus}/3 compras${rrBonusCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-artifact-rr-bonus" ${!rrBonusCanBuy ? "disabled" : ""} aria-label="${escapeHtml(rrBonusAria)}">${rrBonusBtn}</button></div>`,
+  );
+  grid.appendChild(rrDiv);
+  rrDiv.querySelector("#btn-artifact-rr-bonus")!.addEventListener("click", () => {
+    if (model.buyArtifactRerollBonus()) render();
+  });
+
+  const banBonus = m.artifactBanBonus;
+  const banBonusCost = model.nextArtifactBanBonusCost();
+  const banBonusCanBuy = banBonusCost != null && m.crystals >= banBonusCost;
+  const banBonusBtn = banBonusCost != null ? `${banBonusCost} 💎` : "—";
+  const banBonusAria =
+    banBonusCost != null
+      ? `Comprar +1 banimento gratuito por escolha por ${banBonusCost} cristais`
+      : "Número máximo de compras";
+  const banDiv = el(
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">+1 banimento gratuito por escolha de artefatos: ${banBonus}/3 compras${banBonusCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-artifact-ban-bonus" ${!banBonusCanBuy ? "disabled" : ""} aria-label="${escapeHtml(banBonusAria)}">${banBonusBtn}</button></div>`,
+  );
+  grid.appendChild(banDiv);
+  banDiv.querySelector("#btn-artifact-ban-bonus")!.addEventListener("click", () => {
+    if (model.buyArtifactBanBonus()) render();
   });
 
   for (let slot = 0; slot < 3; slot++) {
@@ -7450,20 +7486,47 @@ function showLevelPick(): void {
   const heroLine = hero
     ? escapeHtml(hero.name)
     : "Herói";
+  const rerollFree = p.rerollsFreeLeft > 0;
+  const rerollDisabled =
+    !rerollFree &&
+    !(
+      p.rerollsPaidUsed < ARTIFACT_PICK_PAID_CHARGES_MAX &&
+      model.crystalsRun >= ARTIFACT_PICK_PAID_CRYSTAL_COST
+    );
+  let rerollLabel = "";
+  if (rerollFree) {
+    rerollLabel =
+      p.rerollsFreeLeft === 1
+        ? "Rerol (1 grátis)"
+        : `Rerol (${p.rerollsFreeLeft} grátis)`;
+  } else if (
+    p.rerollsPaidUsed < ARTIFACT_PICK_PAID_CHARGES_MAX &&
+    model.crystalsRun >= ARTIFACT_PICK_PAID_CRYSTAL_COST
+  ) {
+    rerollLabel = `Rerol (${ARTIFACT_PICK_PAID_CRYSTAL_COST} cristais)`;
+  } else if (p.rerollsPaidUsed >= ARTIFACT_PICK_PAID_CHARGES_MAX) {
+    rerollLabel = "Rerol esgotado";
+  } else {
+    rerollLabel = `Rerol (${ARTIFACT_PICK_PAID_CRYSTAL_COST} cristais — faltam)`;
+  }
+  const banBtnActive = p.banMode ? " artifact-pick-ban-btn--active" : "";
   const s = el(`<div class="modal modal--crystal"><div class="modal-inner modal-inner--artifact-pick">
     <h2 class="crystal-modal-title">Escolha um artefato — ${heroLine}</h2>
-    <p class="artifact-pick-hint">Passe o rato sobre a carta para ver o próximo nível.</p>
+    <p class="artifact-pick-hint">Passe o rato sobre a carta para ver o próximo nível. Ative <strong>Banir</strong>, paira num artefato (fica vermelho) e clica para retirá-lo da run.</p>
     <div id="opts" class="artifact-pick-grid"></div>
-    <div class="artifact-pick-actions">
-      <button type="button" class="btn" id="btn-artifact-reroll">Rerol (1)</button>
+    <div class="artifact-pick-actions artifact-pick-actions--split">
+      <button type="button" class="btn artifact-pick-ban-btn${banBtnActive}" id="btn-artifact-ban-mode" aria-pressed="${p.banMode ? "true" : "false"}">${p.banMode ? "Banir (ativo)" : "Banir"}</button>
+      <button type="button" class="btn" id="btn-artifact-reroll" ${rerollDisabled ? "disabled" : ""}>${rerollLabel}</button>
     </div>
   </div></div>`);
   uiRoot.appendChild(s);
+  const btnBan = s.querySelector("#btn-artifact-ban-mode") as HTMLButtonElement;
+  btnBan.addEventListener("click", () => {
+    model.toggleArtifactPickBanMode();
+    render();
+  });
   const btnReroll = s.querySelector("#btn-artifact-reroll") as HTMLButtonElement;
-  if (p.rerollsLeft <= 0) {
-    btnReroll.disabled = true;
-    btnReroll.textContent = "Rerol usado";
-  } else {
+  if (!rerollDisabled) {
     btnReroll.addEventListener("click", () => {
       model.rerollArtifactPick();
       render();
@@ -7496,7 +7559,21 @@ function showLevelPick(): void {
     if (hero) {
       bindGameTooltip(b, () => artifactPickChoiceTooltip(id, hero));
     }
+    const canBanHover = p.banMode && !id.startsWith("_pick");
+    if (canBanHover) {
+      b.addEventListener("mouseenter", () => {
+        b.classList.add("artifact-pick-card--ban-hover");
+      });
+      b.addEventListener("mouseleave", () => {
+        b.classList.remove("artifact-pick-card--ban-hover");
+      });
+    }
     b.addEventListener("click", () => {
+      if (p.banMode && !id.startsWith("_pick")) {
+        model.banArtifactFromPick(id);
+        render();
+        return;
+      }
       model.pickArtifact(id);
       render();
     });

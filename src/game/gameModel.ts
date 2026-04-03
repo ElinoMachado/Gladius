@@ -9,6 +9,12 @@ import type {
   Unit,
   WeaponLevel,
 } from "./types";
+import {
+  ARTIFACT_BAN_BONUS_COSTS,
+  ARTIFACT_PICK_PAID_CHARGES_MAX,
+  ARTIFACT_PICK_PAID_CRYSTAL_COST,
+  ARTIFACT_REROLL_BONUS_COSTS,
+} from "./types";
 import { buildHexArena, getCell, type HexCell } from "./grid";
 import { findPath, reachableHexes } from "./pathfinding";
 import { getSkipEnemyMoveAnim } from "./combatPrefs";
@@ -385,9 +391,15 @@ export class GameModel {
     choices: string[];
     /** Mesmo número de cartas que no primeiro sorteio (para rerol). */
     choiceCount: number;
-    /** 1 rerol gratuito por level-up; 0 após usar. */
-    rerollsLeft: number;
+    rerollsFreeLeft: number;
+    rerollsPaidUsed: number;
+    bansFreeLeft: number;
+    bansPaidUsed: number;
+    /** Modo banir: clique na carta remove-a da pool da run. */
+    banMode: boolean;
   } | null = null;
+  /** IDs de artefatos banidos pelo jogador nesta run (não voltam a aparecer nas escolhas). */
+  private artifactBannedThisRun = new Set<string>();
   pendingUltimate: { unitId: string } | null = null;
   duel: { gladiatorId: string; enemyId: string } | null = null;
   selectedUnitId: string | null = null;
@@ -675,6 +687,7 @@ export class GameModel {
     this.pendingWaveSummaryNext = null;
     this.waveXpGained = 0;
     this.runPlaySessionPerfMsStart = null;
+    this.artifactBannedThisRun.clear();
 
     this.playerTurnJustStarted = false;
     this.inEnemyPhase = false;
@@ -1050,6 +1063,7 @@ export class GameModel {
     this.units = [];
     this.wave = 0;
     this.metaEssencesAtRunStart = { ...this.meta.essences };
+    this.artifactBannedThisRun.clear();
     this.crystalsRun = 0;
     this.waveCrystalsGained = 0;
     this.waveEssencesGained = {};
@@ -4857,41 +4871,161 @@ export class GameModel {
     const nArt = 3 + this.meta.initialCards;
     const choices = randomArtifactChoicesForHero(u, nArt, sorteEff, new Set(), {
       bypassRarityCaps: this.devSandboxMode,
+      bannedIds: this.artifactBannedThisRun,
     });
     if (choices.length === 0) {
       this.log(`${u.name}: sem cartas de level-up disponíveis.`);
     } else {
+      const freeRerolls = 1 + this.meta.artifactRerollBonus;
+      const freeBans = this.meta.artifactBanBonus;
       this.pendingArtifacts = {
         unitId: u.id,
         choices,
         choiceCount: nArt,
-        rerollsLeft: 1,
+        rerollsFreeLeft: freeRerolls,
+        rerollsPaidUsed: 0,
+        bansFreeLeft: freeBans,
+        bansPaidUsed: 0,
+        banMode: false,
       };
       this.phase = "level_up_pick";
     }
     this.emit();
   }
 
-  /** Um rerol por level-up: novo lote com o mesmo número de cartas. */
+  /** Novo lote com o mesmo número de cartas (grátis meta + 1 base; depois até 3×2 cristais da run). */
   rerollArtifactPick(): void {
     const pa = this.pendingArtifacts;
-    if (!pa || pa.rerollsLeft <= 0) return;
+    if (!pa) return;
     const u = this.units.find((x) => x.id === pa.unitId);
     if (!u) return;
     const sorteEff = this.effectiveSorte(u);
     const choices = randomArtifactChoicesForHero(u, pa.choiceCount, sorteEff, new Set(), {
       bypassRarityCaps: this.devSandboxMode,
+      bannedIds: this.artifactBannedThisRun,
     });
     if (choices.length === 0) {
       this.log(`${u.name}: sem cartas de reroll disponíveis.`);
       return;
     }
+    if (pa.rerollsFreeLeft > 0) {
+      pa.rerollsFreeLeft--;
+    } else if (
+      pa.rerollsPaidUsed < ARTIFACT_PICK_PAID_CHARGES_MAX &&
+      this.crystalsRun >= ARTIFACT_PICK_PAID_CRYSTAL_COST
+    ) {
+      this.crystalsRun -= ARTIFACT_PICK_PAID_CRYSTAL_COST;
+      pa.rerollsPaidUsed++;
+    } else {
+      this.log(`${u.name}: sem rerolls disponíveis.`);
+      return;
+    }
     this.pendingArtifacts = {
       ...pa,
       choices,
-      rerollsLeft: 0,
     };
     this.emit();
+  }
+
+  toggleArtifactPickBanMode(): void {
+    const pa = this.pendingArtifacts;
+    if (!pa) return;
+    pa.banMode = !pa.banMode;
+    this.emit();
+  }
+
+  /**
+   * Remove um artefato da pool da run e substitui a carta por outra sorteada.
+   * Ofertas especiais (_pick_*) não podem ser banidas.
+   */
+  banArtifactFromPick(artifactId: string): boolean {
+    const pa = this.pendingArtifacts;
+    if (!pa) return false;
+    if (artifactId.startsWith("_pick")) {
+      this.log("Ofertas especiais não podem ser banidas.");
+      return false;
+    }
+    const u = this.units.find((x) => x.id === pa.unitId);
+    if (!u) return false;
+    const ix = pa.choices.indexOf(artifactId);
+    if (ix < 0) return false;
+
+    const testBanned = new Set(this.artifactBannedThisRun);
+    testBanned.add(artifactId);
+    const keep = pa.choices.filter((x) => x !== artifactId);
+    const need = pa.choiceCount - keep.length;
+    const sorteEff = this.effectiveSorte(u);
+    const opts = {
+      bypassRarityCaps: this.devSandboxMode,
+      bannedIds: testBanned,
+    };
+    const extra = randomArtifactChoicesForHero(
+      u,
+      need,
+      sorteEff,
+      new Set(keep),
+      opts,
+    );
+    if (extra.length < need) {
+      this.log(
+        `${u.name}: não há cartas de substituição — não foi possível banir.`,
+      );
+      return false;
+    }
+
+    if (pa.bansFreeLeft > 0) {
+      pa.bansFreeLeft--;
+    } else if (
+      pa.bansPaidUsed < ARTIFACT_PICK_PAID_CHARGES_MAX &&
+      this.crystalsRun >= ARTIFACT_PICK_PAID_CRYSTAL_COST
+    ) {
+      this.crystalsRun -= ARTIFACT_PICK_PAID_CRYSTAL_COST;
+      pa.bansPaidUsed++;
+    } else {
+      this.log(`${u.name}: sem banimentos disponíveis.`);
+      return false;
+    }
+
+    this.artifactBannedThisRun.add(artifactId);
+    pa.choices = [...keep, ...extra];
+    const def = artifactDefById(artifactId);
+    this.log(`${u.name}: ${def?.name ?? artifactId} banido nesta run.`);
+    this.emit();
+    return true;
+  }
+
+  nextArtifactRerollBonusCost(): number | null {
+    const cur = this.meta.artifactRerollBonus;
+    if (cur >= 3) return null;
+    return ARTIFACT_REROLL_BONUS_COSTS[cur]!;
+  }
+
+  buyArtifactRerollBonus(): boolean {
+    const cur = this.meta.artifactRerollBonus;
+    if (cur >= 3) return false;
+    const cost = ARTIFACT_REROLL_BONUS_COSTS[cur];
+    if (cost === undefined || this.meta.crystals < cost) return false;
+    this.meta.crystals -= cost;
+    this.meta.artifactRerollBonus = cur + 1;
+    this.saveMeta();
+    return true;
+  }
+
+  nextArtifactBanBonusCost(): number | null {
+    const cur = this.meta.artifactBanBonus;
+    if (cur >= 3) return null;
+    return ARTIFACT_BAN_BONUS_COSTS[cur]!;
+  }
+
+  buyArtifactBanBonus(): boolean {
+    const cur = this.meta.artifactBanBonus;
+    if (cur >= 3) return false;
+    const cost = ARTIFACT_BAN_BONUS_COSTS[cur];
+    if (cost === undefined || this.meta.crystals < cost) return false;
+    this.meta.crystals -= cost;
+    this.meta.artifactBanBonus = cur + 1;
+    this.saveMeta();
+    return true;
   }
 
   private applyPickBonusPerStack(

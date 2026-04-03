@@ -258,6 +258,10 @@ export interface MetaProgress {
   permCrystalDrop: number;
   /** 0-3 cartas iniciais extra */
   initialCards: number;
+  /** 0–3: +N rerols gratuitos em cada escolha de artefato ao subir de nível. */
+  artifactRerollBonus: number;
+  /** 0–3: +N banimentos gratuitos por escolha de artefato ao subir de nível. */
+  artifactBanBonus: number;
   /** Essências por bioma (permanente, drop em combate). */
   essences: Partial<Record<ForgeEssenceId, number>>;
   /** Níveis forjados por tipo + bioma (globais; não duplicar por slot). */
@@ -270,3 +274,12 @@ export interface MetaProgress {
 
 export const META_COSTS = [1, 2, 4, 6, 9] as const;
 export const INITIAL_CARD_COSTS = [2, 5, 9] as const;
+
+/** Loja de cristais: +1 rerol gratuito por escolha de level-up (máx. 3 compras). */
+export const ARTIFACT_REROLL_BONUS_COSTS = [2, 5, 9] as const;
+/** Loja de cristais: +1 banimento gratuito por escolha de level-up (máx. 3 compras). */
+export const ARTIFACT_BAN_BONUS_COSTS = [2, 5, 9] as const;
+
+/** Após rerols/banimentos gratuitos: até 3 usos pagos por ecrã, 2 cristais da run cada. */
+export const ARTIFACT_PICK_PAID_CHARGES_MAX = 3;
+export const ARTIFACT_PICK_PAID_CRYSTAL_COST = 2;
