@@ -304,6 +304,8 @@ export class GameRenderer {
   private layoutSubMode: "coliseum" | "camera" = "coliseum";
   /** Em combate/menu: usar `freeCamera` em vez da ortográfica (exceto durante cometa). */
   private usePersistentFreeCamera = false;
+  /** No combate usa-se sempre a ortográfica (pan/WASD) mesmo com câmara guardada na cena. */
+  private combatUsesOrthographicView = false;
   /** Se o jogador entrou no modo câmara ou alterou zoom/rotação; senão só gravamos o coliseu. */
   private arenaLayoutCameraPersonalized = false;
   private readonly orbitTarget = new THREE.Vector3(0, 0, 0);
@@ -398,8 +400,9 @@ export class GameRenderer {
   /** Câmara usada para render e picking no ecrã atual. */
   private getRenderCamera(): THREE.Camera {
     if (this.cometaArcanoCinematic) return this.camera;
-    if (this.arenaLayoutEditActive || this.usePersistentFreeCamera)
-      return this.freeCamera;
+    if (this.arenaLayoutEditActive) return this.freeCamera;
+    if (this.combatUsesOrthographicView) return this.camera;
+    if (this.usePersistentFreeCamera) return this.freeCamera;
     return this.camera;
   }
 
@@ -414,7 +417,13 @@ export class GameRenderer {
 
   /** Se true, a câmara guardada (perspetiva) está ativa no jogo; pan/zoom de combate ficam desligados. */
   usesCustomSceneCamera(): boolean {
+    if (this.combatUsesOrthographicView) return false;
     return this.usePersistentFreeCamera;
+  }
+
+  /** Chamado a partir do `render()` do jogo: em combate força vista ortográfica e controlos de câmara. */
+  setCombatUsesOrthographicView(active: boolean): void {
+    this.combatUsesOrthographicView = active;
   }
 
   /** Se o último gesto foi arrastar a câmera, o combate deve ignorar o `click` seguinte. */
@@ -429,7 +438,11 @@ export class GameRenderer {
    * @param alignArena — se true, roda a arena para alinhar o bioma desse hex à câmera (ex.: herói).
    */
   focusOnAxial(q: number, r: number, alignArena = false): void {
-    if (this.usePersistentFreeCamera && !this.arenaLayoutEditActive) {
+    if (
+      this.usePersistentFreeCamera &&
+      !this.arenaLayoutEditActive &&
+      !this.combatUsesOrthographicView
+    ) {
       if (alignArena) this.setArenaYawFromAxial(q, r);
       return;
     }
@@ -440,7 +453,11 @@ export class GameRenderer {
 
   /** Centraliza na hora (sem lerp), ex.: início do turno do jogador; alinha bioma ao herói. */
   snapCameraToAxial(q: number, r: number): void {
-    if (this.usePersistentFreeCamera && !this.arenaLayoutEditActive) {
+    if (
+      this.usePersistentFreeCamera &&
+      !this.arenaLayoutEditActive &&
+      !this.combatUsesOrthographicView
+    ) {
       this.setArenaYawFromAxial(q, r);
       return;
     }
@@ -1989,7 +2006,12 @@ export class GameRenderer {
   }
 
   private updateFocusLerp(dt: number): void {
-    if (this.usePersistentFreeCamera && !this.arenaLayoutEditActive) return;
+    if (
+      this.usePersistentFreeCamera &&
+      !this.arenaLayoutEditActive &&
+      !this.combatUsesOrthographicView
+    )
+      return;
     if (!this.focusTarget || !this.cameraInputEnabled) return;
     if (this.panDragMoved) return;
     if (this.keysDown.size > 0) {
@@ -2010,7 +2032,12 @@ export class GameRenderer {
   }
 
   private updateCameraPan(dt: number): void {
-    if (this.usePersistentFreeCamera && !this.arenaLayoutEditActive) return;
+    if (
+      this.usePersistentFreeCamera &&
+      !this.arenaLayoutEditActive &&
+      !this.combatUsesOrthographicView
+    )
+      return;
     if (!this.cameraInputEnabled || !this.domCanvas) return;
 
     /** Câmera alinhada ao pan atual para o raycast bater com o frame visível. */
@@ -2452,8 +2479,13 @@ export class GameRenderer {
       transparent: true,
       opacity,
       depthWrite: false,
+      depthTest: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -10,
+      polygonOffsetUnits: -10,
     });
     const group = new THREE.Group();
+    group.renderOrder = 2;
     for (const k of keys) {
       const geo = new THREE.ShapeGeometry(shape);
       geo.rotateX(-Math.PI / 2);
@@ -3694,7 +3726,8 @@ export class GameRenderer {
     /** Durante arrasto com o rato, não aplicar clamp aqui: o `pointermove` já mexe no pan e o clamp puxava de volta → sacudidela. */
     const draggingCameraPan = this.panPointerDown && this.panDragMoved;
     const freeRig =
-      this.usePersistentFreeCamera || this.arenaLayoutEditActive;
+      this.arenaLayoutEditActive ||
+      (this.usePersistentFreeCamera && !this.combatUsesOrthographicView);
     if (!draggingCameraPan && !cometOn && !freeRig) {
       this.clampPanIntoColiseum();
       this.applyCameraPose();

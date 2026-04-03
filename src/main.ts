@@ -7935,6 +7935,7 @@ function render(): void {
   );
   applyCombatOverlays();
   view.setArenaLayoutEditEligible(model.phase === "main_menu");
+  view.setCombatUsesOrthographicView(model.phase === "combat");
   view.setCameraInputEnabled(
     model.phase === "combat" &&
       !runPauseOpen &&
