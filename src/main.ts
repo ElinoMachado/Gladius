@@ -2079,7 +2079,10 @@ function showCrystalShop(): void {
   panel.innerHTML = `
     <div class="crystal-shop-panel-inner">
       <h1 class="crystal-shop-heading">Loja de cristais</h1>
-      <p class="crystal-shop-crystals">Cristais: <strong>${m.crystals}</strong></p>
+      <div class="crystal-shop-crystals" aria-label="Cristais disponíveis">
+        <span class="crystal-shop-crystals__num">${m.crystals}</span>
+        ${metaCrystalIconSvgHtml("crystal-shop-crystals__ico")}
+      </div>
       <div class="shop-grid crystal-shop-grid" id="meta-grid"></div>
       <button type="button" class="btn crystal-shop-back-btn" id="btn-back">Voltar</button>
     </div>`;

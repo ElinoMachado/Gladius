@@ -5763,22 +5763,30 @@ body.enemy-inspect--dragging-body {
 }
 
 .crystal-shop-crystals {
+  position: absolute;
+  top: 1.4rem;
+  right: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   margin: 0;
-  font-size: 1.05rem;
-  letter-spacing: 0.06em;
-  text-align: center;
-  color: #c4ccd8;
+  font-size: 0.98rem;
+  letter-spacing: 0.04em;
+  color: #dce8ff;
   text-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.12),
-    0 -1px 0 rgba(0, 0, 0, 0.4);
+    0 1px 0 rgba(10, 8, 20, 0.9),
+    0 0 12px rgba(90, 130, 200, 0.55);
 }
 
-.crystal-shop-crystals strong {
-  font-size: 1.2em;
-  color: #e8eef5;
-  text-shadow:
-    0 0 12px rgba(200, 220, 255, 0.35),
-    0 1px 0 rgba(60, 70, 90, 0.5);
+.crystal-shop-crystals__num {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.crystal-shop-crystals__ico {
+  width: 1.35rem;
+  height: 1.35rem;
+  display: block;
 }
 
 /*
