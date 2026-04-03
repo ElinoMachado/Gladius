@@ -2436,7 +2436,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     <p class="combat-sandbox-panel__hero-hint">Herói: <strong>${heroLabelText}</strong> (turno ou primeiro vivo)</p>
     <section class="combat-sandbox-heroes" aria-label="Heróis sandbox">
       <h3 class="shop-sandbox-artifacts__title">Heróis</h3>
-      <p class="shop-sandbox-artifacts__hint">Voar / Aterrar altera o estado de voo (combate + modelo 3D). Nv+1 sobe um nível sem escolher artefato. Matar remove o herói do combate (como morte).</p>
+      <p class="shop-sandbox-artifacts__hint">Voar / Aterrar altera o estado de voo (combate + modelo 3D). Nv+1 concede XP até subir um nível e abre o menu de artefato ou, no nível 60, o de forma final. Matar remove o herói do combate (como morte).</p>
       ${
         partyKillRows
           ? `<div class="combat-sandbox-heroes__list" role="group">${partyKillRows}</div>`
@@ -4621,6 +4621,65 @@ function tooltipEspecialista(h: Unit, m: GameModel): string {
       kind: "fx",
     },
   ]);
+}
+
+function stripGameTooltipInner(html: string): string {
+  const marker = "game-ui-tooltip-inner";
+  const i = html.indexOf(marker);
+  if (i < 0) return html;
+  const gt = html.indexOf(">", i);
+  if (gt < 0) return html;
+  const start = gt + 1;
+  const end = html.lastIndexOf("</div>");
+  if (end < start) return html;
+  return html.slice(start, end).trim();
+}
+
+function unitCloneSemFormaFinal(u: Unit): Unit {
+  const o = { ...u } as Unit;
+  delete o.ultimateId;
+  return o;
+}
+
+function unitCloneComFormaFinal(u: Unit, ultId: string): Unit {
+  return { ...u, ultimateId: ultId };
+}
+
+/** Skill principal (W) / básico conforme a forma — para o menu nível 60. */
+function formaFinalPrimarySkillTooltip(u: Unit, m: GameModel): string {
+  const cls = u.heroClass;
+  if (!cls) return tooltipPassiveHtml("—", "—");
+  if (cls === "pistoleiro" && u.ultimateId === "especialista_destruicao") {
+    return tooltipEspecialista(u, m);
+  }
+  if (cls === "pistoleiro" && u.ultimateId === "arauto_caos") {
+    return tooltipBasicAttack(u, m);
+  }
+  const sk = HEROES[cls].skills[0]!;
+  return tooltipSkillById(u, m, sk);
+}
+
+function formaFinalPickMergedTooltipHtml(
+  u: Unit,
+  m: GameModel,
+  branch: "weapon" | 0 | 1,
+): string {
+  const cls = u.heroClass!;
+  const tmpl = HEROES[cls];
+  const ultList = tmpl.ultimates;
+  const preview: Unit =
+    branch === "weapon"
+      ? unitCloneSemFormaFinal(u)
+      : unitCloneComFormaFinal(u, ultList[branch as 0 | 1]!.id);
+  const skillBlock = stripGameTooltipInner(formaFinalPrimarySkillTooltip(preview, m));
+  const ultSource: Unit = branch === "weapon" ? unitCloneSemFormaFinal(u) : preview;
+  const ultBlock = stripGameTooltipInner(tooltipWeaponUltimate(ultSource));
+  let extraForma = "";
+  if (branch !== "weapon") {
+    const ult = ultList[branch as 0 | 1]!;
+    extraForma = `<div class="forma-final-tt-divider" role="separator"></div><p class="game-ui-tooltip-passive forma-final-tt-passiva"><strong class="tt-ult-forma">${escapeHtml(ult.name)}</strong> — ${escapeHtml(ult.description)}</p>`;
+  }
+  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--forma-final-pick">${skillBlock}<div class="forma-final-tt-divider" role="separator"></div>${ultBlock}${extraForma}</div>`;
 }
 
 /** Bônus % de acerto crítico do artefato Ronin (combate usa o mesmo). */
@@ -7138,28 +7197,57 @@ function showUltimatePick(): void {
   const p = model.pendingUltimate!;
   const u = model.units.find((x) => x.id === p.unitId);
   uiRoot.innerHTML = "";
+  const cls = u?.heroClass;
+  const heroName = u ? escapeHtml(u.name) : "Herói";
+  const weaponIco =
+    cls && u
+      ? `<span class="forma-final-node__weapon-ico" aria-hidden="true">${hudWeaponIconSvg(cls)}</span>`
+      : "";
   const s = el(`<div class="modal modal--crystal"><div class="modal-inner modal-inner--ultimate-pick">
-    <h2 class="crystal-modal-title">Forma final (nível 60) — Ultimate</h2>
-    <div id="opts" class="ultimate-pick-list"></div>
+    <h2 class="crystal-modal-title crystal-modal-title--forma-final">${heroName}</h2>
+    <p class="forma-final-subtitle">Escolha sua forma final</p>
+    <div class="forma-final-tree" id="forma-final-tree" role="group" aria-label="Forma final">
+      <div class="forma-final-tree__root-wrap">
+        <button type="button" class="forma-final-node forma-final-node--root" id="forma-final-root" aria-label="Arma principal — pairar para ver habilidade e ultimate da arma">
+          ${weaponIco}
+          <span class="forma-final-node__label">Arma principal</span>
+        </button>
+      </div>
+      <svg class="forma-final-tree__svg" viewBox="0 0 320 72" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M 160 0 L 160 22 M 160 22 L 72 72 M 160 22 L 288 72" fill="none" stroke="rgba(201,162,55,0.55)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div class="forma-final-tree__leaves" id="forma-final-leaves"></div>
+    </div>
   </div></div>`);
   uiRoot.appendChild(s);
-  const opts = s.querySelector("#opts")!;
+  const rootBtn = s.querySelector("#forma-final-root") as HTMLButtonElement | null;
+  const leaves = s.querySelector("#forma-final-leaves") as HTMLElement | null;
+  if (u && rootBtn) {
+    bindGameTooltip(rootBtn, () => formaFinalPickMergedTooltipHtml(u, model, "weapon"));
+  }
   const list =
-    u?.heroClass === "pistoleiro"
+    cls === "pistoleiro"
       ? HEROES.pistoleiro.ultimates
-      : u?.heroClass === "gladiador"
+      : cls === "gladiador"
         ? HEROES.gladiador.ultimates
         : HEROES.sacerdotisa.ultimates;
-  for (const ult of list) {
+  list.forEach((ult, idx) => {
+    const branch = idx as 0 | 1;
     const b = el(
-      `<button type="button" class="btn ultimate-pick-option">${escapeHtml(ult.name)}<br/><small>${escapeHtml(ult.description)}</small></button>`,
+      `<button type="button" class="forma-final-node forma-final-node--pick" data-ult-id="${escapeHtml(ult.id)}" aria-label="Forma ${idx + 1}: ${escapeHtml(ult.name)}">
+        <span class="forma-final-node__form-cap">Forma ${idx + 1}</span>
+        <span class="forma-final-node__form-name">${escapeHtml(ult.name)}</span>
+      </button>`,
     );
+    if (u) {
+      bindGameTooltip(b, () => formaFinalPickMergedTooltipHtml(u, model, branch));
+    }
     b.addEventListener("click", () => {
       model.pickUltimate(ult.id);
       render();
     });
-    opts.appendChild(b);
-  }
+    leaves?.appendChild(b);
+  });
 }
 
 function showVictory(): void {

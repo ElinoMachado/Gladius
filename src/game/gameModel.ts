@@ -4961,20 +4961,20 @@ export class GameModel {
     this.emit();
   }
 
-  /** Modo sandbox: +1 nível instantâneo (sem pick de artefato). */
+  /**
+   * Modo sandbox: +1 nível como no jogo normal — `checkLevelUp` abre escolha de
+   * artefato ou forma final (nível 60) em vez de só alterar o número.
+   */
   sandboxAddHeroLevel(heroId: string): void {
     if (!this.devSandboxMode) return;
+    if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") return;
+    if (this.phase !== "combat") return;
     const u = this.units.find((x) => x.id === heroId);
     if (!u?.isPlayer || u.hp <= 0) return;
     if (u.level >= 100) return;
-    u.level++;
-    u.xpToNext = xpCurve(u.level);
-    u.xp = 0;
-    this.syncWeaponPassivesOnLevelUp(u);
-    u.hp = Math.min(u.hp, u.maxHp);
-    u.mana = Math.min(u.mana, u.maxMana);
-    this.log(`[Sandbox] ${u.name}: nível ${u.level}.`);
-    this.emit();
+    if (!Number.isFinite(u.xpToNext) || u.xpToNext <= 0) return;
+    u.xp = u.xpToNext;
+    this.checkLevelUp(u);
   }
 
   /** Modo sandbox: matar herói (remove da arena como morte normal). */

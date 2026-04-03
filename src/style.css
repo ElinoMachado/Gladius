@@ -8432,7 +8432,160 @@ select.forge-biome-sel option:disabled {
 }
 
 .modal-inner--ultimate-pick {
-  max-width: min(520px, 94vw);
+  max-width: min(640px, 96vw);
+}
+
+.crystal-modal-title--forma-final {
+  margin-bottom: 0.15rem;
+}
+
+.forma-final-subtitle {
+  margin: 0 0 1rem;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #c9b896;
+  letter-spacing: 0.04em;
+}
+
+.forma-final-tree {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.forma-final-tree__root-wrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  z-index: 1;
+}
+
+.forma-final-tree__svg {
+  width: 100%;
+  height: 48px;
+  display: block;
+  margin: -4px 0 -8px;
+  flex-shrink: 0;
+}
+
+.forma-final-tree__leaves {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1.25rem;
+  width: 100%;
+  padding: 0 0.25rem;
+  box-sizing: border-box;
+}
+
+.forma-final-node {
+  box-sizing: border-box;
+  cursor: help;
+  border-radius: 6px;
+  border: 2px solid rgba(201, 162, 39, 0.45);
+  background: linear-gradient(
+    168deg,
+    rgba(48, 44, 54, 0.92) 0%,
+    rgba(22, 20, 28, 0.96) 100%
+  );
+  color: #e8e4dc;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0.5rem 0.45rem;
+  min-height: 88px;
+  min-width: 108px;
+  flex: 1 1 0;
+  max-width: 180px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+}
+
+.forma-final-node--root {
+  min-width: 120px;
+  max-width: 140px;
+  min-height: 96px;
+}
+
+.forma-final-node__weapon-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.35rem;
+  line-height: 0;
+}
+
+.forma-final-node__weapon-ico .lol-weapon-svg {
+  width: 52px;
+  height: 52px;
+}
+
+.forma-final-node__label,
+.forma-final-node__form-cap {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #d4af37;
+  line-height: 1.2;
+}
+
+.forma-final-node__form-name {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #f0ebe0;
+  line-height: 1.25;
+}
+
+.forma-final-node--pick {
+  cursor: pointer;
+}
+
+.forma-final-node--pick:hover:not(:disabled) {
+  border-color: rgba(232, 200, 100, 0.85);
+  color: #fff8ec;
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.25);
+}
+
+.forma-final-node--pick:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.forma-final-node--root:hover {
+  border-color: rgba(212, 175, 55, 0.7);
+}
+
+.game-ui-tooltip-inner--forma-final-pick {
+  max-width: min(380px, 92vw);
+}
+
+.forma-final-tt-divider {
+  height: 0;
+  margin: 0.45rem 0;
+  border: none;
+  border-top: 1px solid rgba(120, 110, 90, 0.45);
+}
+
+.forma-final-tt-passiva {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #c8c0b0;
+}
+
+.forma-final-tt-passiva .tt-ult-forma {
+  color: #e8c86a;
 }
 
 .ultimate-pick-list {
