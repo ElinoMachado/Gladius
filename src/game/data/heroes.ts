@@ -58,7 +58,8 @@ export const HEROES: Record<HeroClassId, HeroTemplate> = {
       {
         id: "arauto_caos",
         name: "Arauto do Caos",
-        description: "Ataque básico acerta todos no alcance.",
+        description:
+          "Substitui «Atirar pra todo lado» por Tiro destruidor: feixe em linha reta de hexes; +200% de dano por turno sem usar (até 5 cargas, 1200% no máximo).",
       },
       {
         id: "especialista_destruicao",

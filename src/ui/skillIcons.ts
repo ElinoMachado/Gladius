@@ -36,6 +36,21 @@ const icons: Record<string, string> = {
     `<defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a3848"/><stop offset="1" stop-color="#1a1418"/></linearGradient></defs><rect width="${V}" height="${V}" rx="4" fill="url(#g1)"/><g fill="#c9a227"><circle cx="6" cy="10" r="1.8"/><circle cx="11" cy="8" r="1.8"/><circle cx="16" cy="11" r="1.8"/><circle cx="20" cy="9" r="1.8"/></g><path fill="#8a7060" d="M5 18h18v3H5z"/><ellipse cx="14" cy="19.5" rx="5" ry="1.2" fill="#5a4a40"/>`,
   ),
 
+  tiro_destruidor: wrap(
+    `<defs>
+      <linearGradient id="tdBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1a2848"/><stop offset="1" stop-color="#0a1020"/></linearGradient>
+      <linearGradient id="tdBeam" x1="0" y1="0.5" x2="1" y2="0.5">
+        <stop offset="0" stop-color="#4060ff" stop-opacity="0.15"/>
+        <stop offset="0.45" stop-color="#88ccff" stop-opacity="0.95"/>
+        <stop offset="0.55" stop-color="#ccffff" stop-opacity="1"/>
+        <stop offset="1" stop-color="#4060ff" stop-opacity="0.2"/>
+      </linearGradient>
+    </defs>
+    <rect width="${V}" height="${V}" rx="4" fill="url(#tdBg)"/>
+    <rect x="2" y="11.5" width="24" height="5" rx="1.2" fill="url(#tdBeam)"/>
+    <rect x="2" y="12.8" width="24" height="2" fill="#e8ffff" opacity="0.55"/>`,
+  ),
+
   ate_a_morte: wrap(
     `<defs><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6a3030"/><stop offset="1" stop-color="#2a1010"/></linearGradient></defs><rect width="${V}" height="${V}" rx="4" fill="url(#g2)"/><path fill="#c04040" d="M14 4l2 8 8 2-8 2-2 8-2-8-8-2 8-2z"/><path fill="#ff8060" d="M14 9l1 4 4 1-4 1-1 4-1-4-4-1 4-1z"/>`,
   ),

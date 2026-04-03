@@ -1,4 +1,4 @@
-import { axialKey, hexNeighbors } from "./hex";
+import { axialKey, hexBeamRayThroughGrid, hexNeighbors } from "./hex";
 import type {
   BiomeId,
   ForgeEssenceId,
@@ -190,6 +190,12 @@ export type CombatVfxHint =
       kind: "weapon_ult_furacao";
       heroId: string;
       targetIds: string[];
+    }
+  | {
+      kind: "tiro_destruidor_plasma";
+      heroId: string;
+      pathQr: { q: number; r: number }[];
+      charges: number;
     }
   | { kind: "pisotear_chain"; heroId: string; targetIds: string[] }
   | { kind: "golpe_relampago_teleport"; heroId: string }
@@ -1697,6 +1703,9 @@ export class GameModel {
     this.basicAttacksSpentThisTurn = 0;
     this.syncBasicLeftFromSpent(h);
     h.immobileThisTurn = true;
+    if (h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos") {
+      h.tiroDestruidorUsedThisTurn = false;
+    }
     this.playerTurnJustStarted = true;
     this.emit();
   }
@@ -1731,6 +1740,14 @@ export class GameModel {
         if (h.furiaGiganteTurns <= 0) {
           this.endFuriaGigante(h);
         }
+      }
+      if (
+        h.heroClass === "pistoleiro" &&
+        h.ultimateId === "arauto_caos" &&
+        !h.tiroDestruidorUsedThisTurn
+      ) {
+        const c = h.tiroDestruidorCharges ?? 0;
+        if (c < 5) h.tiroDestruidorCharges = c + 1;
       }
     }
     if (this.phase !== "combat") {
@@ -2486,20 +2503,9 @@ export class GameModel {
       if (att.motorMorteNextBasicPct > 0) {
         att.motorMorteNextBasicPct = 0;
       }
-      if (att.heroClass === "pistoleiro" && att.ultimateId === "arauto_caos") {
-        const alc2 = this.effectiveAlcanceForHero(att);
-        for (const e of [...this.enemies()]) {
-          if (e.hp <= 0) continue;
-          if (hexDistance({ q: att.q, r: att.r }, { q: e.q, r: e.r }) <= alc2) {
-            this.strike(att, e, raw);
-            if (this.phase !== "combat") break;
-          }
-        }
-      } else {
-        const t2 = this.units.find((u) => u.id === targetId);
-        if (t2 && !t2.isPlayer && t2.hp > 0) {
-          this.strike(att, t2, raw);
-        }
+      const t2 = this.units.find((u) => u.id === targetId);
+      if (t2 && !t2.isPlayer && t2.hp > 0) {
+        this.strike(att, t2, raw);
       }
       this.flushCombatLevelUp(att);
       if (this.phase === "combat") {
@@ -2507,44 +2513,6 @@ export class GameModel {
       }
       this.emit();
     };
-
-    if (h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos") {
-      const inRange = [...this.enemies()].filter(
-        (e) =>
-          e.hp > 0 &&
-          hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r }) <= alc,
-      );
-      this.pendingCombatVfxQueue.push({
-        kind: "basic_volley",
-        fromId: h.id,
-        targetIds: inRange.map((e) => e.id),
-      });
-      this.basicAttacksSpentThisTurn++;
-      this.syncBasicLeftFromSpent(h);
-      const volleyStagger = 95;
-      inRange.forEach((e, i) => {
-        this.queueCombat(i * volleyStagger, () => {
-          const att = this.units.find((u) => u.id === h.id);
-          if (!att || att.hp <= 0 || this.phase !== "combat") return;
-          let raw = this.computeBasicAttackRawDamage(att);
-          if (att.motorMorteNextBasicPct > 0) att.motorMorteNextBasicPct = 0;
-          const tg = this.units.find((u) => u.id === e.id);
-          if (tg && tg.hp > 0) this.strike(att, tg, raw);
-        });
-      });
-      const tail =
-        inRange.length === 0 ? 0 : (inRange.length - 1) * volleyStagger + 30;
-      this.queueCombat(tail, () => {
-        const att = this.units.find((u) => u.id === h.id);
-        if (att) this.flushCombatLevelUp(att);
-        if (this.phase === "combat") {
-          this.tryResolveWaveClearAfterCombatResume();
-        }
-        this.emit();
-      });
-      this.emit();
-      return true;
-    }
 
     if (h.heroClass === "pistoleiro") {
       this.pendingCombatVfxQueue.push({
@@ -2705,10 +2673,83 @@ export class GameModel {
       return true;
     }
 
-    if (!this.devSandboxMode && (h.skillCd[skillId] ?? 0) > 0) return false;
     if (this.bunkerAtHex(h.q, h.r)?.occupantId === h.id) return false;
 
-    if (skillId === "atirar_todo_lado" && h.heroClass === "pistoleiro") {
+    if (skillId === "tiro_destruidor") {
+      if (h.heroClass !== "pistoleiro" || h.ultimateId !== "arauto_caos")
+        return false;
+      if (!this.devSandboxMode && (h.skillCd["tiro_destruidor"] ?? 0) > 0)
+        return false;
+      if (!targetId?.startsWith("beam:")) return false;
+      const rest = targetId.slice("beam:".length);
+      const si = rest.indexOf(":");
+      if (si < 0) return false;
+      const tq = Number(rest.slice(0, si));
+      const tr = Number(rest.slice(si + 1));
+      if (!Number.isFinite(tq) || !Number.isFinite(tr)) return false;
+      if (tq === h.q && tr === h.r) return false;
+      const d0 = hexDistance({ q: h.q, r: h.r }, { q: tq, r: tr });
+      const alc = this.effectiveAlcanceForHero(h);
+      if (d0 < 1 || d0 > alc) return false;
+      const beamHexes = hexBeamRayThroughGrid(
+        { q: h.q, r: h.r },
+        { q: tq, r: tr },
+        (qq, rr) => this.grid.has(axialKey(qq, rr)),
+        48,
+      );
+      const charges = Math.min(5, Math.max(0, h.tiroDestruidorCharges ?? 0));
+      const mult = 1 + 2.2 * charges;
+      const dmgBase = this.computeAtirarTodoLadoDamagePerHit(h);
+      const critRoll = rollCrit(h.acertoCritico + roninCritBonus(h));
+      this.pendingCombatVfxQueue.push({
+        kind: "tiro_destruidor_plasma",
+        heroId: h.id,
+        pathQr: beamHexes.map((c) => ({ q: c.q, r: c.r })),
+        charges,
+      });
+      let delay = 0;
+      const stepMs = 42;
+      const hitEnemyIds: string[] = [];
+      for (const cell of beamHexes) {
+        const eid = this.liveEnemyIdAtHex(cell.q, cell.r);
+        if (!eid || hitEnemyIds.includes(eid)) continue;
+        hitEnemyIds.push(eid);
+        const curDelay = delay;
+        const enemyId = eid;
+        this.queueCombat(curDelay, () => {
+          const att = this.units.find((u) => u.id === h.id);
+          const tg = this.units.find((u) => u.id === enemyId);
+          if (!att || !tg || tg.hp <= 0 || this.phase !== "combat") return;
+          const raw = roundToCombatDecimals(dmgBase * mult);
+          this.dealDamage(att, tg, raw, critRoll, true, false);
+          this.emit();
+        });
+        delay += stepMs;
+      }
+      h.tiroDestruidorCharges = 0;
+      h.tiroDestruidorUsedThisTurn = true;
+      if (!this.devSandboxMode)
+        h.skillCd["tiro_destruidor"] = atirarCooldownWaves(h.weaponLevel);
+      this.log(`${h.name}: Tiro destruidor! (${charges} carga(s))`);
+      this.queueCombat(delay + 55, () => {
+        const att = this.units.find((u) => u.id === h.id);
+        if (att) this.flushCombatLevelUp(att);
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
+      });
+      this.emit();
+      return true;
+    }
+
+    if (!this.devSandboxMode && (h.skillCd[skillId] ?? 0) > 0) return false;
+
+    if (
+      skillId === "atirar_todo_lado" &&
+      h.heroClass === "pistoleiro" &&
+      h.ultimateId !== "arauto_caos"
+    ) {
       const alc = this.effectiveAlcanceForHero(h);
       const dmg = this.computeAtirarTodoLadoDamagePerHit(h);
       const targets = [...this.enemies()].filter(
@@ -3658,7 +3699,7 @@ export class GameModel {
       this.emit();
     };
 
-    if (att.heroClass === "pistoleiro" && att.ultimateId !== "arauto_caos") {
+    if (att.heroClass === "pistoleiro") {
       this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: att.id,
@@ -4965,6 +5006,21 @@ export class GameModel {
    * Modo sandbox: +1 nível como no jogo normal — `checkLevelUp` abre escolha de
    * artefato ou forma final (nível 60) em vez de só alterar o número.
    */
+  /**
+   * HUD: com nv. ≥60 e sem forma final, abre o menu de escolha (combate).
+   */
+  tryOpenFormaFinalPickFromHud(): boolean {
+    if (this.phase !== "combat") return false;
+    const h = this.currentHero();
+    if (!h?.isPlayer || h.hp <= 0 || h.level < 60 || h.ultimateId) return false;
+    this.cancelLevelUpFloatHoldTimer();
+    this.pendingArtifacts = null;
+    this.pendingUltimate = { unitId: h.id };
+    this.phase = "ultimate_pick";
+    this.emit();
+    return true;
+  }
+
   sandboxAddHeroLevel(heroId: string): void {
     if (!this.devSandboxMode) return;
     if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") return;
@@ -5067,6 +5123,10 @@ export class GameModel {
     if (!u) return;
     u.ultimateId = id;
     u.formaFinal = true;
+    if (id === "arauto_caos") {
+      u.tiroDestruidorCharges = 0;
+      u.tiroDestruidorUsedThisTurn = false;
+    }
     if (id === "fada_cura") u.flying = true;
     u.hp = Math.min(u.hp, u.maxHp);
     u.mana = Math.min(u.mana, u.maxMana);
@@ -5481,7 +5541,11 @@ export class GameModel {
       return keys;
     }
     if (skillId === "ate_a_morte") return this.hexKeysInRing(h.q, h.r, 1, 1);
-    if (skillId === "atirar_todo_lado" || skillId === "especialista_destruicao") {
+    if (
+      skillId === "atirar_todo_lado" ||
+      skillId === "tiro_destruidor" ||
+      skillId === "especialista_destruicao"
+    ) {
       return this.getBasicAttackRangeHexKeys();
     }
     if (skillId === "sentenca") {

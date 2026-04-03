@@ -134,6 +134,7 @@ export class GameRenderer {
     { until: number; playerVictim: boolean; tone: HitFlashTone }
   >();
   private readonly atirarBursts: { group: THREE.Group; until: number }[] = [];
+  private readonly plasmaBeamFx: { group: THREE.Group; until: number }[] = [];
   private readonly flyingProjectiles: {
     mesh: THREE.Mesh;
     x0: number;
@@ -2634,6 +2635,61 @@ export class GameRenderer {
     this.atirarBursts.push({ group: burst, until: performance.now() + durationMs });
   }
 
+  /** Feixe de plasma azul (Tiro destruidor); espessura escala com cargas. */
+  triggerTiroDestruidorPlasma(
+    pathQr: { q: number; r: number }[],
+    charges: number,
+  ): void {
+    if (pathQr.length < 2) return;
+    const ch = Math.max(0, Math.min(5, charges));
+    const w = 0.26 + ch * 0.2;
+    const h = 0.85 + ch * 0.14;
+    const g = new THREE.Group();
+    for (let i = 0; i < pathQr.length - 1; i++) {
+      const a = axialToWorld(pathQr[i]!.q, pathQr[i]!.r, HEX_SIZE);
+      const b = axialToWorld(pathQr[i + 1]!.q, pathQr[i + 1]!.r, HEX_SIZE);
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const len = Math.max(0.08, Math.hypot(dx, dz));
+      const geo = new THREE.BoxGeometry(w, h, len);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x55ccff,
+        transparent: true,
+        opacity: 0.94,
+      });
+      const m = new THREE.Mesh(geo, mat);
+      const cx = (a.x + b.x) * 0.5;
+      const cz = (a.z + b.z) * 0.5;
+      m.position.set(cx, 1.02 + h * 0.4, cz);
+      m.rotation.y = -Math.atan2(dz, dx);
+      g.add(m);
+    }
+    const inner = new THREE.MeshBasicMaterial({
+      color: 0xccffff,
+      transparent: true,
+      opacity: 0.45,
+    });
+    for (let i = 0; i < pathQr.length - 1; i++) {
+      const a = axialToWorld(pathQr[i]!.q, pathQr[i]!.r, HEX_SIZE);
+      const b = axialToWorld(pathQr[i + 1]!.q, pathQr[i + 1]!.r, HEX_SIZE);
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const len = Math.max(0.08, Math.hypot(dx, dz));
+      const geo = new THREE.BoxGeometry(w * 0.45, h * 0.35, len * 1.02);
+      const m = new THREE.Mesh(geo, inner);
+      const cx = (a.x + b.x) * 0.5;
+      const cz = (a.z + b.z) * 0.5;
+      m.position.set(cx, 1.02 + h * 0.55, cz);
+      m.rotation.y = -Math.atan2(dz, dx);
+      g.add(m);
+    }
+    this.arenaRoot.add(g);
+    this.plasmaBeamFx.push({
+      group: g,
+      until: performance.now() + 360 + ch * 85,
+    });
+  }
+
   queueDamageProjectile(
     fromId: string,
     toId: string,
@@ -3122,6 +3178,14 @@ export class GameRenderer {
         this.arenaRoot.remove(b.group);
         this.disposeObject3D(b.group);
         this.atirarBursts.splice(i, 1);
+      }
+    }
+    for (let i = this.plasmaBeamFx.length - 1; i >= 0; i--) {
+      const b = this.plasmaBeamFx[i]!;
+      if (now >= b.until) {
+        this.arenaRoot.remove(b.group);
+        this.disposeObject3D(b.group);
+        this.plasmaBeamFx.splice(i, 1);
       }
     }
     for (let i = this.flyingProjectiles.length - 1; i >= 0; i--) {

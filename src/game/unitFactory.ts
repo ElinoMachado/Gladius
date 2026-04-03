@@ -95,6 +95,8 @@ export function createHeroUnit(
     skillCd: {},
     formaFinal: false,
     pistoleiroBonusDanoWave: 0,
+    tiroDestruidorCharges: 0,
+    tiroDestruidorUsedThisTurn: false,
     gladiadorKills: 0,
     curandeiroDanoWave: 0,
     duroPedraDefStacks: 0,

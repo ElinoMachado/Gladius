@@ -70,6 +70,7 @@ import {
   effectiveDefenseForBiome,
   effectiveAlcanceForBiome,
   formatCombatFloatAmount,
+  roundToCombatDecimals,
   rulerMovementBonus,
   unitIgnoresTerrain,
 } from "./game/combatMath";
@@ -148,6 +149,7 @@ import {
   playLandmineExplosion,
   playMagicBarrage,
   playMagicWhoosh,
+  playTiroDestruidorLaser,
   playEscravoChainSlash,
   playMortarImpact,
   playMortarLaunch,
@@ -363,6 +365,11 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
           i * volleyStaggerMs,
         );
       }
+      break;
+    }
+    case "tiro_destruidor_plasma": {
+      view.triggerTiroDestruidorPlasma(h.pathQr, h.charges);
+      playTiroDestruidorLaser(h.charges);
       break;
     }
     case "bunker_minas":
@@ -3295,6 +3302,24 @@ function mountGoldShopHeroSkillsRow(
           );
           continue;
         }
+        if (
+          sk.id === "atirar_todo_lado" &&
+          h.heroClass === "pistoleiro" &&
+          h.ultimateId === "arauto_caos"
+        ) {
+          const tiroSk = pistoleiroTiroDestruidorSkillDef();
+          const cdT = cdEff(h.skillCd["tiro_destruidor"] ?? 0);
+          append(
+            goldShopSkillChipHtml({
+              iconHtml: skillButtonIconHtml("tiro_destruidor"),
+              manaBadge: manaCostBadgeText(tiroSk.manaCost ?? 0),
+              ariaLabel: ariaSkillLabel(tiroSk.name, cdT),
+              cdTurns: cdT > 0 ? cdT : undefined,
+            }),
+            () => tooltipSkillById(h, m, tiroSk),
+          );
+          continue;
+        }
         const cd = cdEff(h.skillCd[sk.id] ?? 0);
         append(
           goldShopSkillChipHtml({
@@ -4297,11 +4322,7 @@ function clearGameTooltipHandlers(el: HTMLElement): void {
 function tooltipBasicAttack(h: Unit, m: GameModel): string {
   const alc = m.effectiveAlcanceForHero(h);
   const raw = m.tooltipPreviewBasicAttackRawDamage(h);
-  const arauto =
-    h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos";
-  const dmgLine = arauto
-    ? `${formatTooltipNumber(raw)} de dano bruto por inimigo no alcance (crítico/defesa por alvo)`
-    : `${formatTooltipNumber(raw)} de dano bruto (crítico e defesa do alvo aplicam depois)`;
+  const dmgLine = `${formatTooltipNumber(raw)} de dano bruto (crítico e defesa do alvo aplicam depois)`;
   const cap = m.maxBasicAttacksForHero(h);
   const theirTurn =
     m.phase === "combat" &&
@@ -4319,10 +4340,77 @@ function tooltipBasicAttack(h: Unit, m: GameModel): string {
     { label: "Dano:", value: dmgLine, kind: "dmg" },
     {
       label: "Efeito:",
-      value: arauto ? "Acerta todos os inimigos no alcance" : "Um alvo",
+      value: "Um alvo",
       kind: "fx",
     },
   ]);
+}
+
+function pistoleiroTiroDestruidorSkillDef(): SkillDef {
+  const base = HEROES.pistoleiro.skills[0]!;
+  return {
+    ...base,
+    id: "tiro_destruidor",
+    name: "Tiro destruidor",
+    description:
+      "Feixe em linha reta de hexes; acumula dano se não usares (ver cargas).",
+  };
+}
+
+function tooltipTiroDestruidor(h: Unit, m: GameModel, sk: SkillDef): string {
+  const w = h.weaponLevel;
+  const alc = m.effectiveAlcanceForHero(h);
+  const per = m.tooltipPreviewAtirarDamagePerHit(h);
+  const charges = Math.min(5, Math.max(0, h.tiroDestruidorCharges ?? 0));
+  const mult = 1 + 2.2 * charges;
+  const cdv = h.skillCd["tiro_destruidor"] ?? 0;
+  const cdB = atirarCooldownWaves(w);
+  const cdrStr =
+    cdv > 0
+      ? `${tipInt(cdv)} onda(s) até disponível`
+      : `${tipInt(cdB)} onda(s)`;
+  return tooltipAbilityHtml(sk.name, [
+    { label: "Nível arma:", value: tipInt(w), kind: "fx" },
+    {
+      label: "Custo de mana:",
+      value: tipInt(sk.manaCost ?? 0),
+      kind: "mana",
+    },
+    { label: "CDR:", value: cdrStr, kind: "cdr" },
+    {
+      label: "Cargas:",
+      value: `${tipInt(charges)}/5 (+220% dano bruto por carga; máximo 1200%)`,
+      kind: "fx",
+    },
+    { label: "Alcance:", value: formatTooltipNumber(alc), kind: "range" },
+    {
+      label: "Dano (atual):",
+      value: `${formatTooltipNumber(roundToCombatDecimals(per * mult))} bruto por inimigo tocado pelo feixe`,
+      kind: "dmg",
+    },
+    {
+      label: "Efeito:",
+      value:
+        "Clica num hex dentro do alcance (não o teu) para disparar na direção desse hex; acerta inimigos ao longo da linha",
+      kind: "fx",
+    },
+  ]);
+}
+
+function tooltipFormaFinalHudSlot(
+  h: Unit,
+  m: GameModel,
+  isViewingActive: boolean,
+): string {
+  const cur = Math.min(60, h.level);
+  const body = h.ultimateId
+    ? `Progresso ${tipInt(cur)}/60. Já escolheste uma forma final.`
+    : cur < 60
+      ? `${tipInt(cur)}/60 — a barra prismática enche quando sobem de nível.`
+      : isViewingActive && m.phase === "combat"
+        ? `60/60 — clica para escolher a tua forma final.`
+        : `60/60 — na tua vez em combate, clica aqui para escolher a forma final.`;
+  return tooltipPassiveHtml("Níveis até a forma final", body);
 }
 
 function cdrSkillValue(h: Unit, sk: SkillDef): string {
@@ -4595,6 +4683,7 @@ function tooltipSkillSentenca(h: Unit, m: GameModel, sk: SkillDef): string {
 }
 
 function tooltipSkillById(h: Unit, m: GameModel, sk: SkillDef): string {
+  if (sk.id === "tiro_destruidor") return tooltipTiroDestruidor(h, m, sk);
   if (sk.id === "atirar_todo_lado") return tooltipSkillAtirar(h, m, sk);
   if (sk.id === "ate_a_morte") return tooltipSkillAteMorte(h, m, sk);
   if (sk.id === "pisotear") return tooltipSkillPisotear(h, m);
@@ -4662,7 +4751,7 @@ function formaFinalPrimarySkillTooltip(u: Unit, m: GameModel): string {
     return tooltipEspecialista(u, m);
   }
   if (cls === "pistoleiro" && u.ultimateId === "arauto_caos") {
-    return tooltipBasicAttack(u, m);
+    return tooltipTiroDestruidor(u, m, pistoleiroTiroDestruidorSkillDef());
   }
   const sk = HEROES[cls].skills[0]!;
   return tooltipSkillById(u, m, sk);
@@ -6394,18 +6483,35 @@ function showCombatHUD(): void {
       combatHeroStatsTabRef,
     );
     if (h.heroClass) {
-      lolWeaponSlot.innerHTML = `<span class="lol-weapon-lvl-badge" aria-label="Nível da arma">${h.weaponLevel}</span>${hudWeaponIconSvg(h.heroClass)}`;
+      clearGameTooltipHandlers(lolWeaponSlot);
+      lolWeaponSlot.removeAttribute("aria-label");
+      const barPct = Math.min(1, Math.min(h.level, 60) / 60);
+      const formaReady =
+        model.phase === "combat" &&
+        isViewingActive &&
+        h.level >= 60 &&
+        !h.ultimateId;
+      const readyCls = formaReady ? " lol-forma-final-slot--ready" : "";
+      lolWeaponSlot.innerHTML = `<button type="button" class="lol-forma-final-slot${readyCls}" style="--forma-pct:${barPct}" ${formaReady ? "" : "disabled"} aria-label="Forma final">
+<span class="lol-forma-final-title">Forma final</span>
+<span class="lol-forma-final-track" aria-hidden="true"><span class="lol-forma-final-fill"></span></span>
+<span class="lol-forma-final-meta" aria-hidden="true">${Math.min(60, h.level)}/60</span>
+</button>`;
       lolWeaponSlot.style.display = "";
-      lolWeaponSlot.setAttribute(
-        "aria-label",
-        "Esta é a arma principal do seu herói.",
-      );
-      bindGameTooltip(lolWeaponSlot, () =>
-        tooltipPassiveHtml(
-          "Arma principal",
-          "Esta é a arma principal do seu herói.",
-        ),
-      );
+      const formaBtn = lolWeaponSlot.querySelector(
+        "button.lol-forma-final-slot",
+      ) as HTMLButtonElement | null;
+      if (formaBtn) {
+        bindGameTooltip(formaBtn, () =>
+          tooltipFormaFinalHudSlot(h, model, isViewingActive),
+        );
+        formaBtn.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          if (!formaReady) return;
+          if (!combatAbilityInputDebounce()) return;
+          if (model.tryOpenFormaFinalPickFromHud()) update();
+        });
+      }
     } else {
       clearGameTooltipHandlers(lolWeaponSlot);
       lolWeaponSlot.removeAttribute("aria-label");
@@ -6661,6 +6767,21 @@ function showCombatHUD(): void {
               }
             });
             actionRow.appendChild(b);
+            continue;
+          }
+          if (
+            sk.id === "atirar_todo_lado" &&
+            h.heroClass === "pistoleiro" &&
+            h.ultimateId === "arauto_caos"
+          ) {
+            const tiroSk = pistoleiroTiroDestruidorSkillDef();
+            addSkillBtn(
+              "tiro_destruidor",
+              tiroSk.name,
+              h.skillCd["tiro_destruidor"] ?? 0,
+              false,
+              tiroSk,
+            );
             continue;
           }
           const noMana = false;
@@ -7045,6 +7166,28 @@ function showCombatHUD(): void {
           }
         } else {
           cancelPendingCombatToMove();
+        }
+        return;
+      }
+      if (sid === "tiro_destruidor") {
+        const hex = view.pickHex(x, y, model.grid);
+        if (!hex) {
+          cancelPendingCombatToMove();
+          return;
+        }
+        if (hex.q === active.q && hex.r === active.r) {
+          cancelPendingCombatToMove();
+          return;
+        }
+        if (!model.hexInSkillRange(sid, hex.q, hex.r)) {
+          cancelPendingCombatToMove();
+          return;
+        }
+        if (
+          model.trySkill("tiro_destruidor", `beam:${hex.q}:${hex.r}`)
+        ) {
+          resetCombatSelection();
+          update();
         }
         return;
       }

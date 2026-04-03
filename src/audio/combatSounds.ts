@@ -137,6 +137,42 @@ export function playMagicWhoosh(): void {
   o.stop(t + 0.13);
 }
 
+/** Tiro destruidor: laser azul; mais grave e alto com cargas 0–5. */
+export function playTiroDestruidorLaser(charges: number): void {
+  const c = ctx();
+  if (!c) return;
+  resume();
+  const t = c.currentTime;
+  const ch = Math.max(0, Math.min(5, Math.floor(charges)));
+  const baseHz = 380 + ch * 160;
+  const peakHz = 1100 + ch * 420;
+  const dur = 0.11 + ch * 0.042;
+  const gain0 = 0.085 + ch * 0.052;
+  const o = c.createOscillator();
+  const o2 = c.createOscillator();
+  const g = c.createGain();
+  o.type = "sawtooth";
+  o2.type = "square";
+  o.frequency.setValueAtTime(baseHz, t);
+  o.frequency.exponentialRampToValueAtTime(Math.min(4800, peakHz), t + dur * 0.5);
+  o2.frequency.setValueAtTime(baseHz * 1.03, t);
+  o2.frequency.exponentialRampToValueAtTime(Math.min(4900, peakHz * 1.02), t + dur * 0.52);
+  g.gain.setValueAtTime(gain0, t);
+  g.gain.exponentialRampToValueAtTime(0.008, t + dur);
+  o.connect(g);
+  o2.connect(g);
+  const bp = c.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.setValueAtTime(820 + ch * 220, t);
+  bp.Q.value = 1.15;
+  g.connect(bp);
+  connectToSfxOut(c, bp);
+  o.start(t);
+  o2.start(t);
+  o.stop(t + dur + 0.03);
+  o2.stop(t + dur + 0.03);
+}
+
 /** Múltiplos “hits” mágicos (sentença). */
 export function playMagicBarrage(hits: number, staggerMs: number): void {
   for (let i = 0; i < hits; i++) {

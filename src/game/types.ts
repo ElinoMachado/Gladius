@@ -135,6 +135,10 @@ export interface Unit extends CoreStats {
   formaFinal: boolean;
   /** Pistoleiro: dano extra na rodada/wave */
   pistoleiroBonusDanoWave: number;
+  /** Pistoleiro (Arauto → Tiro destruidor): cargas 0–5 (+200% dano por turno sem usar). */
+  tiroDestruidorCharges?: number;
+  /** Turno atual: já usou Tiro destruidor (não acumula carga no fim do turno). */
+  tiroDestruidorUsedThisTurn?: boolean;
   /** Gladiador: kills para passiva campeão */
   gladiadorKills: number;
   /** Curandeiro de batalha stacks */
