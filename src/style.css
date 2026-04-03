@@ -3081,14 +3081,15 @@ body.enemy-inspect--dragging-body {
       1.18fr
     );
   gap: 0.32rem 0.34rem;
-  align-items: center;
+  /* Topo alinhado: arma/passiva e retrato + barras na mesma altura (evita bloco central “a descer”). */
+  align-items: start;
   width: 100%;
   min-height: 0;
 }
 
 .lol-col-passive {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
 }
 
@@ -3199,7 +3200,7 @@ body.enemy-inspect--dragging-body {
 .lol-col-abilities {
   display: flex;
   justify-content: center;
-  align-items: flex-end;
+  align-items: flex-start;
   min-width: 0;
 }
 
@@ -3737,7 +3738,7 @@ body.enemy-inspect--dragging-body {
 .lol-abilities-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 0.38rem;
 }
 
