@@ -917,7 +917,7 @@ function fillEnemyInspectStatusRow(host: HTMLElement, u: Unit): void {
   }
   if (deslumbroInstancesCount(u) > 0) {
     bits.push(
-      `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--deslumbro" role="img" aria-label="Deslumbro">D&nbsp;${deslumbroInstancesCount(u)}</span>`,
+      `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--deslumbro" role="img" aria-label="Deslumbro">✦&nbsp;${deslumbroInstancesCount(u)}</span>`,
     );
   }
   host.innerHTML = bits.length

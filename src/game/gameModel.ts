@@ -406,6 +406,11 @@ export class GameModel {
    * `releaseEnemyPhaseAfterWaveIntro`.
    */
   private pendingCometaArcanoWithoutIntro = false;
+  /**
+   * Cometa arcano: não consumir Deslumbro no fim da **primeira** fase inimiga após o impacto.
+   * Sem isto, com 1 instância o efeito caía a 0 antes do jogador poder atacar (a UI parecia “sem Deslumbro”).
+   */
+  private skipDeslumbroDecayAfterCometaOnce = false;
   /** Mensagem única (ex.: reentrada no bunker) consumida pela UI. */
   pendingBunkerHint: { text: string; q: number; r: number } | null = null;
   /** Mensagem única de movimento bloqueado (2+ inimigos adjacentes), consumida pela UI. */
@@ -877,15 +882,19 @@ export class GameModel {
         0,
         Math.floor((flat + e.maxHp * pct) * mult),
       );
-      if (raw <= 0) continue;
-      this.dealDamage(src, e, raw, false, false, false, {
-        suppressLifesteal: true,
-        fromCometaArcano: true,
-        suppressSourceHitSfx: true,
-      });
-      addDeslumbroInstances(e, desN);
+      if (raw > 0) {
+        this.dealDamage(src, e, raw, false, false, false, {
+          suppressLifesteal: true,
+          fromCometaArcano: true,
+          suppressSourceHitSfx: true,
+        });
+      }
+      if (e.hp > 0) {
+        addDeslumbroInstances(e, desN);
+      }
     }
     this.onDeaths();
+    this.skipDeslumbroDecayAfterCometaOnce = true;
     this.log("Cometa arcano: a onda de energia atinge os inimigos.");
     this.emit();
   }
@@ -915,6 +924,10 @@ export class GameModel {
   }
 
   private tickDeslumbroEndOfEnemyPhase(): void {
+    if (this.skipDeslumbroDecayAfterCometaOnce) {
+      this.skipDeslumbroDecayAfterCometaOnce = false;
+      return;
+    }
     for (const u of this.units) {
       if (u.isPlayer || u.hp <= 0) continue;
       if (deslumbroInstancesCount(u) <= 0) continue;
