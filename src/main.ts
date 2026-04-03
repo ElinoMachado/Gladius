@@ -3072,10 +3072,15 @@ function showGoldShop(isInitial: boolean): void {
     if (h.heroClass) {
       if (skillsWrap) skillsWrap.hidden = false;
       goldShopHeroPreview3d = new HeroPreview3D(hero3dHost, 220, 260);
+      const shopForma =
+        h.formaFinal && h.ultimateId
+          ? { formaFinal: true as const, ultimateId: h.ultimateId }
+          : undefined;
       goldShopHeroPreview3d.setHero(
         h.heroClass,
         h.displayColor,
         h.forgeLoadout,
+        shopForma,
       );
       goldShopHeroPreview3d.start();
       renderHeroStatsGridWithTabs(
@@ -3775,6 +3780,32 @@ function hudWeaponIconSvg(cls: HeroClassId): string {
   return `<svg class="lol-weapon-svg" viewBox="0 0 32 32" aria-hidden="true"><path fill="#c9a227" d="M10 4h12v4H10z"/><path fill="#e8e4dc" d="M11 8h10l-1 14h-8z"/><path fill="#6a8aff" d="M9 22h14v2H9z"/><rect x="7" y="24" width="18" height="5" rx="1" fill="#8a7860"/></svg>`;
 }
 
+/** Ícone da “arma” após forma final (troca visual no HUD e nos menus). */
+function formaFinalWeaponIconSvg(
+  cls: HeroClassId,
+  ultimateId: string,
+): string {
+  if (cls === "pistoleiro" && ultimateId === "arauto_caos") {
+    return `<svg class="lol-weapon-svg lol-weapon-svg--forma" viewBox="0 0 32 32" aria-hidden="true"><rect x="2" y="13" width="22" height="8" rx="1.5" fill="#1a1e28" stroke="#5599ff"/><rect x="20" y="14" width="10" height="6" rx="1" fill="#3a5080"/><circle cx="27" cy="17" r="2.2" fill="#88ddff"/><path fill="#66aaff" d="M4 16h14v2H4z" opacity="0.9"/></svg>`;
+  }
+  if (cls === "pistoleiro" && ultimateId === "especialista_destruicao") {
+    return `<svg class="lol-weapon-svg lol-weapon-svg--forma" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="15" width="20" height="5" rx="0.8" fill="#2a2220" stroke="#8a7060"/><rect x="5" y="16" width="14" height="2" fill="#c9a227"/><circle cx="22" cy="17" r="2.5" fill="#1a1810" stroke="#666"/><rect x="8" y="9" width="3" height="5" rx="0.5" fill="#3a3835"/></svg>`;
+  }
+  if (cls === "gladiador" && ultimateId === "campeao") {
+    return `<svg class="lol-weapon-svg lol-weapon-svg--forma" viewBox="0 0 32 32" aria-hidden="true"><path fill="#e8e8f0" d="M14 2l2 4h4l2-4v4h6l-2 6 2 6h-6v14h-4V18h-4v14h-4V18H6l2-6-2-6h6V2z"/><path fill="#c9a227" d="M15 6h2v10h-2z"/></svg>`;
+  }
+  if (cls === "gladiador" && ultimateId === "estrategista_nato") {
+    return `<svg class="lol-weapon-svg lol-weapon-svg--forma" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11" fill="#2a2418" stroke="#ffd54f" stroke-width="1.5"/><path fill="#ffd54f" d="M16 8v4l3 6h-6l3-6z"/><rect x="12" y="20" width="8" height="5" rx="1" fill="#5a5048"/></svg>`;
+  }
+  if (cls === "sacerdotisa" && ultimateId === "fada_cura") {
+    return `<svg class="lol-weapon-svg lol-weapon-svg--forma" viewBox="0 0 32 32" aria-hidden="true"><path fill="#6a9cff" d="M16 3l2 6h6l-5 4 2 7-5-3-5 3 2-7-5-4h6z"/><circle cx="16" cy="22" r="5" fill="#aaffcc" stroke="#44cc88"/><rect x="14" y="26" width="4" height="4" fill="#8a6a40"/></svg>`;
+  }
+  if (cls === "sacerdotisa" && ultimateId === "rainha_desespero") {
+    return `<svg class="lol-weapon-svg lol-weapon-svg--forma" viewBox="0 0 32 32" aria-hidden="true"><path fill="#4a2060" d="M16 4l3 8h7l-6 5 2 9-6-4-6 4 2-9-6-5h7z"/><circle cx="16" cy="24" r="4" fill="#220030" stroke="#aa66cc"/></svg>`;
+  }
+  return hudWeaponIconSvg(cls);
+}
+
 function combatPassiveDescription(h: Unit): string {
   if (h.heroClass === "sacerdotisa") {
     const p = priestPassivePotencialPoints(h.level);
@@ -4429,6 +4460,10 @@ function tooltipTiroDestruidor(h: Unit, m: GameModel, sk: SkillDef): string {
     cdv > 0
       ? `${tipInt(cdv)} onda(s) até disponível`
       : `${tipInt(cdB)} onda(s)`;
+  const usable = m.devSandboxMode || charges >= 1;
+  const dmgLine = usable
+    ? `${formatTooltipNumber(roundToCombatDecimals(per * mult))} bruto por inimigo tocado pelo feixe`
+    : "— (precisas de pelo menos 1 carga)";
   return tooltipAbilityHtml(sk.name, [
     { label: "Nível arma:", value: tipInt(w), kind: "fx" },
     {
@@ -4439,19 +4474,19 @@ function tooltipTiroDestruidor(h: Unit, m: GameModel, sk: SkillDef): string {
     { label: "CDR:", value: cdrStr, kind: "cdr" },
     {
       label: "Cargas:",
-      value: `${tipInt(charges)}/5 (+220% dano bruto por carga; máximo 1200%)`,
+      value: `${tipInt(charges)}/5 (+220% dano bruto por carga; máximo 1200%); mínimo 1 para disparar`,
       kind: "fx",
     },
     { label: "Alcance:", value: formatTooltipNumber(alc), kind: "range" },
     {
       label: "Dano (atual):",
-      value: `${formatTooltipNumber(roundToCombatDecimals(per * mult))} bruto por inimigo tocado pelo feixe`,
+      value: dmgLine,
       kind: "dmg",
     },
     {
       label: "Efeito:",
       value:
-        "Com a skill escolhida, move o rato: vês o feixe e os hexes atingidos. Clica num hex válido (não o teu) para disparar nessa direção.",
+        "Com a skill escolhida, move o rato: vês o feixe e os hexes atingidos. Clica num hex válido (não o teu) para disparar nessa direção. Cargas acumulam no fim de cada turno em que não usares a skill.",
       kind: "fx",
     },
   ]);
@@ -4463,13 +4498,21 @@ function tooltipFormaFinalHudSlot(
   isViewingActive: boolean,
 ): string {
   const cur = Math.min(60, h.level);
-  const body = h.ultimateId
-    ? `Progresso ${tipInt(cur)}/60. Já escolheste uma forma final.`
-    : cur < 60
-      ? `${tipInt(cur)}/60 — a barra prismática enche quando sobem de nível.`
-      : isViewingActive && m.phase === "combat"
-        ? `60/60 — clica para escolher a tua forma final.`
-        : `60/60 — na tua vez em combate, clica aqui para escolher a forma final.`;
+  const ultNm =
+    h.heroClass && h.ultimateId
+      ? HEROES[h.heroClass].ultimates.find((x) => x.id === h.ultimateId)
+          ?.name
+      : undefined;
+  const body =
+    h.ultimateId && h.formaFinal && ultNm
+      ? `Arma evoluída — ${ultNm}. O teu herói usa esta forma na arena (modelo 3D mais imponente).`
+      : h.ultimateId
+        ? `Progresso ${tipInt(cur)}/60. Já escolheste uma forma final.`
+        : cur < 60
+          ? `${tipInt(cur)}/60 — a barra prismática enche quando sobem de nível.`
+          : isViewingActive && m.phase === "combat"
+            ? `60/60 — clica para escolher a tua forma final.`
+            : `60/60 — na tua vez em combate, clica aqui para escolher a forma final.`;
   return tooltipPassiveHtml("Níveis até a forma final", body);
 }
 
@@ -6552,8 +6595,14 @@ function showCombatHUD(): void {
         h.level >= 60 &&
         !h.ultimateId;
       const readyCls = formaReady ? " lol-forma-final-slot--ready" : "";
-      lolWeaponSlot.innerHTML = `<button type="button" class="lol-forma-final-slot${readyCls}" style="--forma-pct:${barPct}" ${formaReady ? "" : "disabled"} aria-label="Forma final">
-<span class="lol-forma-final-title">Forma final</span>
+      const formaEvolved = !!(h.ultimateId && h.formaFinal);
+      const slotWeaponIco = formaEvolved
+        ? formaFinalWeaponIconSvg(h.heroClass, h.ultimateId!)
+        : hudWeaponIconSvg(h.heroClass);
+      const slotTitle = "Forma final";
+      lolWeaponSlot.innerHTML = `<button type="button" class="lol-forma-final-slot${formaEvolved ? " lol-forma-final-slot--evolved" : ""}${readyCls}" style="--forma-pct:${barPct}" ${formaReady ? "" : "disabled"} aria-label="Forma final">
+<span class="lol-forma-final-ico-wrap" aria-hidden="true">${slotWeaponIco}</span>
+<span class="lol-forma-final-title">${escapeHtml(slotTitle)}</span>
 <span class="lol-forma-final-track" aria-hidden="true"><span class="lol-forma-final-fill"></span></span>
 <span class="lol-forma-final-meta" aria-hidden="true">${Math.min(60, h.level)}/60</span>
 </button>`;
@@ -6835,11 +6884,14 @@ function showCombatHUD(): void {
             h.ultimateId === "arauto_caos"
           ) {
             const tiroSk = pistoleiroTiroDestruidorSkillDef();
+            const tiroCharges = h.tiroDestruidorCharges ?? 0;
+            const tiroNoCharges =
+              !model.devSandboxMode && tiroCharges < 1;
             addSkillBtn(
               "tiro_destruidor",
               tiroSk.name,
               h.skillCd["tiro_destruidor"] ?? 0,
-              false,
+              tiroNoCharges,
               tiroSk,
             );
             continue;
@@ -7458,8 +7510,11 @@ function showUltimatePick(): void {
         : HEROES.sacerdotisa.ultimates;
   list.forEach((ult, idx) => {
     const branch = idx as 0 | 1;
+    const branchIco =
+      cls != null ? formaFinalWeaponIconSvg(cls, ult.id) : "";
     const b = el(
       `<button type="button" class="forma-final-node forma-final-node--pick" data-ult-id="${escapeHtml(ult.id)}" aria-label="Forma ${idx + 1}: ${escapeHtml(ult.name)}">
+        <span class="forma-final-node__weapon-ico forma-final-node__weapon-ico--branch" aria-hidden="true">${branchIco}</span>
         <span class="forma-final-node__form-cap">Forma ${idx + 1}</span>
         <span class="forma-final-node__form-name">${escapeHtml(ult.name)}</span>
       </button>`,

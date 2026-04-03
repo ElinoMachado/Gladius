@@ -3159,6 +3159,33 @@ body.enemy-inspect--dragging-body {
   animation: forma-final-prism-glow 2.2s ease-in-out infinite;
 }
 
+.lol-forma-final-slot--evolved {
+  background: linear-gradient(
+    165deg,
+    rgba(36, 30, 48, 0.98),
+    rgba(14, 10, 22, 0.99)
+  );
+  box-shadow: inset 0 0 12px rgba(212, 175, 55, 0.12);
+}
+
+.lol-forma-final-ico-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+.lol-forma-final-ico-wrap .lol-weapon-svg {
+  width: 32px;
+  height: 32px;
+}
+
+.lol-forma-final-slot--evolved .lol-forma-final-ico-wrap .lol-weapon-svg {
+  width: 40px;
+  height: 40px;
+}
+
 .lol-forma-final-title {
   color: #c4b8e8;
   text-shadow: 0 0 8px rgba(160, 140, 255, 0.4);
@@ -8644,6 +8671,11 @@ select.forge-biome-sel option:disabled {
 .forma-final-node__weapon-ico .lol-weapon-svg {
   width: 52px;
   height: 52px;
+}
+
+.forma-final-node__weapon-ico--branch .lol-weapon-svg {
+  width: 46px;
+  height: 46px;
 }
 
 .forma-final-node__label,

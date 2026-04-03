@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { ForgeHeroLoadout, HeroClassId } from "../game/types";
-import { buildHeroBody } from "./unitModels";
+import { buildHeroBody, type HeroFormaVisualOpts } from "./unitModels";
 
 function disposeObject3D(o: THREE.Object3D): void {
   o.traverse((obj) => {
@@ -63,10 +63,11 @@ export class HeroPreview3D {
     heroClass: HeroClassId,
     displayColor: number,
     forgeLoadout?: ForgeHeroLoadout,
+    forma?: HeroFormaVisualOpts,
   ): void {
     disposeObject3D(this.pivot);
     this.pivot.clear();
-    const body = buildHeroBody(heroClass, displayColor, forgeLoadout);
+    const body = buildHeroBody(heroClass, displayColor, forgeLoadout, forma);
     body.position.set(0, 0, 0);
     this.pivot.add(body);
     this.pivot.rotation.y = 0.35;

@@ -2680,6 +2680,8 @@ export class GameModel {
         return false;
       if (!this.devSandboxMode && (h.skillCd["tiro_destruidor"] ?? 0) > 0)
         return false;
+      if (!this.devSandboxMode && (h.tiroDestruidorCharges ?? 0) < 1)
+        return false;
       if (!targetId?.startsWith("beam:")) return false;
       const rest = targetId.slice("beam:".length);
       const si = rest.indexOf(":");

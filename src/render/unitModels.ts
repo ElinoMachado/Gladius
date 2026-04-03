@@ -10,7 +10,10 @@ import {
 } from "./forgePieceMesh";
 
 export function modelKeyForUnit(
-  u: Pick<Unit, "isPlayer" | "heroClass" | "hp"> & {
+  u: Pick<
+    Unit,
+    "isPlayer" | "heroClass" | "hp" | "formaFinal" | "ultimateId"
+  > & {
     enemyArchetypeId?: string;
     forgeLoadout?: ForgeHeroLoadout;
   },
@@ -18,7 +21,9 @@ export function modelKeyForUnit(
   if (u.isPlayer) {
     if ((u.hp ?? 1) <= 0) return "h:tomb";
     const fk = forgeVisualKey(u.forgeLoadout);
-    return `h:${u.heroClass ?? "?"}:${fk}`;
+    const ult =
+      u.formaFinal && u.ultimateId ? u.ultimateId : "";
+    return `h:${u.heroClass ?? "?"}:${fk}:${ult}`;
   }
   return `e:${u.enemyArchetypeId ?? "gladinio"}`;
 }
@@ -140,11 +145,110 @@ function addForgeMeshes(
   }
 }
 
+/** Anel e peças extra quando o herói tem forma final (silhueta mais imponente). */
+function applyFormaFinalAugment(
+  root: THREE.Group,
+  heroClass: HeroClassId,
+  ultimateId: string,
+  accent: number,
+  mat: (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => THREE.MeshStandardMaterial,
+): void {
+  root.scale.multiplyScalar(1.14);
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.55, 0.045, 8, 28),
+    mat(0xffe8b8, { emissive: 0xcc7722, emissiveIntensity: 0.42 }),
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.035;
+  ring.userData.role = "forma_aura";
+  root.add(ring);
+
+  if (heroClass === "pistoleiro") {
+    if (ultimateId === "arauto_caos") {
+      const cannon = new THREE.Mesh(
+        new THREE.BoxGeometry(0.58, 0.12, 0.14),
+        mat(0x1e1e2a, { metalness: 0.55, emissive: 0x113366, emissiveIntensity: 0.35 }),
+      );
+      cannon.position.set(0.34, 1.06, 0.14);
+      root.add(cannon);
+      const lens = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.07, 0.09, 0.06, 10),
+        mat(0xaaddff, { emissive: 0x4488ff, emissiveIntensity: 0.75 }),
+      );
+      lens.rotation.z = Math.PI / 2;
+      lens.position.set(0.62, 1.06, 0.14);
+      root.add(lens);
+    } else if (ultimateId === "especialista_destruicao") {
+      const long = new THREE.Mesh(
+        new THREE.BoxGeometry(0.62, 0.055, 0.055),
+        mat(0x2a2420, { metalness: 0.65 }),
+      );
+      long.position.set(0.36, 1.04, 0.12);
+      root.add(long);
+      const scope = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8),
+        mat(0x222228, { metalness: 0.5 }),
+      );
+      scope.rotation.z = Math.PI / 2;
+      scope.position.set(0.12, 1.12, 0.16);
+      root.add(scope);
+    }
+  } else if (heroClass === "gladiador") {
+    if (ultimateId === "campeao") {
+      const bigSword = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.72, 0.05),
+        mat(0xe8ecf2, { metalness: 0.72 }),
+      );
+      bigSword.position.set(0.46, 1.22, 0.1);
+      root.add(bigSword);
+      const crown = new THREE.Mesh(
+        new THREE.TorusGeometry(0.12, 0.025, 6, 12),
+        mat(accent, { emissive: accent, emissiveIntensity: 0.25 }),
+      );
+      crown.rotation.x = Math.PI / 2;
+      crown.position.set(0, 1.52, 0);
+      root.add(crown);
+    } else if (ultimateId === "estrategista_nato") {
+      const coin = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.14, 0.14, 0.04, 12),
+        mat(0xffd54f, { metalness: 0.5, emissive: 0xaa7700, emissiveIntensity: 0.2 }),
+      );
+      coin.rotation.x = Math.PI / 2;
+      coin.position.set(0.28, 1.35, 0.18);
+      root.add(coin);
+    }
+  } else if (heroClass === "sacerdotisa") {
+    if (ultimateId === "fada_cura") {
+      const halo = new THREE.Mesh(
+        new THREE.TorusGeometry(0.22, 0.02, 6, 20),
+        mat(0x88ffcc, { emissive: 0x44ffaa, emissiveIntensity: 0.5 }),
+      );
+      halo.rotation.x = Math.PI / 2;
+      halo.position.set(0, 1.48, 0);
+      root.add(halo);
+    } else if (ultimateId === "rainha_desespero") {
+      const spike = new THREE.Mesh(
+        new THREE.ConeGeometry(0.1, 0.28, 6),
+        mat(0x4a2060, { emissive: 0x220044, emissiveIntensity: 0.35 }),
+      );
+      spike.position.set(-0.28, 1.42, 0.06);
+      spike.rotation.z = 0.35;
+      root.add(spike);
+    }
+  }
+}
+
+export type HeroFormaVisualOpts = {
+  formaFinal?: boolean;
+  ultimateId?: string;
+};
+
 /** Corpo do herói (sem barras de vida — só malha). */
 export function buildHeroBody(
   heroClass: HeroClassId,
   displayColor: number,
   forgeLoadout?: ForgeHeroLoadout,
+  forma?: HeroFormaVisualOpts,
 ): THREE.Group {
   const root = new THREE.Group();
   const accent = displayColor;
@@ -193,6 +297,9 @@ export function buildHeroBody(
     gun.add(grip);
     root.add(gun);
     addForgeMeshes(root, heroClass, forgeLoadout, stdMat);
+    if (forma?.formaFinal && forma.ultimateId) {
+      applyFormaFinalAugment(root, heroClass, forma.ultimateId, accent, stdMat);
+    }
     return root;
   }
 
@@ -237,6 +344,9 @@ export function buildHeroBody(
     sword.position.set(0.4, 1.12, 0.08);
     root.add(sword);
     addForgeMeshes(root, heroClass, forgeLoadout, stdMat);
+    if (forma?.formaFinal && forma.ultimateId) {
+      applyFormaFinalAugment(root, heroClass, forma.ultimateId, accent, stdMat);
+    }
     return root;
   }
 
@@ -280,6 +390,9 @@ export function buildHeroBody(
   orb.position.set(0.32, 1.38, 0.1);
   root.add(orb);
   addForgeMeshes(root, heroClass, forgeLoadout, stdMat);
+  if (forma?.formaFinal && forma.ultimateId) {
+    applyFormaFinalAugment(root, heroClass, forma.ultimateId, accent, stdMat);
+  }
   return root;
 }
 
@@ -290,14 +403,25 @@ export function buildEnemyBody(archetypeId: string, displayColor: number): THREE
 export function buildUnitBodyGroup(
   u: Pick<
     Unit,
-    "isPlayer" | "heroClass" | "enemyArchetypeId" | "displayColor" | "forgeLoadout" | "hp"
+    | "isPlayer"
+    | "heroClass"
+    | "enemyArchetypeId"
+    | "displayColor"
+    | "forgeLoadout"
+    | "hp"
+    | "formaFinal"
+    | "ultimateId"
   >,
 ): THREE.Group {
   if (u.isPlayer && (u.hp ?? 1) <= 0) {
     return buildHeroTombstone(u.displayColor);
   }
   if (u.isPlayer && u.heroClass) {
-    return buildHeroBody(u.heroClass, u.displayColor, u.forgeLoadout);
+    const forma =
+      u.formaFinal && u.ultimateId
+        ? { formaFinal: true as const, ultimateId: u.ultimateId }
+        : undefined;
+    return buildHeroBody(u.heroClass, u.displayColor, u.forgeLoadout, forma);
   }
   return buildEnemyBody(u.enemyArchetypeId ?? "gladinio", u.displayColor);
 }
