@@ -279,8 +279,6 @@ export class GameRenderer {
   private readonly rayGround = new THREE.Raycaster();
   private readonly rayStatus = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-  /** Fallback de picking: malha do GLB pode não cobrir o centro (hexes por cima). */
-  private readonly coliseumPickBoxScratch = new THREE.Box3();
   private readonly hitGround = new THREE.Vector3();
   private readonly panDragHitScratch = new THREE.Vector3();
   private readonly panDragBase = new THREE.Vector3();
@@ -325,6 +323,12 @@ export class GameRenderer {
   private readonly editorScratchVec3B = new THREE.Vector3();
   private arenaLayoutPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private onArenaLayoutSessionEnd: (() => void) | null = null;
+  /** Objeto 3D ativo no editor de cena (null até ao primeiro clique num selecionável). */
+  private layoutSelectedRoot: THREE.Object3D | null = null;
+  private layoutPointerDownX = 0;
+  private layoutPointerDownY = 0;
+  private layoutEligibleForDragAfterDown = false;
+  private readonly layoutDragThresholdPx = 8;
   private readonly ndcGroundCorners = [
     new THREE.Vector2(-1, -1),
     new THREE.Vector2(1, -1),
@@ -3747,6 +3751,12 @@ export class GameRenderer {
         prefs.coliseum.y,
         prefs.coliseum.z,
       );
+      const sc =
+        typeof prefs.coliseumScale === "number" &&
+        Number.isFinite(prefs.coliseumScale)
+          ? THREE.MathUtils.clamp(prefs.coliseumScale, 0.02, 48)
+          : 1;
+      this.arenaColiseumMount.scale.setScalar(sc);
     }
     if (prefs.freeCamera) {
       const fc = prefs.freeCamera;
@@ -3774,8 +3784,12 @@ export class GameRenderer {
 
   collectSceneLayoutPrefs(): SceneLayoutPrefs {
     const coliseum = this.getColiseumOffsetForPrefs();
+    const m = this.arenaColiseumMount;
+    const coliseumScale = m
+      ? THREE.MathUtils.clamp(m.scale.x, 0.02, 48)
+      : 1;
     if (!this.arenaLayoutCameraPersonalized) {
-      return { coliseum, freeCamera: null };
+      return { coliseum, coliseumScale, freeCamera: null };
     }
     const freeCamera = {
       position: [
@@ -3791,7 +3805,7 @@ export class GameRenderer {
       ] as [number, number, number, number],
       fov: this.freeCamera.fov,
     };
-    return { coliseum, freeCamera };
+    return { coliseum, coliseumScale, freeCamera };
   }
 
   /** Menu principal: permite iniciar a sessão de ajuste (botão no menu). */
@@ -3855,32 +3869,6 @@ export class GameRenderer {
     };
   }
 
-  private pickColiseumWithCamera(
-    cam: THREE.Camera,
-    ndcX: number,
-    ndcY: number,
-  ): boolean {
-    if (!this.arenaColiseumMount) return false;
-    if (cam === this.camera) this.applyCameraPose();
-    else cam.updateMatrixWorld(true);
-    this.arenaColiseumMount.updateMatrixWorld(true);
-
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
-    if (ray.intersectObject(this.arenaColiseumMount, true).length > 0) return true;
-
-    this.coliseumPickBoxScratch.setFromObject(this.arenaColiseumMount);
-    if (!this.coliseumPickBoxScratch.isEmpty()) {
-      this.coliseumPickBoxScratch.expandByScalar(2.5);
-      if (ray.ray.intersectsBox(this.coliseumPickBoxScratch)) return true;
-    }
-
-    const groundHit = this.editorScratchVec3;
-    if (ray.ray.intersectPlane(this.groundPlane, groundHit) === null) return false;
-    const r = COLISEUM_XZ_MAX * 1.08;
-    return groundHit.x * groundHit.x + groundHit.z * groundHit.z <= r * r;
-  }
-
   private intersectGroundWithCamera(
     cam: THREE.Camera,
     ndcX: number,
@@ -3894,9 +3882,10 @@ export class GameRenderer {
     return ray.ray.intersectPlane(plane, out) !== null;
   }
 
-  private applyWorldDeltaToColiseumMountXZ(dw: THREE.Vector3): void {
-    const mount = this.arenaColiseumMount;
-    if (!mount) return;
+  private applyWorldDeltaToLayoutMountXZ(
+    mount: THREE.Object3D,
+    dw: THREE.Vector3,
+  ): void {
     const c = Math.cos(-this.arenaYaw);
     const s = Math.sin(-this.arenaYaw);
     const lx = dw.x * c + dw.z * s;
@@ -3905,10 +3894,110 @@ export class GameRenderer {
     mount.position.z += lz;
   }
 
+  /** Raízes que podem receber clique no editor (extensível para mais props). */
+  private getLayoutSelectableRoots(): THREE.Object3D[] {
+    return this.arenaColiseumMount ? [this.arenaColiseumMount] : [];
+  }
+
+  private pickLayoutSelectableRoot(
+    cam: THREE.Camera,
+    ndcX: number,
+    ndcY: number,
+  ): THREE.Object3D | null {
+    const roots = this.getLayoutSelectableRoots();
+    if (roots.length === 0) return null;
+    if (cam === this.camera) this.applyCameraPose();
+    else cam.updateMatrixWorld(true);
+    for (const r of roots) r.updateMatrixWorld(true);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
+    const hits = ray.intersectObjects(roots, true);
+    const solid = hits.filter(
+      (h) =>
+        h.object instanceof THREE.Mesh ||
+        h.object instanceof THREE.SkinnedMesh ||
+        h.object instanceof THREE.InstancedMesh,
+    );
+    if (solid.length === 0) return null;
+    const obj = solid[0]!.object;
+    for (const r of roots) {
+      let p: THREE.Object3D | null = obj;
+      while (p) {
+        if (p === r) return r;
+        p = p.parent;
+      }
+    }
+    return null;
+  }
+
+  private rayHitsLayoutRoot(
+    cam: THREE.Camera,
+    ndcX: number,
+    ndcY: number,
+    root: THREE.Object3D,
+  ): boolean {
+    if (cam === this.camera) this.applyCameraPose();
+    else cam.updateMatrixWorld(true);
+    root.updateMatrixWorld(true);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
+    const hits = ray.intersectObject(root, true);
+    return hits.some(
+      (h) =>
+        h.object instanceof THREE.Mesh ||
+        h.object instanceof THREE.SkinnedMesh ||
+        h.object instanceof THREE.InstancedMesh,
+    );
+  }
+
+  private clearLayoutSelectionOutlines(root: THREE.Object3D | null): void {
+    if (!root) return;
+    root.traverse((obj) => {
+      const ln = obj.userData.layoutOutlineLines as
+        | THREE.LineSegments
+        | undefined;
+      if (ln) {
+        obj.remove(ln);
+        ln.geometry.dispose();
+        (ln.material as THREE.Material).dispose();
+        delete obj.userData.layoutOutlineLines;
+      }
+    });
+  }
+
+  private addLayoutSelectionOutlines(root: THREE.Object3D): void {
+    root.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh) || !obj.geometry) return;
+      if (!obj.geometry.getAttribute("position")) return;
+      if (obj.userData.layoutOutlineLines) return;
+      const edges = new THREE.EdgesGeometry(obj.geometry, 22);
+      const mat = new THREE.LineBasicMaterial({
+        color: 0xff3a3a,
+        transparent: true,
+        opacity: 0.94,
+        depthTest: false,
+      });
+      const lines = new THREE.LineSegments(edges, mat);
+      lines.userData.layoutSelectionOutline = true;
+      lines.renderOrder = 2;
+      obj.add(lines);
+      obj.userData.layoutOutlineLines = lines;
+    });
+  }
+
+  private setLayoutSelectedRoot(root: THREE.Object3D | null): void {
+    if (this.layoutSelectedRoot === root) return;
+    this.clearLayoutSelectionOutlines(this.layoutSelectedRoot);
+    this.layoutSelectedRoot = root;
+    if (root) this.addLayoutSelectionOutlines(root);
+  }
+
   private beginArenaLayoutSession(canvas: HTMLCanvasElement): void {
     if (this.arenaLayoutEditActive) return;
     this.arenaLayoutEditActive = true;
     this.layoutSubMode = "coliseum";
+    this.setLayoutSelectedRoot(null);
+    this.layoutEligibleForDragAfterDown = false;
     this.arenaLayoutCameraPersonalized = this.usePersistentFreeCamera;
     this.editorDragMode = "none";
     this.applyCameraPose();
@@ -3926,6 +4015,8 @@ export class GameRenderer {
     this.arenaLayoutEditActive = false;
     this.layoutSubMode = "coliseum";
     this.editorDragMode = "none";
+    this.layoutEligibleForDragAfterDown = false;
+    this.setLayoutSelectedRoot(null);
     for (const c of [
       "KeyW",
       "KeyA",
@@ -3935,6 +4026,10 @@ export class GameRenderer {
       "KeyE",
       "KeyX",
       "KeyZ",
+      "BracketLeft",
+      "BracketRight",
+      "NumpadAdd",
+      "NumpadSubtract",
     ]) {
       this.keysDown.delete(c);
     }
@@ -3963,7 +4058,8 @@ export class GameRenderer {
 
   private updateArenaLayoutEditSession(dt: number): void {
     if (!this.arenaLayoutEditActive) return;
-    if (this.layoutSubMode === "coliseum" && this.arenaColiseumMount) {
+    if (this.layoutSubMode === "coliseum" && this.layoutSelectedRoot) {
+      const sel = this.layoutSelectedRoot;
       const sp = 17 * dt;
       const ix =
         (this.keysDown.has("KeyD") ? 1 : 0) -
@@ -3977,11 +4073,30 @@ export class GameRenderer {
       let moved = false;
       if (ix !== 0 || iz !== 0) {
         this.editorScratchVec3.set(ix * sp, 0, iz * sp);
-        this.applyWorldDeltaToColiseumMountXZ(this.editorScratchVec3);
+        this.applyWorldDeltaToLayoutMountXZ(sel, this.editorScratchVec3);
         moved = true;
       }
       if (iy !== 0) {
-        this.arenaColiseumMount.position.y += iy * sp;
+        sel.position.y += iy * sp;
+        moved = true;
+      }
+      let scaled = false;
+      const sUp = 0.88 * dt;
+      const sDn = 0.72 * dt;
+      if (this.keysDown.has("BracketRight") || this.keysDown.has("NumpadAdd")) {
+        sel.scale.multiplyScalar(1 + sUp);
+        scaled = true;
+      }
+      if (
+        this.keysDown.has("BracketLeft") ||
+        this.keysDown.has("NumpadSubtract")
+      ) {
+        sel.scale.multiplyScalar(Math.max(0.02 / Math.max(sel.scale.x, 1e-6), 1 - sDn));
+        scaled = true;
+      }
+      if (scaled) {
+        const u = THREE.MathUtils.clamp(sel.scale.x, 0.02, 48);
+        sel.scale.setScalar(u);
         moved = true;
       }
       if (moved) this.scheduleArenaLayoutPersist();
@@ -4044,6 +4159,10 @@ export class GameRenderer {
       "KeyE",
       "KeyX",
       "KeyZ",
+      "BracketLeft",
+      "BracketRight",
+      "NumpadAdd",
+      "NumpadSubtract",
     ]);
     window.addEventListener("keydown", (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
@@ -4104,44 +4223,82 @@ export class GameRenderer {
 
       if (e.button !== 0) {
         this.editorDragMode = "none";
+        this.layoutEligibleForDragAfterDown = false;
         return;
       }
-      if (
-        this.pickColiseumWithCamera(this.freeCamera, ndc.x, ndc.y) &&
-        this.arenaColiseumMount
-      ) {
-        if (e.shiftKey) {
-          this.editorDragMode = "coliseum_y";
-        } else if (
-          this.intersectGroundWithCamera(
-            this.freeCamera,
-            ndc.x,
-            ndc.y,
-            0,
-            this.editorLastGround,
-          )
-        ) {
-          this.editorDragMode = "coliseum_xz";
-        } else {
-          this.editorDragMode = "none";
-        }
-      } else {
+
+      this.layoutPointerDownX = e.clientX;
+      this.layoutPointerDownY = e.clientY;
+      const pickRoot = this.pickLayoutSelectableRoot(
+        this.freeCamera,
+        ndc.x,
+        ndc.y,
+      );
+      if (!pickRoot) {
+        this.setLayoutSelectedRoot(null);
+        this.layoutEligibleForDragAfterDown = false;
         this.editorDragMode = "none";
+        return;
       }
-      if (this.editorDragMode !== "none") {
-        try {
-          canvas.setPointerCapture(e.pointerId);
-        } catch {
-          /* ignore */
-        }
-      }
+      this.setLayoutSelectedRoot(pickRoot);
+      this.layoutEligibleForDragAfterDown = this.rayHitsLayoutRoot(
+        this.freeCamera,
+        ndc.x,
+        ndc.y,
+        pickRoot,
+      );
+      this.editorDragMode = "none";
     };
 
     const onMove = (e: PointerEvent) => {
-      if (!this.arenaLayoutEditActive || this.editorDragMode === "none") return;
+      if (!this.arenaLayoutEditActive) return;
+      const ndc = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
+      if (
+        this.layoutSubMode === "coliseum" &&
+        this.layoutEligibleForDragAfterDown &&
+        this.layoutSelectedRoot &&
+        (e.buttons & 1) !== 0 &&
+        this.editorDragMode === "none"
+      ) {
+        const dpx = e.clientX - this.layoutPointerDownX;
+        const dpy = e.clientY - this.layoutPointerDownY;
+        if (
+          Math.hypot(dpx, dpy) >= this.layoutDragThresholdPx &&
+          this.rayHitsLayoutRoot(
+            this.freeCamera,
+            ndc.x,
+            ndc.y,
+            this.layoutSelectedRoot,
+          )
+        ) {
+          if (e.shiftKey) {
+            this.editorDragMode = "coliseum_y";
+          } else if (
+            this.intersectGroundWithCamera(
+              this.freeCamera,
+              ndc.x,
+              ndc.y,
+              0,
+              this.editorLastGround,
+            )
+          ) {
+            this.editorDragMode = "coliseum_xz";
+          }
+          this.layoutEligibleForDragAfterDown = false;
+          this.editorLastClientX = e.clientX;
+          this.editorLastClientY = e.clientY;
+          if (this.editorDragMode !== "none") {
+            try {
+              canvas.setPointerCapture(e.pointerId);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      }
+      if (this.editorDragMode === "none") return;
       e.preventDefault();
       e.stopPropagation();
-      const ndc = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
       const dx = e.clientX - this.editorLastClientX;
       const dy = e.clientY - this.editorLastClientY;
       this.editorLastClientX = e.clientX;
@@ -4175,26 +4332,28 @@ export class GameRenderer {
         }
         case "coliseum_xz": {
           const hit = this.editorScratchVec3;
+          const sel = this.layoutSelectedRoot;
           if (
+            sel &&
             this.intersectGroundWithCamera(
               this.freeCamera,
               ndc.x,
               ndc.y,
               0,
               hit,
-            ) &&
-            this.arenaColiseumMount
+            )
           ) {
             const dw = hit.clone().sub(this.editorLastGround);
             this.editorLastGround.copy(hit);
-            this.applyWorldDeltaToColiseumMountXZ(dw);
+            this.applyWorldDeltaToLayoutMountXZ(sel, dw);
             this.scheduleArenaLayoutPersist();
           }
           break;
         }
         case "coliseum_y": {
-          if (this.arenaColiseumMount) {
-            this.arenaColiseumMount.position.y -= dy * 0.065;
+          const sel = this.layoutSelectedRoot;
+          if (sel) {
+            sel.position.y -= dy * 0.065;
             this.scheduleArenaLayoutPersist();
           }
           break;
@@ -4207,6 +4366,7 @@ export class GameRenderer {
     const onUp = (e: PointerEvent) => {
       if (!this.arenaLayoutEditActive) return;
       if (e.button !== 0 && e.button !== 2) return;
+      this.layoutEligibleForDragAfterDown = false;
       this.editorDragMode = "none";
       try {
         canvas.releasePointerCapture(e.pointerId);

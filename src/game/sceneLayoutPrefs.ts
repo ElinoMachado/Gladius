@@ -3,6 +3,8 @@ const LS_KEY = "gladius-scene-layout-v1";
 export type SceneLayoutPrefs = {
   /** Deslocamento extra do grupo que contém o GLB do coliseu (mundo → local do arenaRoot). */
   coliseum: { x: number; y: number; z: number };
+  /** Escala uniforme do grupo do coliseu (editor de cena). */
+  coliseumScale: number;
   /** Câmara livre (perspetiva); null = usar câmara ortográfica de combate. */
   freeCamera: null | {
     position: [number, number, number];
@@ -13,11 +15,17 @@ export type SceneLayoutPrefs = {
 
 const DEFAULT_PREFS: SceneLayoutPrefs = {
   coliseum: { x: 0, y: 0, z: 0 },
+  coliseumScale: 1,
   freeCamera: null,
 };
 
 function parsePrefs(raw: string | null): SceneLayoutPrefs {
-  if (!raw) return { ...DEFAULT_PREFS, coliseum: { ...DEFAULT_PREFS.coliseum } };
+  if (!raw)
+    return {
+      ...DEFAULT_PREFS,
+      coliseum: { ...DEFAULT_PREFS.coliseum },
+      coliseumScale: DEFAULT_PREFS.coliseumScale,
+    };
   try {
     const o = JSON.parse(raw) as Partial<SceneLayoutPrefs>;
     const col = o.coliseum;
@@ -27,6 +35,12 @@ function parsePrefs(raw: string | null): SceneLayoutPrefs {
       col && typeof col.y === "number" && Number.isFinite(col.y) ? col.y : 0;
     const cz =
       col && typeof col.z === "number" && Number.isFinite(col.z) ? col.z : 0;
+    const cScale =
+      typeof o.coliseumScale === "number" &&
+      Number.isFinite(o.coliseumScale) &&
+      o.coliseumScale > 0
+        ? Math.min(48, Math.max(0.02, o.coliseumScale))
+        : 1;
     let freeCamera: SceneLayoutPrefs["freeCamera"] = null;
     const fc = o.freeCamera;
     if (
@@ -48,15 +62,27 @@ function parsePrefs(raw: string | null): SceneLayoutPrefs {
         fov,
       };
     }
-    return { coliseum: { x: cx, y: cy, z: cz }, freeCamera };
+    return {
+      coliseum: { x: cx, y: cy, z: cz },
+      coliseumScale: cScale,
+      freeCamera,
+    };
   } catch {
-    return { ...DEFAULT_PREFS, coliseum: { ...DEFAULT_PREFS.coliseum } };
+    return {
+      ...DEFAULT_PREFS,
+      coliseum: { ...DEFAULT_PREFS.coliseum },
+      coliseumScale: DEFAULT_PREFS.coliseumScale,
+    };
   }
 }
 
 export function loadSceneLayoutPrefs(): SceneLayoutPrefs {
   if (typeof localStorage === "undefined") {
-    return { ...DEFAULT_PREFS, coliseum: { ...DEFAULT_PREFS.coliseum } };
+    return {
+      ...DEFAULT_PREFS,
+      coliseum: { ...DEFAULT_PREFS.coliseum },
+      coliseumScale: DEFAULT_PREFS.coliseumScale,
+    };
   }
   return parsePrefs(localStorage.getItem(LS_KEY));
 }
