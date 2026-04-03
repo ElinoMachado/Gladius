@@ -4977,6 +4977,37 @@ export class GameModel {
     this.checkLevelUp(u);
   }
 
+  /**
+   * Modo sandbox: abre já o menu de escolha de forma final (nível 60) para este herói.
+   * Repõe ultimate/forma se já existirem, sobe para nv. 60 se for preciso e muda a fase para `ultimate_pick`.
+   */
+  sandboxOpenFormaFinalPick(heroId: string): void {
+    if (!this.devSandboxMode) return;
+    if (this.phase === "level_up_pick" || this.phase === "ultimate_pick") return;
+    if (this.phase !== "combat") return;
+    const u = this.units.find((x) => x.id === heroId);
+    if (!u?.isPlayer || u.hp <= 0 || !u.heroClass) return;
+    this.cancelLevelUpFloatHoldTimer();
+    this.pendingArtifacts = null;
+    delete u.ultimateId;
+    u.formaFinal = false;
+    u.flying = false;
+    if (u.level < 60) {
+      u.level = 60;
+      u.xpToNext = xpCurve(u.level);
+      u.xp = 0;
+      this.syncWeaponPassivesOnLevelUp(u);
+    }
+    u.hp = Math.min(u.hp, u.maxHp);
+    u.mana = Math.min(u.mana, u.maxMana);
+    this.pendingUltimate = { unitId: u.id };
+    this.phase = "ultimate_pick";
+    this.log(
+      `[Sandbox] ${u.name}: menu de forma final (nv. ${u.level}).`,
+    );
+    this.emit();
+  }
+
   /** Modo sandbox: matar herói (remove da arena como morte normal). */
   sandboxKillHero(heroId: string): void {
     if (!this.devSandboxMode || this.phase !== "combat") return;

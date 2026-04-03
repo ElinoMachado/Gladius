@@ -2421,6 +2421,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
       <div class="combat-sandbox-hero-row__actions">
         <button type="button" class="btn combat-sandbox-fly-btn" data-sandbox-toggle-fly="${escapeHtml(p.id)}" aria-pressed="${p.flying ? "true" : "false"}">${p.flying ? "Aterrar" : "Voar"}</button>
         <button type="button" class="btn combat-sandbox-level-btn" data-sandbox-level-up="${escapeHtml(p.id)}">Nv+1</button>
+        <button type="button" class="btn combat-sandbox-forma-btn" data-sandbox-forma-final="${escapeHtml(p.id)}" title="Abre o menu de forma final (nv. 60)">Forma final</button>
         <button type="button" class="btn combat-sandbox-kill-btn" data-sandbox-kill-hero="${escapeHtml(p.id)}">Matar</button>
       </div>
     </div>`,
@@ -2436,7 +2437,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     <p class="combat-sandbox-panel__hero-hint">Herói: <strong>${heroLabelText}</strong> (turno ou primeiro vivo)</p>
     <section class="combat-sandbox-heroes" aria-label="Heróis sandbox">
       <h3 class="shop-sandbox-artifacts__title">Heróis</h3>
-      <p class="shop-sandbox-artifacts__hint">Voar / Aterrar altera o estado de voo (combate + modelo 3D). Nv+1 concede XP até subir um nível e abre o menu de artefato ou, no nível 60, o de forma final. Matar remove o herói do combate (como morte).</p>
+      <p class="shop-sandbox-artifacts__hint">Voar / Aterrar altera o estado de voo (combate + modelo 3D). Nv+1 concede XP até subir um nível e abre o menu de artefato ou, no nível 60, o de forma final. Forma final abre esse menu já (nv. 60 se preciso, remove forma anterior). Matar remove o herói do combate (como morte).</p>
       ${
         partyKillRows
           ? `<div class="combat-sandbox-heroes__list" role="group">${partyKillRows}</div>`
@@ -2536,6 +2537,14 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
       if (lvlBtn && panel.contains(lvlBtn)) {
         const lid = lvlBtn.dataset.sandboxLevelUp;
         if (lid) model.sandboxAddHeroLevel(lid);
+        return;
+      }
+      const formaBtn = (e.target as HTMLElement).closest(
+        "[data-sandbox-forma-final]",
+      ) as HTMLButtonElement | null;
+      if (formaBtn && panel.contains(formaBtn)) {
+        const fid = formaBtn.dataset.sandboxFormaFinal;
+        if (fid) model.sandboxOpenFormaFinalPick(fid);
         return;
       }
       const btn = (e.target as HTMLElement).closest(
