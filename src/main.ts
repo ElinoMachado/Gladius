@@ -9,6 +9,7 @@ import {
   type CombatVfxHint,
 } from "./game/gameModel";
 import { GameRenderer } from "./render/GameRenderer";
+import { preloadArenaColiseumGlb } from "./render/arenaColiseumGlb";
 import { preloadForgePieceGlbs } from "./render/forgePieceGlb";
 import { preloadGladiadorGlb } from "./render/gladiatorGlb";
 import { HeroPreview3D } from "./render/HeroPreview3D";
@@ -253,7 +254,12 @@ const view = new GameRenderer(canvas);
 
 view.buildHexGrid(model.grid);
 
-Promise.all([preloadGladiadorGlb(), preloadForgePieceGlbs()]).then(() => {
+Promise.all([
+  preloadGladiadorGlb(),
+  preloadForgePieceGlbs(),
+  preloadArenaColiseumGlb(),
+]).then(() => {
+  view.attachArenaColiseumDecoration();
   render();
 });
 

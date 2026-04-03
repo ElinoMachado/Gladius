@@ -30,6 +30,10 @@ import {
   type BunkerRenderTier,
 } from "./bunkerMesh";
 import {
+  cloneArenaColiseum,
+  isArenaColiseumLoaded,
+} from "./arenaColiseumGlb";
+import {
   connectToSfxOut,
   ensureAudioContext,
   playCometaArcanoImpact,
@@ -116,6 +120,10 @@ export class GameRenderer {
   private hexMeshes = new Map<string, THREE.Mesh>();
   private unitMeshes = new Map<string, THREE.Group>();
   private readonly arenaRoot: THREE.Group;
+  /** Modelo 3D do coliseu (chão + arquibancadas); hexes ficam invisíveis mas ativos ao clique. */
+  private arenaColiseumDecoration: THREE.Group | null = null;
+  /** Multidão procedural em volta; oculta-se quando o GLB da arena carrega. */
+  private coliseumCrowdRing: THREE.InstancedMesh | null = null;
   private throneGroup: THREE.Group;
   private roseParticles: THREE.Points | null = null;
   private animRose = 0;
@@ -2047,7 +2055,46 @@ export class GameRenderer {
       mesh.setMatrixAt(i, m);
     }
     mesh.instanceMatrix.needsUpdate = true;
+    this.coliseumCrowdRing = mesh;
     this.arenaRoot.add(mesh);
+  }
+
+  /**
+   * Coloca o GLB da arena por baixo do trono/unidades; hexes passam a ser só “hit proxy” invisível.
+   * Idempotente; chamar após `preloadArenaColiseumGlb()` resolver.
+   */
+  attachArenaColiseumDecoration(): void {
+    if (this.arenaColiseumDecoration != null || !isArenaColiseumLoaded()) return;
+    const g = cloneArenaColiseum();
+    if (!g) return;
+    this.arenaColiseumDecoration = g;
+    g.userData.role = "arena_coliseum";
+
+    const throne = this.throneGroup;
+    this.arenaRoot.remove(throne);
+    const crowd = this.coliseumCrowdRing;
+    if (crowd) this.arenaRoot.remove(crowd);
+
+    this.arenaRoot.add(g);
+    this.arenaRoot.add(throne);
+    if (crowd) {
+      crowd.visible = false;
+      this.arenaRoot.add(crowd);
+    }
+
+    this.applyHexPickProxyVisual();
+  }
+
+  /** Hex visível só para raycast: opaco 0, sem escrever depth (mostra o coliseu por baixo). */
+  private applyHexPickProxyVisual(): void {
+    if (!isArenaColiseumLoaded()) return;
+    for (const mesh of this.hexMeshes.values()) {
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      mat.transparent = true;
+      mat.opacity = 0;
+      mat.depthWrite = false;
+      mat.needsUpdate = true;
+    }
   }
 
   buildHexGrid(grid: Map<string, HexCell>): void {
@@ -2058,11 +2105,15 @@ export class GameRenderer {
     const geo = new THREE.ShapeGeometry(shape);
     geo.rotateX(-Math.PI / 2);
 
+    const hexPickOnly = isArenaColiseumLoaded();
     for (const cell of grid.values()) {
       const mat = new THREE.MeshStandardMaterial({
         color: BIOME_HEX_COLOR[cell.biome],
         roughness: 0.85,
         flatShading: true,
+        transparent: hexPickOnly,
+        opacity: hexPickOnly ? 0 : 1,
+        depthWrite: !hexPickOnly,
       });
       const mesh = new THREE.Mesh(geo, mat);
       const { x, z } = axialToWorld(cell.q, cell.r, HEX_SIZE);
