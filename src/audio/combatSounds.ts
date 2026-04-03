@@ -185,6 +185,55 @@ export function playKnifeCut(): void {
   noise.stop(t + 0.15);
 }
 
+/** Impacto do Cometa arcano (explosão mágica no castelo). */
+export function playCometaArcanoImpact(): void {
+  const c = ctx();
+  if (!c) return;
+  resume();
+  const t = c.currentTime;
+  const oLow = c.createOscillator();
+  const gLow = c.createGain();
+  oLow.type = "sine";
+  oLow.frequency.setValueAtTime(48, t);
+  oLow.frequency.exponentialRampToValueAtTime(18, t + 0.55);
+  gLow.gain.setValueAtTime(0.26, t);
+  gLow.gain.exponentialRampToValueAtTime(0.01, t + 0.58);
+  oLow.connect(gLow);
+  connectToSfxOut(c, gLow);
+  oLow.start(t);
+  oLow.stop(t + 0.62);
+  const noise = c.createBufferSource();
+  const n = Math.floor(c.sampleRate * 0.42);
+  const buf = c.createBuffer(1, n, c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) {
+    d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (n * 0.1));
+  }
+  noise.buffer = buf;
+  const hp = c.createBiquadFilter();
+  hp.type = "lowpass";
+  hp.frequency.value = 4800;
+  const gN = c.createGain();
+  gN.gain.setValueAtTime(0.44, t);
+  gN.gain.exponentialRampToValueAtTime(0.01, t + 0.38);
+  noise.connect(hp);
+  hp.connect(gN);
+  connectToSfxOut(c, gN);
+  noise.start(t);
+  noise.stop(t + 0.42);
+  const oAir = c.createOscillator();
+  const gA = c.createGain();
+  oAir.type = "triangle";
+  oAir.frequency.setValueAtTime(220, t + 0.015);
+  oAir.frequency.exponentialRampToValueAtTime(70, t + 0.22);
+  gA.gain.setValueAtTime(0.12, t + 0.015);
+  gA.gain.exponentialRampToValueAtTime(0.01, t + 0.26);
+  oAir.connect(gA);
+  connectToSfxOut(c, gA);
+  oAir.start(t + 0.015);
+  oAir.stop(t + 0.28);
+}
+
 /** Explosão curta tipo mina terrestre. */
 export function playLandmineExplosion(): void {
   const c = ctx();

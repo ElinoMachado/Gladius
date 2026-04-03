@@ -29,6 +29,7 @@ import {
 import {
   connectToSfxOut,
   ensureAudioContext,
+  playCometaArcanoImpact,
   resume as resumeWebAudio,
 } from "../audio/combatSounds";
 
@@ -218,6 +219,9 @@ export class GameRenderer {
     heroR: number;
     comet: THREE.Group;
     shockRing: THREE.Mesh | null;
+    anticipation: THREE.Group;
+    hubLight: THREE.PointLight;
+    glowMesh: THREE.Mesh;
     impactDone: boolean;
     onImpact: () => void;
     onComplete: () => void;
@@ -416,38 +420,72 @@ export class GameRenderer {
     this.focusTarget = null;
     this.panVelocity.set(0, 0);
 
+    const S = 3;
     const { x, z } = axialToWorld(0, 0, HEX_SIZE);
     const g = new THREE.Group();
     const ball = new THREE.Mesh(
-      new THREE.SphereGeometry(1.15, 20, 14),
+      new THREE.SphereGeometry(1.15 * S, 22, 16),
       new THREE.MeshStandardMaterial({
         color: 0xffffff,
-        emissive: 0xc5d5ee,
-        emissiveIntensity: 0.9,
-        metalness: 0.15,
-        roughness: 0.32,
+        emissive: 0xd8e8ff,
+        emissiveIntensity: 1.05,
+        metalness: 0.12,
+        roughness: 0.28,
       }),
     );
     g.add(ball);
     for (let i = 0; i < 6; i++) {
       const sm = new THREE.Mesh(
-        new THREE.SphereGeometry(0.42 - i * 0.055, 10, 8),
+        new THREE.SphereGeometry((0.42 - i * 0.055) * S, 12, 8),
         new THREE.MeshBasicMaterial({
           color: 0xffffff,
           transparent: true,
-          opacity: 0.5 - i * 0.065,
+          opacity: 0.52 - i * 0.065,
         }),
       );
-      sm.position.set(0, 2.1 + i * 1.05, -0.35 - i * 0.62);
+      sm.position.set(0, (2.1 + i * 1.05) * S, (-0.35 - i * 0.62) * S);
       g.add(sm);
     }
-    g.position.set(x, 46, z);
+    g.position.set(x, 46 * S, z);
+    g.visible = false;
     this.arenaRoot.add(g);
+
+    const ant = new THREE.Group();
+    ant.position.set(x, 0, z);
+    const hubLight = new THREE.PointLight(0xffffff, 0, 70, 2);
+    hubLight.position.set(0, 2.1, 0);
+    ant.add(hubLight);
+    const glowGeo = new THREE.CircleGeometry(7.5, 48);
+    const glowMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+    glowMesh.rotation.x = -Math.PI / 2;
+    glowMesh.position.y = 0.12;
+    ant.add(glowMesh);
+    const pillarGeo = new THREE.CylinderGeometry(0.15, 2.8, 14, 24, 1, true);
+    const pillarMat = new THREE.MeshBasicMaterial({
+      color: 0xf5f8ff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+    const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+    pillar.position.y = 7;
+    ant.add(pillar);
+    glowMesh.userData.pillar = pillar;
+    this.arenaRoot.add(ant);
 
     const zoom0 = this.zoom;
     const hub = this.cometaHubPanScratch;
     this.worldPanInto(0, 0, hub);
-    const zoomWide = Math.max(0.32, zoom0 * 0.4);
+    const zoomWide = Math.max(0.28, zoom0 * 0.38);
 
     this.cometaArcanoCinematic = {
       startMs: performance.now(),
@@ -461,6 +499,9 @@ export class GameRenderer {
       heroR: opts.heroR,
       comet: g,
       shockRing: null,
+      anticipation: ant,
+      hubLight,
+      glowMesh,
       impactDone: false,
       onImpact: opts.onImpact,
       onComplete: opts.onComplete,
@@ -477,79 +518,151 @@ export class GameRenderer {
     const ease = (a: number, b: number, w: number) => a + (b - a) * w;
     const sm = (x: number) => THREE.MathUtils.smoothstep(x, 0, 1);
 
-    if (t < 0.55) {
-      const w = sm(t / 0.55);
-      this.zoom = ease(fx.zoom0, fx.zoomWide, w);
-      this.pan.x = ease(fx.pan0X, fx.hubPanX, w);
-      this.pan.y = ease(fx.pan0Y, fx.hubPanY, w);
-      this.applyOrthoFrustum(canvas);
-    } else if (t < 1.22) {
-      this.zoom = fx.zoomWide;
-      this.pan.x = fx.hubPanX;
-      this.pan.y = fx.hubPanY;
-      this.applyOrthoFrustum(canvas);
-      const w = (t - 0.55) / 0.67;
-      const fe = w * w;
-      fx.comet.position.y = ease(46, 1.25, fe);
+    const T_ZOOM = 0.52;
+    const T_LIGHT_START = 0.1;
+    const T_FALL_START = 0.56;
+    const T_IMPACT = 1.34;
+    const T_SHAKE_END = T_IMPACT + 0.48;
+    const T_RESTORE = 2.08;
+    const T_DONE = 2.78;
+
+    const S = 3;
+    const fallH0 = 46 * S;
+    const fallH1 = 1.25 * S;
+
+    let zoomV = fx.zoom0;
+    let basePanX = fx.pan0X;
+    let basePanY = fx.pan0Y;
+
+    if (t < T_ZOOM) {
+      const w = sm(t / T_ZOOM);
+      zoomV = ease(fx.zoom0, fx.zoomWide, w);
+      basePanX = ease(fx.pan0X, fx.hubPanX, w);
+      basePanY = ease(fx.pan0Y, fx.hubPanY, w);
+    } else if (t < T_RESTORE) {
+      zoomV = fx.zoomWide;
+      basePanX = fx.hubPanX;
+      basePanY = fx.hubPanY;
     } else {
-      if (!fx.impactDone) {
-        fx.impactDone = true;
-        fx.onImpact();
-        fx.comet.visible = false;
-        const { x: rx, z: rz } = axialToWorld(0, 0, HEX_SIZE);
-        const geo = new THREE.RingGeometry(0.9, 1.55, 56);
-        const mat = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: 0.72,
-          side: THREE.DoubleSide,
-        });
-        const ring = new THREE.Mesh(geo, mat);
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.set(rx, 0.14, rz);
-        this.arenaRoot.add(ring);
-        fx.shockRing = ring;
+      const w2 = sm(Math.min(1, (t - T_RESTORE) / Math.max(0.05, T_DONE - T_RESTORE)));
+      const heroPan = this.cometaHubPanScratch;
+      this.worldPanInto(fx.heroQ, fx.heroR, heroPan);
+      zoomV = ease(fx.zoomWide, fx.zoom0, w2);
+      basePanX = ease(fx.hubPanX, heroPan.x, w2);
+      basePanY = ease(fx.hubPanY, heroPan.y, w2);
+    }
+
+    let panX = basePanX;
+    let panY = basePanY;
+
+    if (t < T_LIGHT_START) {
+      fx.hubLight.intensity = 0;
+      (fx.glowMesh.material as THREE.MeshBasicMaterial).opacity = 0;
+      const pillar = fx.glowMesh.userData.pillar as THREE.Mesh | undefined;
+      if (pillar) (pillar.material as THREE.MeshBasicMaterial).opacity = 0;
+    } else if (t < T_FALL_START) {
+      const w = sm((t - T_LIGHT_START) / (T_FALL_START - T_LIGHT_START));
+      fx.hubLight.intensity = w * 6.2;
+      (fx.glowMesh.material as THREE.MeshBasicMaterial).opacity = w * 0.42;
+      const pillar = fx.glowMesh.userData.pillar as THREE.Mesh | undefined;
+      if (pillar) (pillar.material as THREE.MeshBasicMaterial).opacity = w * 0.22;
+    } else if (t < T_IMPACT) {
+      const pulse = 1 + Math.sin(t * 26) * 0.08;
+      fx.hubLight.intensity = 6.2 * pulse;
+      (fx.glowMesh.material as THREE.MeshBasicMaterial).opacity = 0.42 * pulse;
+      const pillar = fx.glowMesh.userData.pillar as THREE.Mesh | undefined;
+      if (pillar) (pillar.material as THREE.MeshBasicMaterial).opacity = 0.24 * pulse;
+    } else {
+      const fade = Math.max(0, 1 - (t - T_IMPACT) / 0.35);
+      fx.hubLight.intensity = 6.2 * fade;
+      (fx.glowMesh.material as THREE.MeshBasicMaterial).opacity = 0.42 * fade;
+      const pillar = fx.glowMesh.userData.pillar as THREE.Mesh | undefined;
+      if (pillar) (pillar.material as THREE.MeshBasicMaterial).opacity = 0.24 * fade;
+    }
+
+    const falling = t >= T_FALL_START && t < T_IMPACT;
+    fx.comet.visible = falling;
+    if (falling) {
+      const w = (t - T_FALL_START) / (T_IMPACT - T_FALL_START);
+      const fe = w * w;
+      fx.comet.position.y = ease(fallH0, fallH1, fe);
+    }
+
+    if (t >= T_IMPACT && !fx.impactDone) {
+      fx.impactDone = true;
+      try {
+        resumeWebAudio();
+        playCometaArcanoImpact();
+      } catch {
+        /* ignore */
       }
-      this.zoom = fx.zoomWide;
-      this.pan.x = fx.hubPanX;
-      this.pan.y = fx.hubPanY;
-      this.applyOrthoFrustum(canvas);
-      const tr = t - 1.22;
-      if (fx.shockRing) {
-        const wr = Math.min(1, tr / 0.78);
-        const s = 1 + wr * 42;
+      fx.onImpact();
+      fx.comet.visible = false;
+      const { x: rx, z: rz } = axialToWorld(0, 0, HEX_SIZE);
+      const geo = new THREE.RingGeometry(2.7, 4.65, 64);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.78,
+        side: THREE.DoubleSide,
+      });
+      const ring = new THREE.Mesh(geo, mat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(rx, 0.14, rz);
+      this.arenaRoot.add(ring);
+      fx.shockRing = ring;
+    }
+
+    if (t >= T_IMPACT && t < T_SHAKE_END) {
+      const age = t - T_IMPACT;
+      const dec = Math.exp(-age * 8.5);
+      panX += Math.sin(age * 118) * dec * 1.35;
+      panY += Math.cos(age * 96) * dec * 1.1;
+      panX += Math.sin(age * 203 + 0.7) * dec * 0.55;
+      panY += Math.cos(age * 177 + 1.1) * dec * 0.5;
+    }
+
+    this.zoom = zoomV;
+    this.pan.x = panX;
+    this.pan.y = panY;
+    this.applyOrthoFrustum(canvas);
+
+    if (fx.shockRing) {
+      const tr = t - T_IMPACT;
+      if (tr >= 0) {
+        const wr = Math.min(1, tr / 0.82);
+        const s = 1 + wr * 36;
         fx.shockRing.scale.set(s, s, s);
         (fx.shockRing.material as THREE.MeshBasicMaterial).opacity =
-          0.72 * (1 - wr);
+          0.78 * (1 - wr);
       }
-      if (t >= 1.95) {
-        const w2 = sm(Math.min(1, (t - 1.95) / 0.58));
-        const heroPan = this.cometaHubPanScratch;
-        this.worldPanInto(fx.heroQ, fx.heroR, heroPan);
-        this.zoom = ease(fx.zoomWide, fx.zoom0, w2);
-        this.pan.x = ease(fx.hubPanX, heroPan.x, w2);
-        this.pan.y = ease(fx.hubPanY, heroPan.y, w2);
-        this.applyOrthoFrustum(canvas);
-      }
-      if (t >= 2.58) {
-        this.arenaRoot.remove(fx.comet);
-        fx.comet.traverse((o) => {
-          if (o instanceof THREE.Mesh) {
-            o.geometry.dispose();
-            (o.material as THREE.Material).dispose();
-          }
-        });
-        if (fx.shockRing) {
-          this.arenaRoot.remove(fx.shockRing);
-          fx.shockRing.geometry.dispose();
-          (fx.shockRing.material as THREE.Material).dispose();
+    }
+
+    if (t >= T_DONE) {
+      this.arenaRoot.remove(fx.comet);
+      fx.comet.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          (o.material as THREE.Material).dispose();
         }
-        this.snapCameraToAxial(fx.heroQ, fx.heroR);
-        this.setCameraInputEnabled(fx.camEnabledRestore);
-        const done = fx.onComplete;
-        this.cometaArcanoCinematic = null;
-        done();
+      });
+      if (fx.shockRing) {
+        this.arenaRoot.remove(fx.shockRing);
+        fx.shockRing.geometry.dispose();
+        (fx.shockRing.material as THREE.Material).dispose();
       }
+      this.arenaRoot.remove(fx.anticipation);
+      fx.anticipation.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          (o.material as THREE.Material).dispose();
+        }
+      });
+      this.snapCameraToAxial(fx.heroQ, fx.heroR);
+      this.setCameraInputEnabled(fx.camEnabledRestore);
+      const done = fx.onComplete;
+      this.cometaArcanoCinematic = null;
+      done();
     }
   }
 
