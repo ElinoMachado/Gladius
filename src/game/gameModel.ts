@@ -4877,7 +4877,7 @@ export class GameModel {
       this.log(`${u.name}: sem cartas de level-up disponíveis.`);
     } else {
       const freeRerolls = 1 + this.meta.artifactRerollBonus;
-      const freeBans = this.meta.artifactBanBonus;
+      const freeBans = 1 + this.meta.artifactBanBonus;
       this.pendingArtifacts = {
         unitId: u.id,
         choices,
