@@ -7880,6 +7880,15 @@ select.forge-biome-sel option:disabled {
   z-index: 1;
 }
 
+/**
+ * O `#ui-root > *` força `pointer-events: auto` em todo o ecrã do menu;
+ * sem isto, o retângulo a cheio bloqueia o canvas por baixo e o clique no coliseu
+ * nunca chega ao `game-canvas` (ajuste de cena).
+ */
+#ui-root .main-menu-screen {
+  pointer-events: none;
+}
+
 .main-menu-version {
   position: fixed;
   top: 1rem;
