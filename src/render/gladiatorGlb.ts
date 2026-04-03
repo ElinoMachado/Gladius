@@ -20,42 +20,76 @@ let gladiadorForgeAttach: GladiadorForgeAttachConfig | null = null;
 let loadAttempted = false;
 let loadPromise: Promise<boolean> | null = null;
 
+const _meshUnionScratch = new THREE.Box3();
+
 /**
- * Calcula posições relativas à malha real (pés em y≈0, altura = TARGET_HEIGHT).
- * Rácios calibrados face ao boneco procedural (~1,56 m) e a humanoides típicos.
+ * União das bbox em espaço mundo só de `Mesh`/`SkinnedMesh` com geometria.
+ * Evita armatures, nós vazios ou helpers que inflam `setFromObject` e encolhem o modelo.
  */
-function computeGladiadorForgeAttachFromBbox(root: THREE.Object3D): GladiadorForgeAttachConfig {
+function unionMeshWorldBox3(root: THREE.Object3D): THREE.Box3 {
+  const box = new THREE.Box3();
+  let has = false;
   root.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(root);
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh) || !obj.geometry) return;
+    const nm = obj.name.toLowerCase();
+    if (
+      nm.includes("collider") ||
+      nm.includes("hitbox") ||
+      nm.includes("bounding") ||
+      nm.includes("_ucx") ||
+      nm.includes("ucx_")
+    ) {
+      return;
+    }
+    const geom = obj.geometry;
+    if (!geom.boundingBox) geom.computeBoundingBox();
+    const lb = geom.boundingBox;
+    if (!lb) return;
+    _meshUnionScratch.copy(lb).applyMatrix4(obj.matrixWorld);
+    if (!has) {
+      box.copy(_meshUnionScratch);
+      has = true;
+    } else {
+      box.union(_meshUnionScratch);
+    }
+  });
+  if (!has) {
+    box.setFromObject(root);
+  }
+  return box;
+}
+
+/**
+ * Anexos da forja a partir da bbox das malhas visíveis (já escaladas e com pés em y≈0).
+ */
+function computeGladiadorForgeAttachFromMeshBox(root: THREE.Object3D): GladiadorForgeAttachConfig {
+  const box = unionMeshWorldBox3(root);
   const min = box.min;
   const max = box.max;
   const sy = Math.max(max.y - min.y, 1e-4);
   const sx = Math.max(max.x - min.x, 1e-4);
   const sz = Math.max(max.z - min.z, 1e-4);
   const sxz = Math.max(sx, sz);
-  /** Escala das peças da forja vs altura de referência do jogo. */
   const hScale = THREE.MathUtils.clamp(sy / TARGET_HEIGHT, 0.85, 1.2);
   const xzScale = THREE.MathUtils.clamp(sxz / 0.48, 0.85, 1.35);
   const pieceScale = THREE.MathUtils.clamp((hScale + xzScale) * 0.5, 0.88, 1.15);
 
   return {
-    /* Centro da cabeça: um pouco abaixo do topo da bbox (malha com capacete/cabelo). */
     helmet: {
       y: max.y - sy * 0.095,
       scale: THREE.MathUtils.clamp(0.58 * pieceScale, 0.46, 0.78),
     },
-    /* Ombros / base do pescoço; z negativo afasta a capa do tronco. */
     cape: {
       x: 0,
       y: min.y + sy * 0.56,
-      z: -Math.max(0.2, sxz * 0.34),
+      z: -Math.max(0.18, sxz * 0.28),
       rotX: 0.05,
       scale: THREE.MathUtils.clamp(0.58 * pieceScale, 0.48, 0.75),
     },
-    /* Altura dos punhos (~0,73× altura no procedural); z ligeiramente à frente. */
     manoplas: {
       y: min.y + sy * 0.72,
-      z: sxz * 0.16,
+      z: sxz * 0.14,
       scale: THREE.MathUtils.clamp(0.7 * pieceScale, 0.56, 0.88),
     },
   };
@@ -65,16 +99,16 @@ function prepareTemplate(scene: THREE.Object3D): THREE.Group {
   const root = new THREE.Group();
   root.name = "gladiador_glb_template";
   root.add(scene);
-  const box = new THREE.Box3().setFromObject(root);
+  const box = unionMeshWorldBox3(root);
   const size = new THREE.Vector3();
   box.getSize(size);
   const h = Math.max(size.y, 1e-4);
   root.scale.setScalar(TARGET_HEIGHT / h);
   root.updateMatrixWorld(true);
-  const box2 = new THREE.Box3().setFromObject(root);
+  const box2 = unionMeshWorldBox3(root);
   root.position.y = -box2.min.y;
   root.updateMatrixWorld(true);
-  gladiadorForgeAttach = computeGladiadorForgeAttachFromBbox(root);
+  gladiadorForgeAttach = computeGladiadorForgeAttachFromMeshBox(root);
   return root;
 }
 
