@@ -1,10 +1,10 @@
 import * as THREE from "three";
+import { type GladiadorForgeAttachConfig } from "./gladiatorGlb";
 import {
-  cloneGladiadorBodyFromGlb,
-  getGladiadorForgeAttach,
-  resolveGladiadorForgeAttachFromRig,
-  type GladiadorForgeAttachConfig,
-} from "./gladiatorGlb";
+  cloneHeroBodyFromGlb,
+  getHeroGlbForgeAttach,
+} from "./heroGlbLoader";
+import { resolveHeroForgeAttachFromRig } from "./heroRigAttach";
 import { buildEnemyBody3D } from "./enemyModels3d";
 import { forgeVisualKey, resolveEquippedForgeLoadout } from "../game/forge";
 import type { ForgeEssenceId, ForgeHeroLoadout, HeroClassId } from "../game/types";
@@ -80,6 +80,12 @@ function stdMat(color: number, opts: Partial<THREE.MeshStandardMaterialParameter
  * Elmo centrado na cabeça, capa para trás (-Z), manoplas à esquerda/direita (já no mesh da peça).
  * Valores alinhados ao torso/cabeça de cada classe em `buildHeroBody`.
  */
+const HERO_GLB_TARGET_H: Record<HeroClassId, number> = {
+  gladiador: 1.45,
+  sacerdotisa: 1.38,
+  pistoleiro: 1.42,
+};
+
 const FORGE_ATTACH: Record<
   HeroClassId,
   {
@@ -94,7 +100,7 @@ const FORGE_ATTACH: Record<
     cape: { x: 0, y: 0.87, z: -0.125, rotX: 0.06, scale: 0.5 },
     manoplas: { y: 1.02, z: 0.09, scale: 0.48 },
   },
-  /* Só usado no fallback procedural; com GLB vê `getGladiadorForgeAttach()`. */
+  /* Fallback procedural; com GLB vê `getHeroGlbForgeAttach()`. */
   gladiador: {
     helmet: { y: 1.38, scale: 0.58 },
     cape: { x: 0, y: 0.88, z: -0.24, rotX: 0.05, scale: 0.58 },
@@ -151,6 +157,43 @@ function addForgeMeshes(
     });
     root.add(m);
   }
+}
+
+function addHeroGlbIfLoaded(
+  root: THREE.Group,
+  heroClass: HeroClassId,
+  displayColor: number,
+  forgeLoadout: ForgeHeroLoadout | undefined,
+  mat: (
+    c: number,
+    o?: Partial<THREE.MeshStandardMaterialParameters>,
+  ) => THREE.MeshStandardMaterial,
+  forma: HeroFormaVisualOpts | undefined,
+): boolean {
+  const glb = cloneHeroBodyFromGlb(heroClass, displayColor);
+  if (!glb) return false;
+  root.add(glb);
+  root.updateMatrixWorld(true);
+  const attach =
+    resolveHeroForgeAttachFromRig(
+      root,
+      glb,
+      getHeroGlbForgeAttach(heroClass),
+      HERO_GLB_TARGET_H[heroClass],
+    ) ??
+    getHeroGlbForgeAttach(heroClass) ??
+    FORGE_ATTACH[heroClass];
+  addForgeMeshes(root, heroClass, forgeLoadout, mat, attach);
+  if (forma?.formaFinal && forma.ultimateId) {
+    applyFormaFinalAugment(
+      root,
+      heroClass,
+      forma.ultimateId,
+      displayColor,
+      mat,
+    );
+  }
+  return true;
 }
 
 /** Anel e peças extra quando o herói tem forma final (silhueta mais imponente). */
@@ -264,6 +307,18 @@ export function buildHeroBody(
   const leather = 0x3d2818;
 
   if (heroClass === "pistoleiro") {
+    if (
+      addHeroGlbIfLoaded(
+        root,
+        "pistoleiro",
+        accent,
+        forgeLoadout,
+        stdMat,
+        forma,
+      )
+    ) {
+      return root;
+    }
     const forgeResolved = resolveEquippedForgeLoadout(forgeLoadout ?? {});
     const hideHeadAdorn = !!forgeResolved.helmo;
 
@@ -312,22 +367,16 @@ export function buildHeroBody(
   }
 
   if (heroClass === "gladiador") {
-    const glb = cloneGladiadorBodyFromGlb(accent);
-    if (glb) {
-      root.add(glb);
-      root.updateMatrixWorld(true);
-      addForgeMeshes(
+    if (
+      addHeroGlbIfLoaded(
         root,
-        heroClass,
+        "gladiador",
+        accent,
         forgeLoadout,
         stdMat,
-        resolveGladiadorForgeAttachFromRig(root, glb) ??
-          getGladiadorForgeAttach() ??
-          FORGE_ATTACH.gladiador,
-      );
-      if (forma?.formaFinal && forma.ultimateId) {
-        applyFormaFinalAugment(root, heroClass, forma.ultimateId, accent, stdMat);
-      }
+        forma,
+      )
+    ) {
       return root;
     }
 
@@ -378,6 +427,19 @@ export function buildHeroBody(
   }
 
   /* sacerdotisa */
+  if (
+    addHeroGlbIfLoaded(
+      root,
+      "sacerdotisa",
+      accent,
+      forgeLoadout,
+      stdMat,
+      forma,
+    )
+  ) {
+    return root;
+  }
+
   const forgeResolved = resolveEquippedForgeLoadout(forgeLoadout ?? {});
   const hideHeadAdorn = !!forgeResolved.helmo;
 

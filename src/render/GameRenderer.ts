@@ -25,6 +25,13 @@ import { enemyTierFromId, waveConfigFromIndex } from "../game/data/enemies";
 import type { BiomeId } from "../game/types";
 import { buildUnitBodyGroup, modelKeyForUnit } from "./unitModels";
 import {
+  playHeroUnitClip,
+  setupHeroUnitAnimations,
+  stopHeroUnitClips,
+  updateHeroUnitAnimations,
+} from "./heroUnitAnimations";
+import { heroHitReactClipName, heroRunClipName } from "../game/heroCombatAnimMs";
+import {
   applyBunkerTierMaterials,
   createBunkerStructureGroup,
   type BunkerRenderTier,
@@ -152,7 +159,13 @@ export class GameRenderer {
 
   private readonly unitMoveAnims = new Map<
     string,
-    { cells: Axial[]; segIndex: number; t: number; segSeconds: number }
+    {
+      cells: Axial[];
+      segIndex: number;
+      t: number;
+      segSeconds: number;
+      playHeroRun?: boolean;
+    }
   >();
 
   private readonly hitFlashState = new Map<
@@ -825,16 +838,31 @@ export class GameRenderer {
     unitId: string,
     cells: { q: number; r: number }[],
     segmentMs?: number,
+    opts?: { playHeroRun?: boolean },
   ): void {
     if (cells.length < 2) return;
     const ms = segmentMs ?? UNIT_MOVE_SEGMENT_MS;
     const segSeconds = Math.min(0.75, ms / 1000);
+    const playHeroRun = opts?.playHeroRun === true;
     this.unitMoveAnims.set(unitId, {
       cells: cells.map((c) => ({ q: c.q, r: c.r })),
       segIndex: 0,
       t: 0,
       segSeconds,
+      playHeroRun,
     });
+    if (playHeroRun) {
+      const g = this.unitMeshes.get(unitId);
+      const body = g?.children.find(
+        (c) => c.userData?.role === "body",
+      ) as THREE.Group | undefined;
+      if (body) {
+        playHeroUnitClip(body, [heroRunClipName(), "run", "running"], {
+          loop: THREE.LoopRepeat,
+          fadeSec: 0.12,
+        });
+      }
+    }
   }
 
   isUnitMoveAnimating(unitId?: string): boolean {
@@ -1706,6 +1734,12 @@ export class GameRenderer {
       }
       const i = a.segIndex;
       if (i >= a.cells.length - 1) {
+        if (a.playHeroRun) {
+          const body = g.children.find(
+            (c) => c.userData?.role === "body",
+          ) as THREE.Group | undefined;
+          if (body) stopHeroUnitClips(body, 0.1);
+        }
         this.unitMoveAnims.delete(id);
         continue;
       }
@@ -1730,10 +1764,40 @@ export class GameRenderer {
         a.segIndex++;
         a.t = 0;
         if (a.segIndex >= a.cells.length - 1) {
+          if (a.playHeroRun) {
+            const body = g.children.find(
+              (c) => c.userData?.role === "body",
+            ) as THREE.Group | undefined;
+            if (body) stopHeroUnitClips(body, 0.1);
+          }
           this.unitMoveAnims.delete(id);
         }
       }
     }
+  }
+
+  /** Clips do GLB do herói (combate); falha silenciosa se não houver rig/clips. */
+  playHeroCombatClip(
+    unitId: string,
+    clipCandidates: string[],
+    opts?: { loop?: THREE.AnimationActionLoopStyles },
+  ): boolean {
+    const g = this.unitMeshes.get(unitId);
+    if (!g) return false;
+    const body = g.children.find(
+      (c) => c.userData?.role === "body",
+    ) as THREE.Group | undefined;
+    if (!body) return false;
+    return playHeroUnitClip(body, clipCandidates, {
+      loop: opts?.loop ?? THREE.LoopOnce,
+      fadeSec: 0.1,
+    });
+  }
+
+  playHeroHitReact(unitId: string): boolean {
+    return this.playHeroCombatClip(unitId, [heroHitReactClipName(), "hit"], {
+      loop: THREE.LoopOnce,
+    });
   }
 
   private clientToNdc(
@@ -2373,6 +2437,16 @@ export class GameRenderer {
         body.userData.role = "body";
         g.add(body);
         g.userData.modelKey = mk;
+        if (u.isPlayer && u.heroClass) {
+          setupHeroUnitAnimations(body, u.heroClass);
+        }
+      } else if (u.isPlayer && u.heroClass) {
+        const existBody = g.children.find(
+          (c) => c.userData?.role === "body",
+        ) as THREE.Group | undefined;
+        if (existBody && !existBody.userData.heroAnimMixer) {
+          setupHeroUnitAnimations(existBody, u.heroClass);
+        }
       }
       this.updateHeroFlyingVisual(g, u, now);
       if (!this.unitMoveAnims.has(u.id)) {
@@ -3786,6 +3860,10 @@ export class GameRenderer {
     const dt = this.clock.getDelta();
     const cometOn = this.cometaArcanoCinematic !== null;
     this.updateUnitMoveAnims(dt);
+    for (const g of this.unitMeshes.values()) {
+      const body = g.children.find((c) => c.userData?.role === "body");
+      if (body) updateHeroUnitAnimations(body, dt);
+    }
     this.updateFlyingHeroPerFrameMotion(performance.now());
     this.updateFlyingHeroGroundShadows();
     this.updateShieldBubblePulse(dt);

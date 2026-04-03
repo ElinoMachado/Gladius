@@ -17,7 +17,15 @@ import {
 } from "./types";
 import { buildHexArena, getCell, type HexCell } from "./grid";
 import { findPath, reachableHexes } from "./pathfinding";
-import { getSkipEnemyMoveAnim } from "./combatPrefs";
+import { getSkipCombatAnimations } from "./combatPrefs";
+import {
+  enemyMeleeAttackWindupMs,
+  heroBasicMagicDamageDelayMs,
+  heroBasicMeleeDamageDelayMs,
+  heroBasicShootDamageDelayMs,
+  heroHitReactAnimMs,
+  heroRunSegmentMs,
+} from "./heroCombatAnimMs";
 import { getSandboxNoCdUltReady } from "./sandboxPrefs";
 import { hexDistance } from "./hex";
 import {
@@ -177,7 +185,10 @@ export type CombatVfxHint =
       fromId: string;
       toId: string;
       style: "bullet" | "magic";
+      /** Duração do projétil / alinhamento ao gesto (ms). */
+      flightMs?: number;
     }
+  | { kind: "hero_basic_melee"; heroId: string; targetId: string }
   | { kind: "basic_volley"; fromId: string; targetIds: string[] }
   | {
       kind: "bunker_minas";
@@ -452,6 +463,8 @@ export class GameModel {
     cells: { q: number; r: number }[];
     /** Se definido, substitui `UNIT_MOVE_SEGMENT_MS` (ex.: inimigos acelerados). */
     segmentMs?: number;
+    /** Herói: animação de corrida durante o deslocamento. */
+    playHeroRunAnim?: boolean;
   } | null = null;
   /** 1 = normal; menor que 1 acelera movimento/pausa na fase inimiga (muitos inimigos). */
   private enemyPhaseTimingMult = 1;
@@ -860,6 +873,7 @@ export class GameModel {
     unitId: string;
     cells: { q: number; r: number }[];
     segmentMs?: number;
+    playHeroRunAnim?: boolean;
   } | null {
     const p = this.pendingMoveAnim;
     this.pendingMoveAnim = null;
@@ -2369,10 +2383,12 @@ export class GameModel {
       blocked,
       panSwamp,
     );
-    if (path && path.length > 1) {
+    if (path && path.length > 1 && !getSkipCombatAnimations()) {
       this.pendingMoveAnim = {
         unitId: h.id,
         cells: path.map((p) => ({ q: p.q, r: p.r })),
+        segmentMs: heroRunSegmentMs(),
+        playHeroRunAnim: true,
       };
     }
     this.movementLeft -= cost;
@@ -2544,16 +2560,21 @@ export class GameModel {
       this.emit();
     };
 
+    const skipFx = getSkipCombatAnimations();
+
     if (h.heroClass === "pistoleiro") {
+      const dmgDelay = skipFx ? 0 : heroBasicShootDamageDelayMs();
+      const flight = skipFx ? BASIC_PISTOL_FLIGHT_MS : dmgDelay;
       this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: h.id,
         toId: tgt.id,
         style: "bullet",
+        flightMs: flight,
       });
       this.basicAttacksSpentThisTurn++;
       this.syncBasicLeftFromSpent(h);
-      this.queueCombat(BASIC_PISTOL_FLIGHT_MS, () => {
+      this.queueCombat(dmgDelay, () => {
         const att = this.units.find((u) => u.id === h.id);
         if (!att || att.hp <= 0 || this.phase !== "combat") return;
         runStrikeAndFinish(att);
@@ -2563,15 +2584,18 @@ export class GameModel {
     }
 
     if (h.heroClass === "sacerdotisa") {
+      const dmgDelay = skipFx ? 0 : heroBasicMagicDamageDelayMs();
+      const flight = skipFx ? BASIC_MAGIC_FLIGHT_MS : dmgDelay;
       this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: h.id,
         toId: tgt.id,
         style: "magic",
+        flightMs: flight,
       });
       this.basicAttacksSpentThisTurn++;
       this.syncBasicLeftFromSpent(h);
-      this.queueCombat(BASIC_MAGIC_FLIGHT_MS, () => {
+      this.queueCombat(dmgDelay, () => {
         const att = this.units.find((u) => u.id === h.id);
         if (!att || att.hp <= 0 || this.phase !== "combat") return;
         runStrikeAndFinish(att);
@@ -2580,18 +2604,33 @@ export class GameModel {
       return true;
     }
 
-    let raw = this.computeBasicAttackRawDamage(h);
-    if (h.motorMorteNextBasicPct > 0) {
-      h.motorMorteNextBasicPct = 0;
+    if (!skipFx) {
+      this.pendingCombatVfxQueue.push({
+        kind: "hero_basic_melee",
+        heroId: h.id,
+        targetId: tgt.id,
+      });
     }
-    this.strike(h, tgt, raw);
-
+    const meleeDelay = skipFx ? 0 : heroBasicMeleeDamageDelayMs();
     this.basicAttacksSpentThisTurn++;
     this.syncBasicLeftFromSpent(h);
-    this.flushCombatLevelUp(h);
-    if (this.phase === "combat") {
-      this.tryResolveWaveClearAfterCombatResume();
-    }
+    this.queueCombat(meleeDelay, () => {
+      const att = this.units.find((u) => u.id === h.id);
+      const t2 = this.units.find((u) => u.id === targetId);
+      if (!att || att.hp <= 0 || this.phase !== "combat") return;
+      let rawD = this.computeBasicAttackRawDamage(att);
+      if (att.motorMorteNextBasicPct > 0) {
+        att.motorMorteNextBasicPct = 0;
+      }
+      if (t2 && !t2.isPlayer && t2.hp > 0) {
+        this.strike(att, t2, rawD);
+      }
+      this.flushCombatLevelUp(att);
+      if (this.phase === "combat") {
+        this.tryResolveWaveClearAfterCombatResume();
+      }
+      this.emit();
+    });
     this.emit();
     return true;
   }
@@ -3635,14 +3674,17 @@ export class GameModel {
     if (distToTarget > alc) {
       killer.motorMorteNextBasicPct = bonusPct;
       if (movedOnMap) {
-        this.pendingMoveAnim = {
-          unitId: killer.id,
-          cells: [
-            { q: fromQ, r: fromR },
-            { q: killer.q, r: killer.r },
-          ],
-          segmentMs: GOLPE_RELAMPAGO_MOVE_MS,
-        };
+        if (!getSkipCombatAnimations()) {
+          this.pendingMoveAnim = {
+            unitId: killer.id,
+            cells: [
+              { q: fromQ, r: fromR },
+              { q: killer.q, r: killer.r },
+            ],
+            segmentMs: GOLPE_RELAMPAGO_MOVE_MS,
+            playHeroRunAnim: true,
+          };
+        }
         this.pendingCombatVfxQueue.push({
           kind: "golpe_relampago_teleport",
           heroId: killer.id,
@@ -3656,17 +3698,22 @@ export class GameModel {
       return;
     }
 
-    let delayBeforeStrike = GOLPE_RELAMPAGO_WINDUP_MS;
+    let delayBeforeStrike = getSkipCombatAnimations()
+      ? 0
+      : GOLPE_RELAMPAGO_WINDUP_MS;
     if (movedOnMap) {
-      this.pendingMoveAnim = {
-        unitId: killer.id,
-        cells: [
-          { q: fromQ, r: fromR },
-          { q: killer.q, r: killer.r },
-        ],
-        segmentMs: GOLPE_RELAMPAGO_MOVE_MS,
-      };
-      delayBeforeStrike = GOLPE_RELAMPAGO_MOVE_MS;
+      if (!getSkipCombatAnimations()) {
+        this.pendingMoveAnim = {
+          unitId: killer.id,
+          cells: [
+            { q: fromQ, r: fromR },
+            { q: killer.q, r: killer.r },
+          ],
+          segmentMs: GOLPE_RELAMPAGO_MOVE_MS,
+          playHeroRunAnim: true,
+        };
+        delayBeforeStrike = GOLPE_RELAMPAGO_MOVE_MS;
+      }
       this.pendingCombatVfxQueue.push({
         kind: "golpe_relampago_teleport",
         heroId: killer.id,
@@ -3732,47 +3779,62 @@ export class GameModel {
       this.emit();
     };
 
+    const skipFx = getSkipCombatAnimations();
     if (att.heroClass === "pistoleiro") {
+      const dly = skipFx ? 0 : heroBasicShootDamageDelayMs();
+      const fl = skipFx ? BASIC_PISTOL_FLIGHT_MS : dly;
       this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: att.id,
         toId: tgt.id,
         style: "bullet",
+        flightMs: fl,
       });
       this.pendingCombatVfxQueue.push({
         kind: "golpe_relampago_lightning",
         heroId: att.id,
         targetId: tgt.id,
-        delayMs: BASIC_PISTOL_FLIGHT_MS,
+        delayMs: dly,
       });
-      this.queueCombat(BASIC_PISTOL_FLIGHT_MS, applyDamage);
+      this.queueCombat(dly, applyDamage);
       this.emit();
       return;
     }
     if (att.heroClass === "sacerdotisa") {
+      const dly = skipFx ? 0 : heroBasicMagicDamageDelayMs();
+      const fl = skipFx ? BASIC_MAGIC_FLIGHT_MS : dly;
       this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: att.id,
         toId: tgt.id,
         style: "magic",
+        flightMs: fl,
       });
       this.pendingCombatVfxQueue.push({
         kind: "golpe_relampago_lightning",
         heroId: att.id,
         targetId: tgt.id,
-        delayMs: BASIC_MAGIC_FLIGHT_MS,
+        delayMs: dly,
       });
-      this.queueCombat(BASIC_MAGIC_FLIGHT_MS, applyDamage);
+      this.queueCombat(dly, applyDamage);
       this.emit();
       return;
     }
+    if (!skipFx) {
+      this.pendingCombatVfxQueue.push({
+        kind: "hero_basic_melee",
+        heroId: att.id,
+        targetId: tgt.id,
+      });
+    }
+    const mel = skipFx ? 0 : heroBasicMeleeDamageDelayMs();
     this.pendingCombatVfxQueue.push({
       kind: "golpe_relampago_lightning",
       heroId: att.id,
       targetId: tgt.id,
-      delayMs: 0,
+      delayMs: mel,
     });
-    this.queueCombat(0, applyDamage);
+    this.queueCombat(mel, applyDamage);
     this.emit();
   }
 
@@ -4403,13 +4465,17 @@ export class GameModel {
     const fromR = hero.r;
     hero.q = dest.q;
     hero.r = dest.r;
-    this.pendingMoveAnim = {
-      unitId: hero.id,
-      cells: [
-        { q: fromQ, r: fromR },
-        { q: dest.q, r: dest.r },
-      ],
-    };
+    if (!getSkipCombatAnimations()) {
+      this.pendingMoveAnim = {
+        unitId: hero.id,
+        cells: [
+          { q: fromQ, r: fromR },
+          { q: dest.q, r: dest.r },
+        ],
+        segmentMs: heroRunSegmentMs(),
+        playHeroRunAnim: true,
+      };
+    }
     this.log(`${hero.name} foi arremessado para fora do bunker destruído!`);
     this.emit();
   }
@@ -4525,18 +4591,21 @@ export class GameModel {
     const moveSegs = Math.max(0, cells.length - 1);
     const mult = this.enemyPhaseTimingMult;
     const segMs = UNIT_MOVE_SEGMENT_MS * mult;
-    const skipMoveAnim = getSkipEnemyMoveAnim();
-    if (cells.length > 1 && !skipMoveAnim) {
+    const skipAnim = getSkipCombatAnimations();
+    if (cells.length > 1 && !skipAnim) {
       this.pendingMoveAnim = {
         unitId: e.id,
         cells,
         segmentMs: segMs,
       };
     }
-    const moveMs = skipMoveAnim ? 0 : moveSegs * segMs;
+    const moveMs = skipAnim ? 0 : moveSegs * segMs;
+    const atkWind = skipAnim ? 0 : enemyMeleeAttackWindupMs();
+    const hitReact =
+      skipAnim || !tgt.isPlayer ? 0 : heroHitReactAnimMs();
     const enemyId = e.id;
     const targetId = tgt.id;
-    this.queueCombat(moveMs, () => {
+    this.queueCombat(moveMs + atkWind, () => {
       const ex = this.units.find((u) => u.id === enemyId);
       const tgx = this.units.find((u) => u.id === targetId);
       if (!ex || !tgx || ex.hp <= 0 || tgx.hp <= 0 || this.phase !== "combat") {
@@ -4581,7 +4650,7 @@ export class GameModel {
       this.applyVolcanicAtEndOfTurn(ex);
       this.emit();
     });
-    return moveMs;
+    return moveMs + atkWind + hitReact;
   }
 
   /** Inimigos não podem entrar no hex dos bunkers (estruturas). */

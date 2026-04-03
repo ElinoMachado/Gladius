@@ -1,5 +1,9 @@
 import * as THREE from "three";
 import type { ForgeHeroLoadout, HeroClassId } from "../game/types";
+import {
+  applyHeroSelectionPreviewAnimations,
+  updateHeroUnitAnimations,
+} from "./heroUnitAnimations";
 import { buildHeroBody, type HeroFormaVisualOpts } from "./unitModels";
 
 function disposeObject3D(o: THREE.Object3D): void {
@@ -29,6 +33,8 @@ export class HeroPreview3D {
   private host: HTMLElement;
   private raf = 0;
   private running = false;
+  private previewBody: THREE.Object3D | null = null;
+  private lastFrameMs = 0;
 
   constructor(
     host: HTMLElement,
@@ -67,8 +73,11 @@ export class HeroPreview3D {
   ): void {
     disposeObject3D(this.pivot);
     this.pivot.clear();
+    this.previewBody = null;
     const body = buildHeroBody(heroClass, displayColor, forgeLoadout, forma);
     body.position.set(0, 0, 0);
+    applyHeroSelectionPreviewAnimations(body, heroClass);
+    this.previewBody = body;
     this.pivot.add(body);
     this.pivot.rotation.y = 0.35;
   }
@@ -76,10 +85,19 @@ export class HeroPreview3D {
   start(): void {
     if (this.running) return;
     this.running = true;
+    this.lastFrameMs = performance.now();
     const loop = (): void => {
       if (!this.running) return;
       this.raf = requestAnimationFrame(loop);
-      this.pivot.rotation.y += 0.012;
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - this.lastFrameMs) / 1000);
+      this.lastFrameMs = now;
+      if (this.previewBody) {
+        updateHeroUnitAnimations(this.previewBody, dt);
+      }
+      this.pivot.rotation.y += this.previewBody?.userData.heroAnimMixer
+        ? 0.004
+        : 0.012;
       this.renderer.render(this.scene, this.camera);
     };
     loop();

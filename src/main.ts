@@ -11,7 +11,7 @@ import {
 import { GameRenderer } from "./render/GameRenderer";
 import { preloadArenaColiseumGlb } from "./render/arenaColiseumGlb";
 import { preloadForgePieceGlbs } from "./render/forgePieceGlb";
-import { preloadGladiadorGlb } from "./render/gladiatorGlb";
+import { preloadAllHeroGlbs } from "./render/heroGlbLoader";
 import { HeroPreview3D } from "./render/HeroPreview3D";
 import { MainMenuSword3D } from "./render/MainMenuSword3D";
 import { BiomePicker3D } from "./render/BiomePicker3D";
@@ -170,13 +170,17 @@ import {
 } from "./audio/combatSounds";
 import { setArenaCombatMusicFromWave, stopArenaAmbient } from "./audio/arenaAmbient";
 import { ensureMenuThemePlaying, pauseMenuTheme } from "./audio/menuAmbient";
-import { getSkipEnemyMoveAnim, setSkipEnemyMoveAnim } from "./game/combatPrefs";
+import {
+  getSkipCombatAnimations,
+  setSkipCombatAnimations,
+} from "./game/combatPrefs";
 import {
   getSandboxNoCdUltReady,
   setSandboxNoCdUltReady,
 } from "./game/sandboxPrefs";
 import { loadSceneLayoutPrefs } from "./game/sceneLayoutPrefs";
 import { UNIT_MOVE_SEGMENT_MS } from "./game/combatTiming";
+import { heroAttackClipName } from "./game/heroCombatAnimMs";
 import {
   BUNKER_EVOLVE_COSTS,
   BUNKER_TIRO_MIN_TIER,
@@ -270,7 +274,7 @@ view.setOnArenaLayoutEditUiRefresh(() => {
 view.buildHexGrid(model.grid);
 
 Promise.all([
-  preloadGladiadorGlb(),
+  preloadAllHeroGlbs(),
   preloadForgePieceGlbs(),
   preloadArenaColiseumGlb(),
 ]).then(() => {
@@ -375,16 +379,48 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
         );
       }
       break;
-    case "basic_projectile":
+    case "basic_projectile": {
+      const flightMs =
+        h.flightMs ??
+        (h.style === "bullet"
+          ? BASIC_PISTOL_FLIGHT_MS
+          : BASIC_MAGIC_FLIGHT_MS);
       view.queueDamageProjectile(h.fromId, h.toId, {
         style: h.style,
-        durationSec:
-          h.style === "bullet"
-            ? BASIC_PISTOL_FLIGHT_MS / 1000
-            : BASIC_MAGIC_FLIGHT_MS / 1000,
+        durationSec: flightMs / 1000,
       });
+      if (!getSkipCombatAnimations()) {
+        if (h.style === "bullet") {
+          view.playHeroCombatClip(h.fromId, [
+            heroAttackClipName("pistoleiro"),
+            "shoot",
+            "fire",
+            "shot",
+          ]);
+        } else {
+          view.playHeroCombatClip(h.fromId, [
+            heroAttackClipName("sacerdotisa"),
+            "cast",
+            "spell",
+            "magic",
+            "attack",
+          ]);
+        }
+      }
       if (h.style === "bullet") playGunshot();
       else playMagicWhoosh();
+      break;
+    }
+    case "hero_basic_melee":
+      if (!getSkipCombatAnimations()) {
+        view.playHeroCombatClip(h.heroId, [
+          heroAttackClipName("gladiador"),
+          "box01",
+          "boxing",
+          "sword",
+          "attack",
+        ]);
+      }
       break;
     case "basic_volley": {
       view.triggerRadialShotVfx(h.fromId, {
@@ -435,6 +471,9 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
       if (h.archetypeId === "escravo") playEscravoChainSlash();
       else playSwordHit();
       view.triggerMeleeSlashBetween(h.attackerId, h.targetId);
+      if (!getSkipCombatAnimations()) {
+        view.playHeroHitReact(h.targetId);
+      }
       break;
     case "weapon_ult_furacao": {
       view.triggerWeaponUltFuracaoJump(h.heroId, FURACAO_ULT_JUMP_MS);
@@ -5924,7 +5963,7 @@ function showCombatHUD(): void {
       <div class="combat-above-bar-right">
         <label class="combat-skip-enemy-label" for="chk-skip-enemy-move">
           <input type="checkbox" id="chk-skip-enemy-move" />
-          <span>Pular movimento inimigo</span>
+          <span>Pular animações</span>
         </label>
         <div class="combat-above-bar-right-btns">
           <button type="button" class="btn btn-combat-above combat-btn--hidden" id="btn-cancel-sel">Cancelar seleção</button>
@@ -7177,9 +7216,9 @@ function showCombatHUD(): void {
     "#chk-skip-enemy-move",
   ) as HTMLInputElement | null;
   if (chkSkipEnemy) {
-    chkSkipEnemy.checked = getSkipEnemyMoveAnim();
+    chkSkipEnemy.checked = getSkipCombatAnimations();
     chkSkipEnemy.addEventListener("change", () => {
-      setSkipEnemyMoveAnim(chkSkipEnemy.checked);
+      setSkipCombatAnimations(chkSkipEnemy.checked);
     });
   }
   combatAboveBar.querySelector("#btn-cancel-sel")!.addEventListener("click", () => {
@@ -7928,9 +7967,15 @@ function render(): void {
   }
 
   const mv = model.takePendingMoveAnimation();
+  view.syncUnits(
+    model.units,
+    model.phase === "combat" ? model.wave : null,
+  );
   if (mv) {
     const segMs = mv.segmentMs ?? UNIT_MOVE_SEGMENT_MS;
-    view.queueUnitMoveAlongCells(mv.unitId, mv.cells, mv.segmentMs);
+    view.queueUnitMoveAlongCells(mv.unitId, mv.cells, mv.segmentMs, {
+      playHeroRun: mv.playHeroRunAnim === true,
+    });
     const segs = Math.max(0, mv.cells.length - 1);
     const totalMs = segs * segMs;
     const dest = mv.cells[mv.cells.length - 1];
@@ -7956,10 +8001,6 @@ function render(): void {
       }, totalMs + 20);
     }
   }
-  view.syncUnits(
-    model.units,
-    model.phase === "combat" ? model.wave : null,
-  );
   const showBunkers = shouldShowBunkerMeshes(model.phase);
   view.setBunkers(
     showBunkers ? model.bunkersForRender() : null,
