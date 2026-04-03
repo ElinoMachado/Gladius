@@ -1933,7 +1933,7 @@ function showArenaLayoutEditHud(): void {
   uiRoot.appendChild(
     el(`
     <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar menu</strong> — Clique no coliseu para selecionar (contorno vermelho). Arrasto no modelo: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> ou numérico +/− escala. Câmara: <kbd>Espaço</kbd>, arrasto e Q/E.
+      <strong>Ajustar menu</strong> — Clique no coliseu para selecionar (contorno vermelho). Arrasto no modelo: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> ou numérico +/− escala. Câmara (vista isométrica fixa): <kbd>Espaço</kbd>; WASD e <kbd>X</kbd>/<kbd>Z</kbd> no alvo; roda zoom; botão direito pan no chão.
       <br /><kbd>Esc</kbd> grava e volta ao menu (vale para o jogo normal e para o sandbox).
     </div>
   `),
@@ -1963,7 +1963,7 @@ function showMainMenu(): void {
         <nav class="main-menu-nav" aria-label="Menu principal">
           <button type="button" class="main-menu-link main-menu-link--primary" data-action="new">Novo jogo</button>
           ${devMenuExtras}
-          <button type="button" class="main-menu-link" data-action="arena-layout" title="Coliseu 3D e ângulo da câmara; aplica-se ao jogo normal e ao sandbox. Esc grava.">Ajustar menu</button>
+          <button type="button" class="main-menu-link" data-action="arena-layout" title="Coliseu 3D e câmara (isométrica fixa no editor); aplica-se ao jogo normal e ao sandbox. Esc grava.">Ajustar menu</button>
           <button type="button" class="main-menu-link" data-action="crystal">Loja de cristais</button>
           <button type="button" class="main-menu-link" data-action="forge">Forja</button>
           <button type="button" class="main-menu-link" data-action="artifacts">Artefatos</button>

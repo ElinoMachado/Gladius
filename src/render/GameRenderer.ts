@@ -300,7 +300,7 @@ export class GameRenderer {
   private arenaLayoutEditEligible = false;
   /** Sessão de ajuste (clique no coliseu no menu); Esc grava e fecha. */
   private arenaLayoutEditActive = false;
-  /** `coliseum`: WASD + arrasto no modelo · `camera`: arrasto, WASD, Q/E (Espaço alterna). */
+  /** `coliseum`: WASD + arrasto no modelo · `camera`: pan/ zoom com ângulo isométrico fixo (Espaço alterna). */
   private layoutSubMode: "coliseum" | "camera" = "coliseum";
   /** Em combate/menu: usar `freeCamera` em vez da ortográfica (exceto durante cometa). */
   private usePersistentFreeCamera = false;
@@ -310,11 +310,8 @@ export class GameRenderer {
   private arenaLayoutCameraPersonalized = false;
   private readonly orbitTarget = new THREE.Vector3(0, 0, 0);
   private orbitRadius = 175;
-  private orbitTheta = 0.62;
-  private orbitPhi = 1.02;
   private editorDragMode:
     | "none"
-    | "orbit"
     | "pan"
     | "coliseum_xz"
     | "coliseum_y" = "none";
@@ -3863,29 +3860,81 @@ export class GameRenderer {
     this.usePersistentFreeCamera = false;
   }
 
-  private syncEditorOrbitFromFreeCamera(): void {
-    const off = this.editorScratchVec3
-      .copy(this.freeCamera.position)
-      .sub(this.orbitTarget);
-    const r = off.length();
-    this.orbitRadius = THREE.MathUtils.clamp(r, 38, 540);
-    if (r < 1e-5) return;
-    this.orbitTheta = Math.atan2(off.x, off.z);
-    const cosP = THREE.MathUtils.clamp(off.y / r, -1, 1);
-    this.orbitPhi = Math.acos(cosP);
+  /**
+   * Editor de cena: mesma direção de vista que a câmara ortográfica isométrica (`camOffsetDir`);
+   * só distância (orbitRadius) e alvo (orbitTarget) variam — sem rodar o ângulo.
+   */
+  private applyLayoutEditorFreeCameraIsometric(): void {
+    if (!this.arenaLayoutEditActive) return;
+    const dir = this.camOffsetDir;
+    this.freeCamera.position
+      .copy(this.orbitTarget)
+      .addScaledVector(dir, this.orbitRadius);
+    this.freeCamera.lookAt(this.orbitTarget);
+    this.freeCamera.updateProjectionMatrix();
+    this.freeCamera.updateMatrixWorld(true);
   }
 
-  private updateFreeCameraFromOrbit(): void {
-    const sinP = Math.sin(this.orbitPhi);
-    const x =
-      this.orbitTarget.x +
-      this.orbitRadius * sinP * Math.sin(this.orbitTheta);
-    const y = this.orbitTarget.y + this.orbitRadius * Math.cos(this.orbitPhi);
-    const z =
-      this.orbitTarget.z +
-      this.orbitRadius * sinP * Math.cos(this.orbitTheta);
-    this.freeCamera.position.set(x, y, z);
-    this.freeCamera.lookAt(this.orbitTarget);
+  private applyLayoutOrbitTargetPanDeltaFromClientPixels(
+    canvas: HTMLCanvasElement,
+    clientX: number,
+    clientY: number,
+    prevClientX: number,
+    prevClientY: number,
+  ): void {
+    const r = canvas.getBoundingClientRect();
+    const w = Math.max(r.width, 1);
+    const h = Math.max(r.height, 1);
+    const dndcX = ((clientX - prevClientX) / w) * 2;
+    const dndcY = -((clientY - prevClientY) / h) * 2;
+    if (Math.abs(dndcX) < 1e-8 && Math.abs(dndcY) < 1e-8) return;
+
+    this.applyLayoutEditorFreeCameraIsometric();
+    const ndc = this.clientToNdc(canvas, clientX, clientY);
+    const hNdc = 0.002;
+    const cam = this.freeCamera;
+    const base = this.intersectGroundNdcWithCamera(
+      cam,
+      ndc.x,
+      ndc.y,
+      this.panDragBase,
+    );
+    const hx = this.intersectGroundNdcWithCamera(
+      cam,
+      ndc.x + hNdc,
+      ndc.y,
+      this.panDragHx,
+    );
+    const hy = this.intersectGroundNdcWithCamera(
+      cam,
+      ndc.x,
+      ndc.y + hNdc,
+      this.panDragHy,
+    );
+    if (!base || !hx || !hy) return;
+
+    const invH = 1 / hNdc;
+    const jxx = (hx.x - base.x) * invH;
+    const jzx = (hx.z - base.z) * invH;
+    const jxy = (hy.x - base.x) * invH;
+    const jzy = (hy.z - base.z) * invH;
+
+    const dWx = jxx * dndcX + jxy * dndcY;
+    const dWz = jzx * dndcX + jzy * dndcY;
+
+    this.orbitTarget.x -= dWx;
+    this.orbitTarget.z -= dWz;
+  }
+
+  private intersectGroundNdcWithCamera(
+    cam: THREE.Camera,
+    ndcX: number,
+    ndcY: number,
+    out: THREE.Vector3,
+  ): THREE.Vector3 | null {
+    this.rayGround.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
+    if (!this.rayGround.ray.intersectPlane(this.groundPlane, out)) return null;
+    return out;
   }
 
   private clientToNdcForEditor(
@@ -4034,11 +4083,13 @@ export class GameRenderer {
     this.arenaLayoutCameraPersonalized = this.usePersistentFreeCamera;
     this.editorDragMode = "none";
     this.applyCameraPose();
-    if (!this.usePersistentFreeCamera) {
-      this.freeCamera.position.copy(this.camera.position);
-      this.freeCamera.quaternion.copy(this.camera.quaternion);
-    }
-    this.syncEditorOrbitFromFreeCamera();
+    const isoLookAt = new THREE.Vector3(this.pan.x, 0, this.pan.y);
+    this.orbitTarget.copy(isoLookAt);
+    this.editorScratchVec3.subVectors(this.camera.position, isoLookAt);
+    let rAlong = this.editorScratchVec3.dot(this.camOffsetDir);
+    if (rAlong < 0.5) rAlong = this.camDistance;
+    this.orbitRadius = THREE.MathUtils.clamp(rAlong, 38, 540);
+    this.applyLayoutEditorFreeCameraIsometric();
     this.resize(canvas);
     this.scheduleArenaLayoutPersist();
   }
@@ -4055,8 +4106,6 @@ export class GameRenderer {
       "KeyA",
       "KeyS",
       "KeyD",
-      "KeyQ",
-      "KeyE",
       "KeyX",
       "KeyZ",
       "BracketLeft",
@@ -4134,6 +4183,7 @@ export class GameRenderer {
       }
       if (moved) this.scheduleArenaLayoutPersist();
     } else if (this.layoutSubMode === "camera") {
+      this.applyLayoutEditorFreeCameraIsometric();
       const sp = 34 * dt;
       const spY = 28 * dt;
       const iw =
@@ -4145,10 +4195,8 @@ export class GameRenderer {
       const iyCam =
         (this.keysDown.has("KeyX") ? 1 : 0) -
         (this.keysDown.has("KeyZ") ? 1 : 0);
-      const rot = 1.15 * dt;
       let moved = false;
       if (iw !== 0 || id !== 0) {
-        this.freeCamera.updateMatrixWorld(true);
         const forward = this.editorScratchVec3
           .set(0, 0, -1)
           .applyQuaternion(this.freeCamera.quaternion);
@@ -4167,16 +4215,8 @@ export class GameRenderer {
         this.orbitTarget.y += iyCam * spY;
         moved = true;
       }
-      if (this.keysDown.has("KeyQ")) {
-        this.orbitTheta += rot;
-        moved = true;
-      }
-      if (this.keysDown.has("KeyE")) {
-        this.orbitTheta -= rot;
-        moved = true;
-      }
       if (moved) {
-        this.updateFreeCameraFromOrbit();
+        this.applyLayoutEditorFreeCameraIsometric();
         this.scheduleArenaLayoutPersist();
       }
     }
@@ -4188,8 +4228,6 @@ export class GameRenderer {
       "KeyA",
       "KeyS",
       "KeyD",
-      "KeyQ",
-      "KeyE",
       "KeyX",
       "KeyZ",
       "BracketLeft",
@@ -4210,6 +4248,14 @@ export class GameRenderer {
         if (this.layoutSubMode === "coliseum") {
           this.layoutSubMode = "camera";
           this.arenaLayoutCameraPersonalized = true;
+          this.applyCameraPose();
+          const isoLookAt = new THREE.Vector3(this.pan.x, 0, this.pan.y);
+          this.orbitTarget.copy(isoLookAt);
+          this.editorScratchVec3.subVectors(this.camera.position, isoLookAt);
+          let rAlong = this.editorScratchVec3.dot(this.camOffsetDir);
+          if (rAlong < 0.5) rAlong = this.camDistance;
+          this.orbitRadius = THREE.MathUtils.clamp(rAlong, 38, 540);
+          this.applyLayoutEditorFreeCameraIsometric();
         } else {
           this.layoutSubMode = "coliseum";
         }
@@ -4237,19 +4283,15 @@ export class GameRenderer {
       const ndc = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
 
       if (this.layoutSubMode === "camera") {
-        if (e.button === 0) {
-          this.editorDragMode = "orbit";
-        } else if (e.button === 2) {
+        if (e.button === 2) {
           this.editorDragMode = "pan";
-        } else {
-          this.editorDragMode = "none";
-        }
-        if (e.button === 0 || e.button === 2) {
           try {
             canvas.setPointerCapture(e.pointerId);
           } catch {
             /* ignore */
           }
+        } else {
+          this.editorDragMode = "none";
         }
         return;
       }
@@ -4332,34 +4374,21 @@ export class GameRenderer {
       if (this.editorDragMode === "none") return;
       e.preventDefault();
       e.stopPropagation();
-      const dx = e.clientX - this.editorLastClientX;
-      const dy = e.clientY - this.editorLastClientY;
+      const prevX = this.editorLastClientX;
+      const prevY = this.editorLastClientY;
+      const dy = e.clientY - prevY;
       this.editorLastClientX = e.clientX;
       this.editorLastClientY = e.clientY;
       switch (this.editorDragMode) {
-        case "orbit": {
-          this.orbitTheta -= dx * 0.0055;
-          this.orbitPhi = THREE.MathUtils.clamp(
-            this.orbitPhi - dy * 0.0055,
-            0.1,
-            Math.PI - 0.1,
-          );
-          this.updateFreeCameraFromOrbit();
-          this.scheduleArenaLayoutPersist();
-          break;
-        }
         case "pan": {
-          const k = this.orbitRadius * 0.0016;
-          this.freeCamera.updateMatrixWorld(true);
-          const right = this.editorScratchVec3
-            .set(1, 0, 0)
-            .applyQuaternion(this.freeCamera.quaternion);
-          const up = this.editorScratchVec3B
-            .set(0, 1, 0)
-            .applyQuaternion(this.freeCamera.quaternion);
-          this.orbitTarget.addScaledVector(right, -dx * k);
-          this.orbitTarget.addScaledVector(up, dy * k);
-          this.updateFreeCameraFromOrbit();
+          this.applyLayoutOrbitTargetPanDeltaFromClientPixels(
+            canvas,
+            e.clientX,
+            e.clientY,
+            prevX,
+            prevY,
+          );
+          this.applyLayoutEditorFreeCameraIsometric();
           this.scheduleArenaLayoutPersist();
           break;
         }
@@ -4423,7 +4452,7 @@ export class GameRenderer {
         38,
         540,
       );
-      this.updateFreeCameraFromOrbit();
+      this.applyLayoutEditorFreeCameraIsometric();
       this.scheduleArenaLayoutPersist();
     };
 
