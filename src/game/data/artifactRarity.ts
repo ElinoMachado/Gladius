@@ -22,30 +22,6 @@ export const ARTIFACT_RARITY_ORDER: ArtifactRarity[] = [
   "common",
 ];
 
-function luckBracket(sorte: number): number {
-  const s = Math.floor(Math.max(0, sorte));
-  if (s <= 5) return 0;
-  if (s <= 10) return 1;
-  if (s <= 15) return 2;
-  if (s <= 20) return 3;
-  if (s <= 25) return 4;
-  if (s <= 30) return 5;
-  if (s <= 35) return 6;
-  return 7;
-}
-
-/** Pesos [comum, incomum, raro, lendário, mítico] em % (somam 100). */
-const BRACKET_WEIGHTS: [number, number, number, number, number][] = [
-  [60, 40, 0, 0, 0],
-  [50, 40, 10, 0, 0],
-  [40, 35, 15, 5, 0],
-  [30, 35, 25, 8, 2],
-  [10, 30, 40, 10, 10],
-  [5, 20, 30, 30, 15],
-  [0, 10, 20, 35, 35],
-  [0, 0, 25, 30, 45],
-];
-
 const RARITIES: ArtifactRarity[] = [
   "common",
   "uncommon",
@@ -54,34 +30,92 @@ const RARITIES: ArtifactRarity[] = [
   "mythic",
 ];
 
+/**
+ * Pesos em % (somam 100) por sorte.
+ *
+ * Regras de desenho:
+ * - Até 59: só comum / incomum / raro (sem lendário nem mítico).
+ * - A partir de 60: entra lendário; mítico continua 0.
+ * - A partir de 100: entra mítico.
+ * - Em 200 de sorte: 50% mítico (interpolado linearmente entre 100 e 200).
+ */
 export function rarityWeightsForSorte(sorte: number): Record<ArtifactRarity, number> {
-  const w = BRACKET_WEIGHTS[luckBracket(sorte)]!;
-  const out: Record<ArtifactRarity, number> = {
-    common: w[0]!,
-    uncommon: w[1]!,
-    rare: w[2]!,
-    legendary: w[3]!,
-    mythic: w[4]!,
+  const s = Math.floor(Math.max(0, sorte));
+
+  if (s < 60) {
+    const t = s <= 0 ? 0 : s / 59;
+    const common = 50 - 25 * t;
+    const uncommon = 35;
+    const rare = 15 + 25 * t;
+    return {
+      common,
+      uncommon,
+      rare,
+      legendary: 0,
+      mythic: 0,
+    };
+  }
+
+  if (s < 100) {
+    const u = (s - 60) / 39;
+    const legendary = 5 + 15 * u;
+    const common = 23.75 - 3.75 * u;
+    const uncommon = 33.25 - 5.25 * u;
+    const rare = 38 - 6 * u;
+    return {
+      common,
+      uncommon,
+      rare,
+      legendary,
+      mythic: 0,
+    };
+  }
+
+  if (s <= 200) {
+    const t = (s - 100) / 100;
+    const mythic = 2 + 48 * t;
+    const legendary = 18 - 13 * t;
+    const common = 20 - 8 * t;
+    const uncommon = 28 - 10 * t;
+    const rare = 32 - 17 * t;
+    return {
+      common,
+      uncommon,
+      rare,
+      legendary,
+      mythic,
+    };
+  }
+
+  return {
+    common: 12,
+    uncommon: 18,
+    rare: 15,
+    legendary: 5,
+    mythic: 50,
   };
-  return out;
 }
 
 export function rollArtifactRarity(sorte: number): ArtifactRarity {
-  const w = BRACKET_WEIGHTS[luckBracket(sorte)]!;
-  const r = Math.random() * 100;
+  const w = rarityWeightsForSorte(sorte);
+  const arr = RARITIES.map((r) => w[r]);
+  const sum = arr.reduce((a, b) => a + b, 0);
+  const r0 = Math.random() * sum;
   let acc = 0;
   for (let i = 0; i < RARITIES.length; i++) {
-    acc += w[i]!;
-    if (r < acc) return RARITIES[i]!;
+    acc += arr[i]!;
+    if (r0 < acc) return RARITIES[i]!;
   }
   return "common";
 }
 
 export function formatRarityOddsLines(sorte: number): string[] {
   const w = rarityWeightsForSorte(sorte);
+  const fmt = (n: number) =>
+    Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
   return [
     "Raridade dos artefatos:",
-    `Comum ${w.common}% · Incomum ${w.uncommon}% · Raro ${w.rare}% · Lendário ${w.legendary}% · Mítico ${w.mythic}%`,
+    `Comum ${fmt(w.common)}% · Incomum ${fmt(w.uncommon)}% · Raro ${fmt(w.rare)}% · Lendário ${fmt(w.legendary)}% · Mítico ${fmt(w.mythic)}%`,
   ];
 }
 
@@ -96,10 +130,12 @@ const RARITY_ODDS_COLORS: Record<ArtifactRarity, string> = {
 /** HTML com nomes de raridade coloridos (para HUD de combate). */
 export function formatRarityOddsLinesHtml(sorte: number): string[] {
   const w = rarityWeightsForSorte(sorte);
+  const fmtPct = (n: number) =>
+    Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, "");
   const plain = formatRarityOddsLines(sorte);
   const parts = RARITIES.map(
     (r) =>
-      `<span style="color:${RARITY_ODDS_COLORS[r]}">${ARTIFACT_RARITY_LABELS[r]}</span> ${w[r]}%`,
+      `<span style="color:${RARITY_ODDS_COLORS[r]}">${ARTIFACT_RARITY_LABELS[r]}</span> ${fmtPct(w[r])}%`,
   );
   return [plain[0]!, `${parts.join(" · ")}`];
 }
