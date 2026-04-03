@@ -8,10 +8,12 @@ import type { HexCell } from "../game/grid";
 import type { Unit } from "../game/types";
 import {
   bleedInstanceCount,
+  burnInstanceCount,
   dotTickConsumeCount,
   hotInstanceCount,
   poisonInstanceCount,
   sumNextBleedTickDamage,
+  sumNextBurnTickDamage,
   sumNextHotTickHeal,
   sumNextPoisonTickDamage,
 } from "../game/dotInstances";
@@ -1113,6 +1115,13 @@ export class GameRenderer {
       (dg.material as THREE.Material).dispose();
       g.userData.deslumbroGlowRing = undefined;
     }
+    const bnr = g.userData.burnGlowRing as THREE.Mesh | undefined;
+    if (bnr) {
+      g.remove(bnr);
+      bnr.geometry.dispose();
+      (bnr.material as THREE.Material).dispose();
+      g.userData.burnGlowRing = undefined;
+    }
   }
 
   private makeStatusGlowRing(color: number, inner: number, outer: number): THREE.Mesh {
@@ -1174,10 +1183,11 @@ export class GameRenderer {
     }
     const wantHot = !!(u.hot && u.hot.instances.length > 0);
     const wantPoison = !!(u.poison && u.poison.instances.length > 0);
+    const wantBurn = !!(u.burn && u.burn.instances.length > 0);
     const wantBleed = !!(u.bleed && u.bleed.instances.length > 0);
     const wantDeslumbro = !u.isPlayer && deslumbroInstancesCount(u) > 0;
     const desN = deslumbroInstancesCount(u);
-    const sig = `${wantHot ? 1 : 0}-${hotInstanceCount(u)}-${sumNextHotTickHeal(u)}-${wantPoison ? 1 : 0}-${poisonInstanceCount(u)}-${sumNextPoisonTickDamage(u)}-${wantBleed ? 1 : 0}-${bleedInstanceCount(u)}-${sumNextBleedTickDamage(u)}-${dotTickConsumeCount(u)}-${wantDeslumbro ? 1 : 0}-${desN}`;
+    const sig = `${wantHot ? 1 : 0}-${hotInstanceCount(u)}-${sumNextHotTickHeal(u)}-${wantPoison ? 1 : 0}-${poisonInstanceCount(u)}-${sumNextPoisonTickDamage(u)}-${wantBurn ? 1 : 0}-${burnInstanceCount(u)}-${sumNextBurnTickDamage(u)}-${wantBleed ? 1 : 0}-${bleedInstanceCount(u)}-${sumNextBleedTickDamage(u)}-${dotTickConsumeCount(u)}-${wantDeslumbro ? 1 : 0}-${desN}`;
     if (barRoot.userData.statusSig === sig) return;
     barRoot.userData.statusSig = sig;
     this.clearStatusVisuals(g);
@@ -1194,6 +1204,12 @@ export class GameRenderer {
       g.add(ring);
       g.userData.poisonGlowRing = ring;
     }
+    if (wantBurn) {
+      const ring = this.makeStatusGlowRing(0xff6e40, 0.56, 0.7);
+      ring.position.y = 0.023;
+      g.add(ring);
+      g.userData.burnGlowRing = ring;
+    }
     if (wantBleed) {
       const ring = this.makeStatusGlowRing(0xc62828, 0.52, 0.66);
       ring.position.y = 0.024;
@@ -1201,9 +1217,9 @@ export class GameRenderer {
       g.userData.bleedGlowRing = ring;
     }
     if (wantDeslumbro) {
-      const ring = this.makeStatusGlowRing(0xe8f4ff, 0.62, 0.78);
+      const ring = this.makeStatusGlowRing(0x66b3ff, 0.62, 0.78);
       ring.position.y = 0.026;
-      (ring.material as THREE.MeshBasicMaterial).opacity = 0.52;
+      (ring.material as THREE.MeshBasicMaterial).opacity = 0.48;
       g.add(ring);
       g.userData.deslumbroGlowRing = ring;
     }
@@ -1249,6 +1265,22 @@ export class GameRenderer {
       stack.add(m);
       ix++;
     }
+    if (wantBurn && u.burn) {
+      const bi = burnInstanceCount(u);
+      const bn = sumNextBurnTickDamage(u);
+      const br = dotTickConsumeCount(u);
+      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Labareda</div><p class="game-ui-tooltip-passive">${bi} instância(s) na fila. Próximo tick: ${bn} dano (consome ${br}).</p></div>`;
+      const m = this.makeStatusBadgeMesh(
+        "♨",
+        bi,
+        "#3a1510",
+        "#ffb088",
+        tip,
+      );
+      m.position.set(-0.2 + ix * 0.42, 0, 0.02);
+      stack.add(m);
+      ix++;
+    }
     if (wantBleed && u.bleed) {
       const bi = bleedInstanceCount(u);
       const bn = sumNextBleedTickDamage(u);
@@ -1269,10 +1301,10 @@ export class GameRenderer {
       const dn = deslumbroInstancesCount(u);
       const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Deslumbro</div><p class="game-ui-tooltip-passive">${dn} instância(s) de efeito. +50% de dano recebido de todas as fontes. −1 após cada fase inimiga (não é DoT; ignora Amplicador/Dobra).</p></div>`;
       const m = this.makeStatusBadgeMesh(
-        "D",
+        "✦",
         dn,
-        "#102030",
-        "#e3f2ff",
+        "#0a1830",
+        "#b8e0ff",
         tip,
       );
       m.position.set(-0.2 + ix * 0.42, 0, 0.02);
@@ -1280,7 +1312,7 @@ export class GameRenderer {
     }
   }
 
-  /** Tooltip HTML ao pairar nos ícones de veneno/cura na barra da unidade. */
+  /** Tooltip HTML ao pairar nos ícones de status na barra da unidade. */
   pickStatusTooltip(
     canvas: HTMLCanvasElement,
     clientX: number,

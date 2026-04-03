@@ -22,10 +22,24 @@ export function bleedInstanceCount(u: Unit): number {
   return u.bleed?.instances.length ?? 0;
 }
 
+export function burnInstanceCount(u: Unit): number {
+  return u.burn?.instances.length ?? 0;
+}
+
 /** Soma do dano das próximas instâncias de veneno consumidas num tick. */
 export function sumNextPoisonTickDamage(u: Unit): number {
   const rate = dotTickConsumeCount(u);
   const arr = u.poison?.instances ?? [];
+  const n = Math.min(rate, arr.length);
+  let s = 0;
+  for (let i = 0; i < n; i++) s += arr[i]!;
+  return s;
+}
+
+/** Soma do dano das próximas instâncias de queimadura consumidas num tick. */
+export function sumNextBurnTickDamage(u: Unit): number {
+  const rate = dotTickConsumeCount(u);
+  const arr = u.burn?.instances ?? [];
   const n = Math.min(rate, arr.length);
   let s = 0;
   for (let i = 0; i < n; i++) s += arr[i]!;
