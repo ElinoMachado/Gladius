@@ -1934,7 +1934,7 @@ function showArenaLayoutEditHud(): void {
     el(`
     <div class="arena-layout-edit-hud" role="status" aria-live="polite">
       <strong>Ajustar menu</strong> — Clique no coliseu para selecionar (contorno vermelho). Arrasto no modelo: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> ou numérico +/− escala. Modo câmara (mesma vista isométrica do jogo): <kbd>Espaço</kbd>; WASD pan; roda zoom; botão direito pan no chão.
-      <br /><kbd>Esc</kbd> grava e volta ao menu (vale para o jogo normal e para o sandbox).
+      <br /><kbd>Esc</kbd> grava e volta ao menu (ferramenta de desenvolvimento).
     </div>
   `),
   );
@@ -1949,7 +1949,8 @@ function showMainMenu(): void {
   uiRoot.innerHTML = "";
   const devMenuExtras = import.meta.env.DEV
     ? `<button type="button" class="main-menu-link main-menu-link--sandbox" data-action="dev-sandbox">Modo sandbox (testes)</button>
-          <button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-reset-fresh">[Dev] Estado inicial (apagar save)</button>`
+          <button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-reset-fresh">[Dev] Estado inicial (apagar save)</button>
+          <button type="button" class="main-menu-link main-menu-link--dev" data-action="arena-layout" title="Coliseu 3D e câmara; gravado em localStorage. Esc grava e volta ao menu.">[Dev] Ajustar cena</button>`
     : "";
   const s = el(`
     <div class="main-menu-screen">
@@ -1963,7 +1964,6 @@ function showMainMenu(): void {
         <nav class="main-menu-nav" aria-label="Menu principal">
           <button type="button" class="main-menu-link main-menu-link--primary" data-action="new">Novo jogo</button>
           ${devMenuExtras}
-          <button type="button" class="main-menu-link" data-action="arena-layout" title="Coliseu 3D e câmara (isométrica fixa no editor); aplica-se ao jogo normal e ao sandbox. Esc grava.">Ajustar menu</button>
           <button type="button" class="main-menu-link" data-action="crystal">Loja de cristais</button>
           <button type="button" class="main-menu-link" data-action="forge">Forja</button>
           <button type="button" class="main-menu-link" data-action="artifacts">Artefatos</button>
@@ -2009,6 +2009,7 @@ function showMainMenu(): void {
           render();
           break;
         case "arena-layout":
+          if (!import.meta.env.DEV) break;
           view.enterArenaLayoutEditFromMenu(canvas);
           render();
           break;
@@ -7934,7 +7935,9 @@ function render(): void {
     showBunkers,
   );
   applyCombatOverlays();
-  view.setArenaLayoutEditEligible(model.phase === "main_menu");
+  view.setArenaLayoutEditEligible(
+    import.meta.env.DEV && model.phase === "main_menu",
+  );
   view.setCombatUsesOrthographicView(model.phase === "combat");
   view.setCameraInputEnabled(
     model.phase === "combat" &&

@@ -3882,20 +3882,25 @@ export class GameRenderer {
     return { coliseum, coliseumScale, freeCamera };
   }
 
-  /** Menu principal: permite iniciar a sessão de ajuste (botão no menu). */
+  /** Menu principal (só `import.meta.env.DEV`): permite iniciar a sessão de ajuste. */
   setArenaLayoutEditEligible(eligible: boolean): void {
-    this.arenaLayoutEditEligible = eligible;
-    if (!eligible && this.arenaLayoutEditActive) {
+    this.arenaLayoutEditEligible = Boolean(eligible && import.meta.env.DEV);
+    if (!this.arenaLayoutEditEligible && this.arenaLayoutEditActive) {
       this.endArenaLayoutEditSession();
     }
   }
 
   /**
    * Entra na sessão de ajuste do coliseu e da câmara (gravado em `localStorage` para run e sandbox).
-   * Só com `setArenaLayoutEditEligible(true)` (ex.: menu principal).
+   * Só em build de desenvolvimento e com `setArenaLayoutEditEligible(true)` (menu principal).
    */
   enterArenaLayoutEditFromMenu(canvas: HTMLCanvasElement): void {
-    if (!this.arenaLayoutEditEligible || this.arenaLayoutEditActive) return;
+    if (
+      !import.meta.env.DEV ||
+      !this.arenaLayoutEditEligible ||
+      this.arenaLayoutEditActive
+    )
+      return;
     this.beginArenaLayoutSession(canvas);
   }
 
