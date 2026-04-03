@@ -1,5 +1,9 @@
 import * as THREE from "three";
-import { cloneGladiadorBodyFromGlb } from "./gladiatorGlb";
+import {
+  cloneGladiadorBodyFromGlb,
+  getGladiadorForgeAttach,
+  type GladiadorForgeAttachConfig,
+} from "./gladiatorGlb";
 import { buildEnemyBody3D } from "./enemyModels3d";
 import { forgeVisualKey, resolveEquippedForgeLoadout } from "../game/forge";
 import type { ForgeEssenceId, ForgeHeroLoadout, HeroClassId } from "../game/types";
@@ -89,9 +93,9 @@ const FORGE_ATTACH: Record<
     cape: { x: 0, y: 0.87, z: -0.125, rotX: 0.06, scale: 0.5 },
     manoplas: { y: 1.02, z: 0.09, scale: 0.48 },
   },
+  /* Só usado no fallback procedural; com GLB vê `getGladiadorForgeAttach()`. */
   gladiador: {
     helmet: { y: 1.38, scale: 0.58 },
-    /* Topo da capa ~ombros; z mais negativo evita clipping com o torso largo. */
     cape: { x: 0, y: 0.88, z: -0.24, rotX: 0.05, scale: 0.58 },
     manoplas: { y: 1.14, z: 0.16, scale: 0.7 },
   },
@@ -108,11 +112,13 @@ function addForgeMeshes(
   heroClass: HeroClassId,
   loadout: ForgeHeroLoadout | undefined,
   _mat: (c: number, o?: Partial<THREE.MeshStandardMaterialParameters>) => THREE.MeshStandardMaterial,
+  /** Sobreposição (ex.: gladiador GLB — posições derivadas da bbox do modelo). */
+  attachOverride?: GladiadorForgeAttachConfig,
 ): void {
   if (!loadout) return;
   const R = resolveEquippedForgeLoadout(loadout);
   const b = (id: string) => id as ForgeEssenceId;
-  const A = FORGE_ATTACH[heroClass];
+  const A = attachOverride ?? FORGE_ATTACH[heroClass];
   if (R.helmo) {
     const h = buildHelmetForgeDetail(b(R.helmo.biome), R.helmo.level);
     h.scale.setScalar(A.helmet.scale);
@@ -308,7 +314,13 @@ export function buildHeroBody(
     const glb = cloneGladiadorBodyFromGlb(accent);
     if (glb) {
       root.add(glb);
-      addForgeMeshes(root, heroClass, forgeLoadout, stdMat);
+      addForgeMeshes(
+        root,
+        heroClass,
+        forgeLoadout,
+        stdMat,
+        getGladiadorForgeAttach() ?? FORGE_ATTACH.gladiador,
+      );
       if (forma?.formaFinal && forma.ultimateId) {
         applyFormaFinalAugment(root, heroClass, forma.ultimateId, accent, stdMat);
       }
