@@ -54,6 +54,8 @@ const BIOME_HEX_COLOR: Record<BiomeId, number> = {
  * Raio centro→vértice no grid axial (vizinhos a distância √3·HEX_SIZE; mesh com o mesmo raio encosta sem folga).
  */
 const HEX_SIZE = 2.18;
+/** Com o coliseu GLB, hexes/unidades sobem ligeiramente acima da areia (após afundar o modelo). */
+const ARENA_PLAY_SURFACE_Y_WITH_COLISEUM = 0.032;
 /** Heróis com `flying`: altura base acima do hex (~4× a elevação inicial). */
 const HERO_FLY_BASE_Y = 1.2;
 /** Oscilação vertical (flutuar) em torno da base. */
@@ -627,7 +629,7 @@ export class GameRenderer {
       });
       const ring = new THREE.Mesh(geo, mat);
       ring.rotation.x = -Math.PI / 2;
-      ring.position.set(rx, 0.14, rz);
+      ring.position.set(rx, this.playSurfaceYOffset() + 0.14, rz);
       this.arenaRoot.add(ring);
       fx.shockRing = ring;
     }
@@ -826,8 +828,9 @@ export class GameRenderer {
         depthWrite: false,
       }),
     );
-    mesh.position.set(midX, 0.72, midZ);
-    mesh.lookAt(bx, 0.72, bz);
+    const py = this.playSurfaceYOffset();
+    mesh.position.set(midX, py + 0.72, midZ);
+    mesh.lookAt(bx, py + 0.72, bz);
     this.arenaRoot.add(mesh);
     this.meleeSlashFx.push({ mesh, until: performance.now() + 145 });
   }
@@ -860,7 +863,7 @@ export class GameRenderer {
     headY = 2.12,
   ): { x: number; y: number } | null {
     const { x, z } = axialToWorld(q, r, HEX_SIZE);
-    this.headScreenScratch.set(x, headY, z);
+    this.headScreenScratch.set(x, this.playSurfaceYOffset() + headY, z);
     this.headScreenScratch.project(this.camera);
     if (this.headScreenScratch.z < -1 || this.headScreenScratch.z > 1)
       return null;
@@ -1548,7 +1551,11 @@ export class GameRenderer {
       const baseY = Number(g.userData.heroFlyBaseY) || 0;
       if (baseY <= 0) continue;
       const { x, z } = g.position;
-      g.position.set(x, this.heroFlyTotalY(nowMs, id, baseY), z);
+      g.position.set(
+        x,
+        this.playSurfaceYOffset() + this.heroFlyTotalY(nowMs, id, baseY),
+        z,
+      );
       const wings = g.userData.flyingWingsRoot as THREE.Group | undefined;
       if (wings) this.applyGoldenWingFlapAndPulse(wings, nowMs);
     }
@@ -1582,7 +1589,7 @@ export class GameRenderer {
       );
       g.position.set(
         THREE.MathUtils.lerp(p0.x, p1.x, p),
-        flyY,
+        this.playSurfaceYOffset() + flyY,
         THREE.MathUtils.lerp(p0.z, p1.z, p),
       );
       if (p >= 1) {
@@ -2069,6 +2076,9 @@ export class GameRenderer {
     if (!g) return;
     this.arenaColiseumDecoration = g;
     g.userData.role = "arena_coliseum";
+    g.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) obj.renderOrder = -1;
+    });
 
     const throne = this.throneGroup;
     this.arenaRoot.remove(throne);
@@ -2081,6 +2091,30 @@ export class GameRenderer {
       crowd.visible = false;
       this.arenaRoot.add(crowd);
     }
+    this.refreshArenaPlaySurfaceVisuals();
+  }
+
+  /** Plano de jogo em Y (hexes, bunkers, base das unidades). Raycasts no chão lógico mantêm-se em Y=0. */
+  private playSurfaceYOffset(): number {
+    return this.arenaColiseumDecoration != null
+      ? ARENA_PLAY_SURFACE_Y_WITH_COLISEUM
+      : 0;
+  }
+
+  private refreshArenaPlaySurfaceVisuals(): void {
+    const y = this.playSurfaceYOffset();
+    const coliseum = this.arenaColiseumDecoration != null;
+    for (const mesh of this.hexMeshes.values()) {
+      mesh.position.y = y;
+      const mat = mesh.material;
+      if (mat instanceof THREE.MeshStandardMaterial) {
+        mat.polygonOffset = coliseum;
+        mat.polygonOffsetFactor = coliseum ? -3 : 0;
+        mat.polygonOffsetUnits = coliseum ? -3 : 0;
+        mat.needsUpdate = true;
+      }
+    }
+    this.throneGroup.position.y = y;
   }
 
   buildHexGrid(grid: Map<string, HexCell>): void {
@@ -2105,6 +2139,7 @@ export class GameRenderer {
       this.arenaRoot.add(mesh);
       this.hexMeshes.set(axialKey(cell.q, cell.r), mesh);
     }
+    this.refreshArenaPlaySurfaceVisuals();
   }
 
   /** Atualiza/instancia modelos 3D das unidades; herói some visualmente se o seu hex tiver bunker com PV. */
@@ -2161,7 +2196,7 @@ export class GameRenderer {
           ju.baseX = x;
           ju.baseZ = z;
         } else {
-          g.position.set(x, flyY, z);
+          g.position.set(x, this.playSurfaceYOffset() + flyY, z);
         }
       }
       /** 2× no gigante: evita cobrir inimigos no raycast (antes 5×). */
@@ -2337,7 +2372,7 @@ export class GameRenderer {
       const mesh = new THREE.Mesh(geo, mat);
       const cell = k.split(",").map(Number) as [number, number];
       const { x, z } = axialToWorld(cell[0]!, cell[1]!, HEX_SIZE);
-      mesh.position.set(x, y, z);
+      mesh.position.set(x, y + this.playSurfaceYOffset(), z);
       group.add(mesh);
     }
     return group;
@@ -2351,7 +2386,8 @@ export class GameRenderer {
     preview: boolean,
   ): THREE.Group {
     const g = new THREE.Group();
-    const y = preview ? 1.38 : 1.06;
+    const py = this.playSurfaceYOffset();
+    const y = (preview ? 1.38 : 1.06) + py;
     const addSeg = (
       w: number,
       h: number,
@@ -2946,7 +2982,7 @@ export class GameRenderer {
   spawnComicPowImpactOnUnit(unitId: string): void {
     const g = this.unitMeshes.get(unitId);
     if (!g) return;
-    this.spawnComicPowBurst(g.position.x, 1.12, g.position.z);
+    this.spawnComicPowBurst(g.position.x, g.position.y + 1.12, g.position.z);
   }
 
   /** Herói brilha com energia enquanto o Golpe Relâmpago encadeia (extensível por novas chamadas). */
@@ -3147,7 +3183,11 @@ export class GameRenderer {
             hexDistance({ q: centerQ, r: centerR }, { q, r }) !== ring
           )
             continue;
-          this.spawnLandmineFireExplosion(mesh.position.x, 0.32, mesh.position.z);
+          this.spawnLandmineFireExplosion(
+            mesh.position.x,
+            mesh.position.y + 0.32,
+            mesh.position.z,
+          );
         }
       }, delay);
     }
@@ -3169,7 +3209,7 @@ export class GameRenderer {
       opacity: 0.96,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    const y0 = 1.35;
+    const y0 = a.position.y + 1.35;
     mesh.position.set(a.position.x, y0, a.position.z);
     this.arenaRoot.add(mesh);
     const dx = b.position.x - a.position.x;
@@ -3233,7 +3273,7 @@ export class GameRenderer {
         applyBunkerTierMaterials(root, tier);
       }
       const { x, z } = axialToWorld(b.q, b.r, HEX_SIZE);
-      root.position.set(x, 0, z);
+      root.position.set(x, this.playSurfaceYOffset(), z);
     }
   }
 
@@ -3296,14 +3336,15 @@ export class GameRenderer {
         id,
         Number(g.userData.heroFlyBaseY) || 0,
       );
+      const baseY = this.playSurfaceYOffset();
       if (elapsed >= ju.durationMs) {
-        g.position.set(ju.baseX, fy, ju.baseZ);
+        g.position.set(ju.baseX, baseY + fy, ju.baseZ);
         this.heroUltJumpById.delete(id);
         continue;
       }
       const t = elapsed / ju.durationMs;
       const y = ju.peakY * Math.sin(Math.PI * t);
-      g.position.set(ju.baseX, fy + y, ju.baseZ);
+      g.position.set(ju.baseX, baseY + fy + y, ju.baseZ);
     }
   }
 
@@ -3423,7 +3464,11 @@ export class GameRenderer {
       const y = p.y0 + Math.sin(u * Math.PI) * p.arcH;
       p.mesh.position.set(x, y, z);
       if (u >= 1) {
-        this.spawnLandmineFireExplosion(p.x1, 1.05, p.z1);
+        this.spawnLandmineFireExplosion(
+          p.x1,
+          this.playSurfaceYOffset() + 1.05,
+          p.z1,
+        );
         this.arenaRoot.remove(p.mesh);
         p.mesh.geometry.dispose();
         (p.mesh.material as THREE.Material).dispose();

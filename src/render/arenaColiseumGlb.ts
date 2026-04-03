@@ -8,6 +8,11 @@ const HEX_SIZE = 2.18;
 const ARENA_HEX_RADIUS = 25;
 /** Folga visual para o anel de hexes caber confortavelmente dentro do coliseu. */
 const ARENA_FIT_MARGIN = 1.1;
+/**
+ * O chão do GLB costuma ser uma malha espessa; o bbox mínimo alinha a base em Y=0 e a areia visível
+ * fica por cima dos hexes. Afundamos o modelo para a superfície da arena ficar abaixo do plano de jogo.
+ */
+const COLISEUM_FLOOR_SINK_Y = 0.42;
 
 /**
  * Raio horizontal no chão até ao vértice mais exterior do grid jogável
@@ -81,7 +86,7 @@ function prepareTemplate(scene: THREE.Object3D): THREE.Group {
   const box2 = unionMeshWorldBox3(root);
   const cx = (box2.min.x + box2.max.x) / 2;
   const cz = (box2.min.z + box2.max.z) / 2;
-  root.position.set(-cx, -box2.min.y, -cz);
+  root.position.set(-cx, -box2.min.y - COLISEUM_FLOOR_SINK_Y, -cz);
   root.updateMatrixWorld(true);
   return root;
 }
