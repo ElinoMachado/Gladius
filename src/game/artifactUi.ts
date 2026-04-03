@@ -477,8 +477,3 @@ export function artifactRaritySlotsStripHtml(u: Unit): string {
   }).join("");
   return `<div class="artifact-rarity-slots" role="group" aria-label="Vagas de tipos distintos por raridade: 3 comuns, 3 incomuns, 2 raros, 2 lendários, 1 mítico">${groups}</div>`;
 }
-
-/** Faixa de vagas no setup de heróis / preview (sem artefatos ainda). */
-export function artifactRaritySlotsStripPreviewHtml(): string {
-  return artifactRaritySlotsStripHtml({ artifacts: {} } as Unit);
-}
