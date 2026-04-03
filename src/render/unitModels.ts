@@ -2,6 +2,7 @@ import * as THREE from "three";
 import {
   cloneGladiadorBodyFromGlb,
   getGladiadorForgeAttach,
+  resolveGladiadorForgeAttachFromRig,
   type GladiadorForgeAttachConfig,
 } from "./gladiatorGlb";
 import { buildEnemyBody3D } from "./enemyModels3d";
@@ -82,9 +83,9 @@ function stdMat(color: number, opts: Partial<THREE.MeshStandardMaterialParameter
 const FORGE_ATTACH: Record<
   HeroClassId,
   {
-    helmet: { y: number; scale: number };
+    helmet: { y: number; scale: number; x?: number; z?: number };
     cape: { x: number; y: number; z: number; rotX: number; scale: number };
-    manoplas: { y: number; z: number; scale: number };
+    manoplas: { y: number; z: number; scale: number; x?: number };
   }
 > = {
   pistoleiro: {
@@ -122,7 +123,7 @@ function addForgeMeshes(
   if (R.helmo) {
     const h = buildHelmetForgeDetail(b(R.helmo.biome), R.helmo.level);
     h.scale.setScalar(A.helmet.scale);
-    h.position.set(0, A.helmet.y, 0);
+    h.position.set(A.helmet.x ?? 0, A.helmet.y, A.helmet.z ?? 0);
     h.userData.role = "forge";
     root.add(h);
   }
@@ -143,7 +144,7 @@ function addForgeMeshes(
       R.manoplas.level,
     );
     m.scale.setScalar(A.manoplas.scale);
-    m.position.set(0, A.manoplas.y, A.manoplas.z);
+    m.position.set(A.manoplas.x ?? 0, A.manoplas.y, A.manoplas.z);
     m.userData.role = "forge";
     m.traverse((o) => {
       if (o instanceof THREE.Mesh) o.renderOrder = 2;
@@ -314,12 +315,15 @@ export function buildHeroBody(
     const glb = cloneGladiadorBodyFromGlb(accent);
     if (glb) {
       root.add(glb);
+      root.updateMatrixWorld(true);
       addForgeMeshes(
         root,
         heroClass,
         forgeLoadout,
         stdMat,
-        getGladiadorForgeAttach() ?? FORGE_ATTACH.gladiador,
+        resolveGladiadorForgeAttachFromRig(root, glb) ??
+          getGladiadorForgeAttach() ??
+          FORGE_ATTACH.gladiador,
       );
       if (forma?.formaFinal && forma.ultimateId) {
         applyFormaFinalAugment(root, heroClass, forma.ultimateId, accent, stdMat);
