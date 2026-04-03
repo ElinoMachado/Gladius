@@ -13,26 +13,61 @@ function disposeObject3D(o: THREE.Object3D): void {
   });
 }
 
-function cameraSetupForKind(kind: ForgeSlotKind): {
-  pos: THREE.Vector3;
-  target: THREE.Vector3;
-} {
-  if (kind === "helmo") {
-    return {
-      pos: new THREE.Vector3(0.05, 0.2, 1.45),
-      target: new THREE.Vector3(0, 0.05, 0),
-    };
+/**
+ * Rotação Y do modelo para ficar de frente à câmara (eixo +Z → olhar para a origem).
+ * Ajusta se o GLB vier com outra convenção (Blender/Mixamo).
+ */
+const PIECE_PREVIEW_YAW: Record<ForgeSlotKind, number> = {
+  helmo: -Math.PI / 2,
+  capa: Math.PI,
+  manoplas: -Math.PI / 2,
+};
+
+const FIT_MARGIN = 1.18;
+
+/** Centra a AABB do objeto na origem do pai (correcto com rotação no filho). */
+function centerObjectOnOrigin(object: THREE.Object3D): void {
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+  const parent = object.parent;
+  if (parent) {
+    parent.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(parent.matrixWorld).invert();
+    center.applyMatrix4(inv);
   }
-  if (kind === "capa") {
-    return {
-      pos: new THREE.Vector3(0, 0.42, 1.55),
-      target: new THREE.Vector3(0, 0.1, -0.05),
-    };
-  }
-  return {
-    pos: new THREE.Vector3(0, 0.12, 1.52),
-    target: new THREE.Vector3(0, 0.02, 0),
-  };
+  object.position.sub(center);
+  object.updateMatrixWorld(true);
+}
+
+/**
+ * Câmara em +Z a olhar para a origem, distância para caber altura e largura do objeto.
+ */
+function fitCameraToObject(
+  camera: THREE.PerspectiveCamera,
+  root: THREE.Object3D,
+  margin: number,
+): void {
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  if (box.isEmpty()) return;
+
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const vFov = (camera.fov * Math.PI) / 180;
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * Math.max(camera.aspect, 0.25));
+
+  const distV = ((size.y / 2) * margin) / Math.tan(vFov / 2);
+  const distH = ((size.x / 2) * margin) / Math.tan(hFov / 2);
+  const dist = Math.max(distV, distH, 0.22);
+
+  const elev = Math.min(size.y * 0.06, 0.14);
+  camera.position.set(0, elev, dist);
+  camera.lookAt(0, size.y * 0.02, 0);
+  camera.near = Math.max(0.015, dist * 0.015);
+  camera.far = Math.max(48, dist * 5);
+  camera.updateProjectionMatrix();
 }
 
 /** Preview isolado de uma peça da forja (elmo / capa / manoplas). */
@@ -45,7 +80,6 @@ export class ForgePiecePreview3D {
   private raf = 0;
   private running = false;
   private onResize = (): void => this.fit();
-  private kind: ForgeSlotKind = "helmo";
   /** Luz pontual pulsante (cor do tier) para realçar bronze/prata/ouro. */
   private tierGlow: THREE.PointLight | null = null;
   private tierGlowBase = 0.9;
@@ -60,10 +94,9 @@ export class ForgePiecePreview3D {
     this.renderer.setClearColor(0x000000, 0);
     host.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(42, 1, 0.08, 24);
-    const { pos, target } = cameraSetupForKind(this.kind);
-    this.camera.position.copy(pos);
-    this.camera.lookAt(target);
+    this.camera = new THREE.PerspectiveCamera(38, 1, 0.05, 64);
+    this.camera.position.set(0, 0.08, 1.35);
+    this.camera.lookAt(0, 0, 0);
 
     const amb = new THREE.AmbientLight(0xf0e8ff, 0.52);
     const key = new THREE.DirectionalLight(0xffffff, 0.92);
@@ -85,7 +118,7 @@ export class ForgePiecePreview3D {
     biome: ForgeEssenceId | null,
     level: 1 | 2 | 3,
   ): void {
-    this.kind = kind;
+    this.pivot.rotation.set(0, 0, 0);
     if (this.tierGlow) {
       this.scene.remove(this.tierGlow);
       this.tierGlow = null;
@@ -94,10 +127,9 @@ export class ForgePiecePreview3D {
     this.pivot.clear();
     if (biome != null) {
       const piece = buildForgePieceDetailGroup(kind, biome, level);
-      if (kind === "helmo") piece.scale.setScalar(1.05);
-      else if (kind === "capa") piece.scale.setScalar(1.02);
-      else piece.scale.setScalar(0.92);
+      piece.rotation.set(0, PIECE_PREVIEW_YAW[kind], 0);
       this.pivot.add(piece);
+      centerObjectOnOrigin(piece);
 
       const glowColor =
         level === 1 ? 0xff6630 : level === 2 ? 0xb8d8ff : 0xffe566;
@@ -105,19 +137,30 @@ export class ForgePiecePreview3D {
       const lg = new THREE.PointLight(
         glowColor,
         this.tierGlowBase,
-        4.2,
-        1.85,
+        5.5,
+        2.2,
       );
-      lg.position.set(0.48, 0.34, 0.58);
+      lg.position.set(0.55, 0.4, 0.75);
       this.tierGlow = lg;
       this.scene.add(lg);
     }
 
-    const { pos, target } = cameraSetupForKind(kind);
-    this.camera.position.copy(pos);
-    this.camera.lookAt(target);
+    this.refitCamera();
     this.fit();
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private refitCamera(): void {
+    if (this.pivot.children.length === 0) {
+      this.camera.position.set(0, 0.08, 1.35);
+      this.camera.lookAt(0, 0, 0);
+      this.camera.near = 0.05;
+      this.camera.far = 64;
+      this.camera.updateProjectionMatrix();
+      return;
+    }
+    this.pivot.updateMatrixWorld(true);
+    fitCameraToObject(this.camera, this.pivot, FIT_MARGIN);
   }
 
   private fit(): void {
@@ -126,6 +169,7 @@ export class ForgePiecePreview3D {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(h, 1);
     this.camera.updateProjectionMatrix();
+    this.refitCamera();
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -136,10 +180,10 @@ export class ForgePiecePreview3D {
     const loop = (now: number): void => {
       if (!this.running) return;
       this.raf = requestAnimationFrame(loop);
-      const t = (now - t0) * 0.001;
-      this.pivot.rotation.y = Math.sin(t * 0.5) * 0.22;
-      this.pivot.rotation.x = Math.sin(t * 0.35) * 0.06;
+      /* Modelo de frente à câmara, sem rodar o conjunto (evita cortes no quadro). */
+      this.pivot.rotation.set(0, 0, 0);
       if (this.tierGlow) {
+        const t = (now - t0) * 0.001;
         const pulse = 0.86 + 0.14 * Math.sin(t * 2.35);
         this.tierGlow.intensity = this.tierGlowBase * pulse;
       }
