@@ -133,6 +133,8 @@ export class GameRenderer {
   private arenaColiseumDecoration: THREE.Group | null = null;
   /** Pai do GLB; deslocamento manual no editor aplica-se aqui. */
   private arenaColiseumMount: THREE.Group | null = null;
+  /** Luz ambiente hemisférica (só com GLB do coliseu). */
+  private arenaColiseumHemisphereLight: THREE.HemisphereLight | null = null;
   /** Multidão procedural em volta; oculta-se quando o GLB da arena carrega. */
   private coliseumCrowdRing: THREE.InstancedMesh | null = null;
   private throneGroup: THREE.Group;
@@ -2190,6 +2192,33 @@ export class GameRenderer {
     const mount = new THREE.Group();
     mount.name = "arena_coliseum_mount";
     mount.add(g);
+
+    if (!this.arenaColiseumHemisphereLight) {
+      this.arenaColiseumHemisphereLight = new THREE.HemisphereLight(
+        0xa8c4ec,
+        0x4a3d30,
+        0.48,
+      );
+      this.arenaColiseumHemisphereLight.name = "arena_coliseum_hemi";
+      this.scene.add(this.arenaColiseumHemisphereLight);
+    }
+
+    const accent = new THREE.Group();
+    accent.name = "arena_coliseum_accent_lights";
+    const warmKey = new THREE.PointLight(0xfff0e0, 2.8, 200, 2);
+    warmKey.position.set(0, 78, 56);
+    accent.add(warmKey);
+    const coolFill = new THREE.PointLight(0xd8e6ff, 1.35, 170, 2);
+    coolFill.position.set(-68, 44, -58);
+    accent.add(coolFill);
+    const rimLow = new THREE.PointLight(0xffcc88, 0.85, 130, 2);
+    rimLow.position.set(52, 22, -36);
+    accent.add(rimLow);
+    const bounce = new THREE.PointLight(0xe8d4c4, 0.55, 95, 2);
+    bounce.position.set(0, 16, 0);
+    accent.add(bounce);
+    mount.add(accent);
+
     this.arenaColiseumMount = mount;
 
     const throne = this.throneGroup;
