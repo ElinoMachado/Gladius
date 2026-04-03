@@ -8,7 +8,6 @@ import {
 const _wPos = new THREE.Vector3();
 const _wPos2 = new THREE.Vector3();
 const _wPos3 = new THREE.Vector3();
-const _wQuat = new THREE.Quaternion();
 const _backOff = new THREE.Vector3();
 const _mid = new THREE.Vector3();
 
@@ -51,12 +50,20 @@ function scoreNeckBone(n: string): number {
   return 0;
 }
 
+/**
+ * Osso das costas / ombros para a capa. Evitar `chest`/`upperchest` como primeiro
+ * candidato: nesses ossos o eixo local costuma apontar para a frente do peito e
+ * empurra a malha para a face.
+ */
 function scoreUpperBackBone(n: string): number {
-  if (n.includes("spine") && (n.includes("3") || n.includes("2"))) return 96;
-  if (n.includes("upperchest") || n.includes("chest")) return 90;
-  if (n.includes("spine1") && !n.includes("2")) return 78;
-  if (n === "spine" || n.endsWith("spine")) return 55;
-  if (n.includes("clavicle") || n.includes("shoulder")) return 48;
+  if (n.includes("spine") && (n.includes("3") || n.includes("03"))) return 100;
+  if (n.includes("spine") && (n.includes("2") || n.includes("02"))) return 98;
+  if (n.includes("spine") && (n.includes("1") || n.includes("01")) && !n.includes("10"))
+    return 80;
+  if (n === "spine" || (n.endsWith("spine") && !/\d/.test(n))) return 58;
+  if (n.includes("upperchest") || n.includes("upper_chest")) return 44;
+  if (n.includes("chest") && !n.includes("neck")) return 38;
+  if (n.includes("clavicle") || n.includes("shoulder")) return 32;
   return 0;
 }
 
@@ -90,8 +97,9 @@ function scoreHandBone(n: string, wantLeft: boolean): number {
   if (wantLeft && !L) return 0;
   if (!wantLeft && !R) return 0;
   if (n.includes("hand")) return 100;
-  if (n.includes("wrist")) return 86;
-  if (n.includes("forearm") || n.includes("lowerarm") || n.includes("lower_arm")) return 52;
+  if (n.includes("wrist")) return 88;
+  /* Só antebra se não houver “hand” nos nomes — evita ponto médio na cintura. */
+  if (n.includes("forearm") || n.includes("lowerarm") || n.includes("lower_arm")) return 28;
   return 0;
 }
 
@@ -149,10 +157,17 @@ export function resolveHeroForgeAttachFromRig(
 
   const backBone = pickBestBone(bones, scoreUpperBackBone);
   if (backBone) {
+    backBone.updateWorldMatrix(true, false);
     backBone.getWorldPosition(_wPos);
-    backBone.getWorldQuaternion(_wQuat);
-    _backOff.set(0, 0, -0.13 * (sy / 1.45)).applyQuaternion(_wQuat);
+    const hScale = sy / 1.45;
+    /* Para trás ao longo do eixo local −Z do osso (costas), não rotação world “solta”. */
+    _backOff.set(0, 0, -0.16 * hScale);
+    _backOff.transformDirection(backBone.matrixWorld);
     _wPos.add(_backOff);
+    /* Ligeiro deslocamento ao longo do eixo local +Y do osso (subir colarinho). */
+    _mid.set(0, 0.055 * hScale, 0);
+    _mid.transformDirection(backBone.matrixWorld);
+    _wPos.add(_mid);
     heroRoot.worldToLocal(_wPos);
     const handL = pickBestBone(bones, (n) => scoreHandBone(n, true));
     const handR = pickBestBone(bones, (n) => scoreHandBone(n, false));
