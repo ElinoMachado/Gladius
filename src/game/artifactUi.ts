@@ -25,7 +25,7 @@ const SPECIAL_MAX: Record<string, number> = {
   muralha_verdade: 3,
   manto_espectral: 5,
   olho_agucado: 6,
-  guerra_total: 2,
+  guerra_total: 3,
   ira_dimensao: 2,
   carne_eterna: 3,
   penumbra: 3,
@@ -176,6 +176,11 @@ export function describeArtifactAtStack(
       return `+${15 * n}% de dano com habilidades (não básico).`;
     case "espinhos_reais":
       return `Devolve ${8 * n}% do dano recebido de inimigos ao atacante.`;
+    case "guerra_total": {
+      const pct = [20, 40, 75][n - 1] ?? 75;
+      const ins = [1, 2, 3][n - 1] ?? 3;
+      return `No início da wave: onda ${pct}% PV máx. por inimigo (metade em elite/chefe), ${ins} instância(s) de Deslumbro (+50% dano recebido).`;
+    }
     case "furacao_ouro":
       return `+${5 * n} ouro na bolsa por eliminação.`;
     case "garra_ferro": {
@@ -293,6 +298,7 @@ export function artifactCardFigureSvg(artifactId: string): string {
     escudo_sangue: `<path fill="#c62828" d="M24 8 L38 14 V28 Q24 38 10 28 V14 Z" stroke="#5d1010" stroke-width="1"/><path fill="#ff8a80" d="M24 14 L32 18 V26 Q24 32 16 26 V18 Z"/>`,
     escudo_residual: `<path fill="#1565c0" d="M24 8 L38 14 V28 Q24 38 10 28 V14 Z" stroke="#0d47a1" stroke-width="1"/><path fill="#81d4fa" d="M24 14 L32 18 V26 Q24 32 16 26 V18 Z"/><path fill="none" stroke="#e3f2fd" stroke-width="1" d="M18 22h12M24 16v14"/>`,
     lamina_magica: `<path fill="#7e57c2" d="M14 34 L24 8 L34 34 Z" stroke="#311b92"/><path fill="#b39ddb" d="M22 16h4v12h-4z"/><circle cx="24" cy="30" r="3" fill="#ffd54f"/>`,
+    guerra_total: `<path fill="#e8eaf6" stroke="#b0bec5" stroke-width="0.6" d="M38 6 L28 22 L32 24 L24 40 L26 18 L20 16 Z"/><path fill="#ffffff" stroke="#eceff1" stroke-width="0.5" opacity="0.95" d="M34 8 L27 20 L30 21 L24 34 L25 19 L21 17 Z"/><path fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" opacity="0.9" d="M36 7 Q22 14 10 26"/><path fill="none" stroke="#f5f5f5" stroke-width="1.4" stroke-linecap="round" opacity="0.75" d="M33 10 Q20 16 8 28"/>`,
     olho_agucado: `<ellipse cx="24" cy="26" rx="16" ry="6" fill="none" stroke="#00838f" stroke-width="1.4" opacity="0.85"/><ellipse cx="24" cy="26" rx="11" ry="4" fill="none" stroke="#26c6da" stroke-width="1.2"/><ellipse cx="24" cy="26" rx="6" ry="2.2" fill="none" stroke="#80deea" stroke-width="1"/><circle cx="24" cy="26" r="2.5" fill="#b2ebf2"/><path fill="none" stroke="#4dd0e1" stroke-width="1" d="M8 26 Q24 14 40 26"/>`,
     _pick_gold: `<circle cx="24" cy="24" r="14" fill="#c9a227" stroke="#6a5018"/><circle cx="24" cy="22" r="9" fill="#e8c84a"/><ellipse cx="24" cy="19" rx="6" ry="2.5" fill="#f5d76e"/>`,
     _pick_restore: `<path fill="#43a047" d="M24 8v32M8 24h32" stroke="#1b5e20" stroke-width="3"/><circle cx="24" cy="24" r="12" fill="none" stroke="#66bb6a" stroke-width="2"/>`,

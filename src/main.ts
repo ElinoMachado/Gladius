@@ -3378,6 +3378,32 @@ function showWaveIntroOverlay(
   waveIntroAutoCloseTimer = window.setTimeout(close, 2000);
 }
 
+/** Cometa arcano: cinemático no canvas e depois liberta a fase inimiga. */
+function startCometaArcanoCinematicThenRelease(): void {
+  const h = model.currentHero();
+  const hq = h?.q ?? 0;
+  const hr = h?.r ?? 0;
+  view.startCometaArcanoCinematic({
+    canvas,
+    heroQ: hq,
+    heroR: hr,
+    onImpact: () => {
+      model.applyCometaArcanoStrike();
+    },
+    onComplete: () => {
+      model.releaseEnemyPhaseAfterWaveIntro();
+    },
+  });
+}
+
+function releaseEnemyPhaseAfterWaveIntroOrCometa(): void {
+  if (model.partyGuerraTotalStackSum() <= 0) {
+    model.releaseEnemyPhaseAfterWaveIntro();
+    return;
+  }
+  requestAnimationFrame(() => startCometaArcanoCinematicThenRelease());
+}
+
 window.addEventListener("blur", () => {
   hideGameTooltip();
 });
@@ -7205,9 +7231,7 @@ function render(): void {
     showCombatHUD();
     if (prevPhase === "shop_initial" || prevPhase === "shop_wave") {
       requestAnimationFrame(() =>
-        showWaveIntroOverlay(model.wave, () =>
-          model.releaseEnemyPhaseAfterWaveIntro(),
-        ),
+        showWaveIntroOverlay(model.wave, releaseEnemyPhaseAfterWaveIntroOrCometa),
       );
     }
   } else if (model.phase === "level_up_pick") {
@@ -7220,6 +7244,10 @@ function render(): void {
   } else if (model.phase === "defeat") {
     canvas.style.opacity = "0.4";
     showDefeat();
+  }
+
+  if (model.phase === "combat" && model.takePendingCometaArcanoWithoutIntro()) {
+    requestAnimationFrame(() => startCometaArcanoCinematicThenRelease());
   }
 
   const mv = model.takePendingMoveAnimation();

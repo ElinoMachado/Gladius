@@ -205,6 +205,25 @@ export class GameRenderer {
 
   private readonly clock = new THREE.Clock();
   private shieldPulsePhase = 0;
+  /** Cometa arcano: cinemático de início de wave (câmera + VFX). */
+  private cometaArcanoCinematic: null | {
+    startMs: number;
+    zoom0: number;
+    pan0X: number;
+    pan0Y: number;
+    zoomWide: number;
+    hubPanX: number;
+    hubPanY: number;
+    heroQ: number;
+    heroR: number;
+    comet: THREE.Group;
+    shockRing: THREE.Mesh | null;
+    impactDone: boolean;
+    onImpact: () => void;
+    onComplete: () => void;
+    camEnabledRestore: boolean;
+  } = null;
+  private readonly cometaHubPanScratch = new THREE.Vector2();
   /** Foco no plano XZ (lookAt). */
   private readonly pan = new THREE.Vector2(0, 0);
   /** Velocidade de pan no plano XZ (unidades mundo / s). */
@@ -378,6 +397,160 @@ export class GameRenderer {
 
   clearCameraFocus(): void {
     this.focusTarget = null;
+  }
+
+  /**
+   * Cometa arcano: afasta a câmera para o centro, cometa no hub, onda branca; `onImpact` ao tocar o chão;
+   * depois foco no herói. Desativa input de câmera até ao fim (restaura o estado anterior).
+   */
+  startCometaArcanoCinematic(opts: {
+    canvas: HTMLCanvasElement;
+    heroQ: number;
+    heroR: number;
+    onImpact: () => void;
+    onComplete: () => void;
+  }): void {
+    if (this.cometaArcanoCinematic) return;
+    const camEnabledRestore = this.cameraInputEnabled;
+    this.setCameraInputEnabled(false);
+    this.focusTarget = null;
+    this.panVelocity.set(0, 0);
+
+    const { x, z } = axialToWorld(0, 0, HEX_SIZE);
+    const g = new THREE.Group();
+    const ball = new THREE.Mesh(
+      new THREE.SphereGeometry(1.15, 20, 14),
+      new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0xc5d5ee,
+        emissiveIntensity: 0.9,
+        metalness: 0.15,
+        roughness: 0.32,
+      }),
+    );
+    g.add(ball);
+    for (let i = 0; i < 6; i++) {
+      const sm = new THREE.Mesh(
+        new THREE.SphereGeometry(0.42 - i * 0.055, 10, 8),
+        new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.5 - i * 0.065,
+        }),
+      );
+      sm.position.set(0, 2.1 + i * 1.05, -0.35 - i * 0.62);
+      g.add(sm);
+    }
+    g.position.set(x, 46, z);
+    this.arenaRoot.add(g);
+
+    const zoom0 = this.zoom;
+    const hub = this.cometaHubPanScratch;
+    this.worldPanInto(0, 0, hub);
+    const zoomWide = Math.max(0.32, zoom0 * 0.4);
+
+    this.cometaArcanoCinematic = {
+      startMs: performance.now(),
+      zoom0,
+      pan0X: this.pan.x,
+      pan0Y: this.pan.y,
+      zoomWide,
+      hubPanX: hub.x,
+      hubPanY: hub.y,
+      heroQ: opts.heroQ,
+      heroR: opts.heroR,
+      comet: g,
+      shockRing: null,
+      impactDone: false,
+      onImpact: opts.onImpact,
+      onComplete: opts.onComplete,
+      camEnabledRestore,
+    };
+    this.applyOrthoFrustum(opts.canvas);
+  }
+
+  private updateCometaArcanoCinematic(): void {
+    const fx = this.cometaArcanoCinematic;
+    if (!fx || !this.domCanvas) return;
+    const canvas = this.domCanvas;
+    const t = (performance.now() - fx.startMs) / 1000;
+    const ease = (a: number, b: number, w: number) => a + (b - a) * w;
+    const sm = (x: number) => THREE.MathUtils.smoothstep(x, 0, 1);
+
+    if (t < 0.55) {
+      const w = sm(t / 0.55);
+      this.zoom = ease(fx.zoom0, fx.zoomWide, w);
+      this.pan.x = ease(fx.pan0X, fx.hubPanX, w);
+      this.pan.y = ease(fx.pan0Y, fx.hubPanY, w);
+      this.applyOrthoFrustum(canvas);
+    } else if (t < 1.22) {
+      this.zoom = fx.zoomWide;
+      this.pan.x = fx.hubPanX;
+      this.pan.y = fx.hubPanY;
+      this.applyOrthoFrustum(canvas);
+      const w = (t - 0.55) / 0.67;
+      const fe = w * w;
+      fx.comet.position.y = ease(46, 1.25, fe);
+    } else {
+      if (!fx.impactDone) {
+        fx.impactDone = true;
+        fx.onImpact();
+        fx.comet.visible = false;
+        const { x: rx, z: rz } = axialToWorld(0, 0, HEX_SIZE);
+        const geo = new THREE.RingGeometry(0.9, 1.55, 56);
+        const mat = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.72,
+          side: THREE.DoubleSide,
+        });
+        const ring = new THREE.Mesh(geo, mat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(rx, 0.14, rz);
+        this.arenaRoot.add(ring);
+        fx.shockRing = ring;
+      }
+      this.zoom = fx.zoomWide;
+      this.pan.x = fx.hubPanX;
+      this.pan.y = fx.hubPanY;
+      this.applyOrthoFrustum(canvas);
+      const tr = t - 1.22;
+      if (fx.shockRing) {
+        const wr = Math.min(1, tr / 0.78);
+        const s = 1 + wr * 42;
+        fx.shockRing.scale.set(s, s, s);
+        (fx.shockRing.material as THREE.MeshBasicMaterial).opacity =
+          0.72 * (1 - wr);
+      }
+      if (t >= 1.95) {
+        const w2 = sm(Math.min(1, (t - 1.95) / 0.58));
+        const heroPan = this.cometaHubPanScratch;
+        this.worldPanInto(fx.heroQ, fx.heroR, heroPan);
+        this.zoom = ease(fx.zoomWide, fx.zoom0, w2);
+        this.pan.x = ease(fx.hubPanX, heroPan.x, w2);
+        this.pan.y = ease(fx.hubPanY, heroPan.y, w2);
+        this.applyOrthoFrustum(canvas);
+      }
+      if (t >= 2.58) {
+        this.arenaRoot.remove(fx.comet);
+        fx.comet.traverse((o) => {
+          if (o instanceof THREE.Mesh) {
+            o.geometry.dispose();
+            (o.material as THREE.Material).dispose();
+          }
+        });
+        if (fx.shockRing) {
+          this.arenaRoot.remove(fx.shockRing);
+          fx.shockRing.geometry.dispose();
+          (fx.shockRing.material as THREE.Material).dispose();
+        }
+        this.snapCameraToAxial(fx.heroQ, fx.heroR);
+        this.setCameraInputEnabled(fx.camEnabledRestore);
+        const done = fx.onComplete;
+        this.cometaArcanoCinematic = null;
+        done();
+      }
+    }
   }
 
   queueUnitMoveAlongCells(
@@ -2967,22 +3140,28 @@ export class GameRenderer {
 
   tick(): void {
     const dt = this.clock.getDelta();
+    const cometOn = this.cometaArcanoCinematic !== null;
     this.updateUnitMoveAnims(dt);
     this.updateFlyingHeroPerFrameMotion(performance.now());
     this.updateFlyingHeroGroundShadows();
     this.updateShieldBubblePulse(dt);
-    this.updateFocusLerp(dt);
-    if (!this.panDragMoved) {
-      this.updateCameraPan(dt);
+    if (!cometOn) {
+      this.updateFocusLerp(dt);
+      if (!this.panDragMoved) {
+        this.updateCameraPan(dt);
+      }
+    } else {
+      this.updateCometaArcanoCinematic();
     }
     this.applyCameraPose();
     /** Durante arrasto com o rato, não aplicar clamp aqui: o `pointermove` já mexe no pan e o clamp puxava de volta → sacudidela. */
     const draggingCameraPan = this.panPointerDown && this.panDragMoved;
-    if (!draggingCameraPan) {
+    if (!draggingCameraPan && !cometOn) {
       this.clampPanIntoColiseum();
       this.applyCameraPose();
     }
     if (
+      !cometOn &&
       this.cameraInputEnabled &&
       this.domCanvas &&
       !this.panDragMoved &&

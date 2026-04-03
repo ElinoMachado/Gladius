@@ -71,6 +71,7 @@ import {
   ESCRAVO,
   FINAL_VICTORY_WAVE,
   getEnemyArchetype,
+  enemyTierFromId,
   killXpScaleForParty,
   pickBossForWave,
   pickEliteForWave,
@@ -393,6 +394,11 @@ export class GameModel {
   inEnemyPhase = false;
   /** Nova wave: aguardar overlay da UI antes de iniciar a fase inimiga. */
   private blockEnemyPhaseForWaveIntro = false;
+  /**
+   * Sem overlay de wave (ex.: sandbox): o main corre o cinemático do Cometa e depois chama
+   * `releaseEnemyPhaseAfterWaveIntro`.
+   */
+  private pendingCometaArcanoWithoutIntro = false;
   /** Mensagem única (ex.: reentrada no bunker) consumida pela UI. */
   pendingBunkerHint: { text: string; q: number; r: number } | null = null;
   /** Mensagem única de movimento bloqueado (2+ inimigos adjacentes), consumida pela UI. */
@@ -822,6 +828,90 @@ export class GameModel {
     if (this.phase !== "combat") return;
     this.blockEnemyPhaseForWaveIntro = false;
     this.runEnemyPhase();
+  }
+
+  /** Soma de acúmulos `guerra_total` (Cometa arcano) em heróis vivos. */
+  partyGuerraTotalStackSum(): number {
+    let s = 0;
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      s += h.artifacts["guerra_total"] ?? 0;
+    }
+    return s;
+  }
+
+  /**
+   * Sandbox: após `startWave` sem overlay, o main consome isto uma vez e corre o cometa antes de
+   * `releaseEnemyPhaseAfterWaveIntro`.
+   */
+  takePendingCometaArcanoWithoutIntro(): boolean {
+    const p = this.pendingCometaArcanoWithoutIntro;
+    this.pendingCometaArcanoWithoutIntro = false;
+    return p;
+  }
+
+  /**
+   * Dano em área + Deslumbro do Cometa arcano (chamar no impacto do cinemático).
+   * O atacante sintético escolhido permite crítico com Lâmina mágica como nas habilidades.
+   */
+  applyCometaArcanoStrike(): void {
+    const sumStacks = Math.min(3, this.partyGuerraTotalStackSum());
+    if (sumStacks <= 0) return;
+    const pct = ([0.2, 0.4, 0.75] as const)[sumStacks - 1]!;
+    const desN = ([1, 2, 3] as const)[sumStacks - 1]!;
+    const src = this.pickCometaArcanoDamageSource();
+    if (!src) return;
+    for (const e of this.enemies()) {
+      if (e.hp <= 0) continue;
+      const tier = enemyTierFromId(e.enemyArchetypeId);
+      const mult = tier === "grunt" ? 1 : 0.5;
+      const raw = Math.max(0, Math.floor(e.maxHp * pct * mult));
+      if (raw <= 0) continue;
+      this.dealDamage(src, e, raw, false, false, false, {
+        suppressLifesteal: true,
+        fromCometaArcano: true,
+        suppressSourceHitSfx: true,
+      });
+      e.deslumbroInstances = (e.deslumbroInstances ?? 0) + desN;
+    }
+    this.onDeaths();
+    this.log("Cometa arcano: a onda de energia atinge os inimigos.");
+    this.emit();
+  }
+
+  private pickCometaArcanoDamageSource(): Unit | null {
+    const party = this.getParty().filter((h) => h.hp > 0);
+    if (party.length === 0) return null;
+    const withCometa = party.filter((h) => (h.artifacts["guerra_total"] ?? 0) > 0);
+    const pool = withCometa.length > 0 ? withCometa : party;
+    const lam = pool.find(
+      (h) => h.heroClass && (h.artifacts["lamina_magica"] ?? 0) > 0,
+    );
+    if (lam) return lam;
+    if (withCometa.length > 0) {
+      let best = withCometa[0]!;
+      let g = -1;
+      for (const h of withCometa) {
+        const gv = h.artifacts["guerra_total"] ?? 0;
+        if (gv > g) {
+          g = gv;
+          best = h;
+        }
+      }
+      return best;
+    }
+    return party[0]!;
+  }
+
+  private tickDeslumbroEndOfEnemyPhase(): void {
+    for (const u of this.units) {
+      if (u.isPlayer || u.hp <= 0) continue;
+      const d = u.deslumbroInstances ?? 0;
+      if (d <= 0) continue;
+      const next = d - 1;
+      if (next <= 0) delete u.deslumbroInstances;
+      else u.deslumbroInstances = next;
+    }
   }
 
   takeCombatVfxHints(): CombatVfxHint[] {
@@ -1817,6 +1907,7 @@ export class GameModel {
 
   /** Fecha fase inimiga; `skipFloatDelay` evita espera pós-floats (ex.: retorno do level-up). */
   private finishEnemyPhaseAfterAllMoves(skipFloatDelay = false): void {
+    this.tickDeslumbroEndOfEnemyPhase();
     this.inEnemyPhase = false;
     this.lastEnemyActedId = null;
     this.enemyTurnQueue = [];
@@ -1903,6 +1994,10 @@ export class GameModel {
     ) {
       d *= 2;
     }
+    const dHit =
+      !u.isPlayer && (u.deslumbroInstances ?? 0) > 0
+        ? roundToCombatDecimals(d * 1.5)
+        : d;
 
     /** Bioma vulcânico: herói no bunker — o dano ambiental vai à estrutura, não ao herói. */
     if (u.isPlayer && this.isBunkerOccupant(u)) {
@@ -1927,13 +2022,13 @@ export class GameModel {
 
     const volcanicWasAlive = u.hp > 0;
     let shieldAbsorb = 0;
-    let dmgHp = d;
+    let dmgHp = dHit;
     if (u.shieldGGBlue > 0) {
-      const absorbed = Math.min(u.shieldGGBlue, d);
+      const absorbed = Math.min(u.shieldGGBlue, dHit);
       shieldAbsorb = absorbed;
       u.shieldGGBlue -= absorbed;
       this.reduceEscudoResidualTagged(u, absorbed);
-      dmgHp = d - absorbed;
+      dmgHp = dHit - absorbed;
     }
     u.hp = Math.max(0, u.hp - dmgHp);
     if (shieldAbsorb > 0) {
@@ -2849,11 +2944,14 @@ export class GameModel {
       suppressSourceHitSfx?: boolean;
       /** Dano secundário (ex.: Seda vampira): nunca dispara roubo de vida. */
       suppressLifesteal?: boolean;
+      /** Cometa arcano: não aplica multiplicadores de habilidade nem veneno/Labareda. */
+      fromCometaArcano?: boolean;
     },
   ): number {
     if (tgt.hp <= 0) return 0;
     let rawUse = raw;
     if (
+      !opts?.fromCometaArcano &&
       !fromBasicAttack &&
       src.isPlayer &&
       src.heroClass &&
@@ -2945,6 +3043,9 @@ export class GameModel {
     let dmg = mit;
     if (useBunkerDefense) {
       dmg = Math.max(1, roundToCombatDecimals(dmg * BUNKER_DAMAGE_TAKEN_MULT));
+    }
+    if (!tgt.isPlayer && (tgt.deslumbroInstances ?? 0) > 0) {
+      dmg = roundToCombatDecimals(dmg * 1.5);
     }
     let shieldAbsorb = 0;
     if (tgt.shieldGGBlue > 0) {
@@ -3090,6 +3191,7 @@ export class GameModel {
       });
     }
     if (
+      !opts?.fromCometaArcano &&
       src.isPlayer &&
       src.heroClass &&
       !tgt.isPlayer &&
@@ -3947,16 +4049,20 @@ export class GameModel {
         pd += this.applyOndaCreptanteInstanceCrit(base, srcId).value;
       }
       if (pd > 0) {
+        const pdFinal =
+          !u.isPlayer && (u.deslumbroInstances ?? 0) > 0
+            ? roundToCombatDecimals(pd * 1.5)
+            : pd;
         this.pushCombatFloat({
           unitId: u.id,
           kind: "damage",
-          amount: pd,
+          amount: pdFinal,
           crit: false,
           targetIsPlayer: u.isPlayer,
           floatHex: { q: u.q, r: u.r },
           poisonDot: true,
         });
-        u.hp = Math.max(0, u.hp - pd);
+        u.hp = Math.max(0, u.hp - pdFinal);
       }
       if (u.poison.instances.length === 0) u.poison = undefined;
     }
@@ -3970,16 +4076,20 @@ export class GameModel {
         fd += this.applyOndaCreptanteInstanceCrit(base, srcId).value;
       }
       if (fd > 0) {
+        const fdFinal =
+          !u.isPlayer && (u.deslumbroInstances ?? 0) > 0
+            ? roundToCombatDecimals(fd * 1.5)
+            : fd;
         this.pushCombatFloat({
           unitId: u.id,
           kind: "damage",
-          amount: fd,
+          amount: fdFinal,
           crit: false,
           targetIsPlayer: u.isPlayer,
           floatHex: { q: u.q, r: u.r },
           burnDot: true,
         });
-        u.hp = Math.max(0, u.hp - fd);
+        u.hp = Math.max(0, u.hp - fdFinal);
       }
       if (u.burn.instances.length === 0) u.burn = undefined;
     }
@@ -4017,15 +4127,19 @@ export class GameModel {
         bd += this.applyOndaCreptanteInstanceCrit(base, srcId).value;
       }
       if (bd > 0) {
+        const bdFinal =
+          !u.isPlayer && (u.deslumbroInstances ?? 0) > 0
+            ? roundToCombatDecimals(bd * 1.5)
+            : bd;
         this.pushCombatFloat({
           unitId: u.id,
           kind: "damage",
-          amount: bd,
+          amount: bdFinal,
           crit: false,
           targetIsPlayer: u.isPlayer,
           floatHex: { q: u.q, r: u.r },
         });
-        u.hp = Math.max(0, u.hp - bd);
+        u.hp = Math.max(0, u.hp - bdFinal);
       }
       if (u.bleed.instances.length === 0) u.bleed = undefined;
     }
@@ -4759,7 +4873,11 @@ export class GameModel {
     if (!this.devSandboxMode || this.phase !== "combat") return;
     const w = Math.max(1, Math.min(FINAL_VICTORY_WAVE, Math.floor(n)));
     this.startWave(w);
-    this.releaseEnemyPhaseAfterWaveIntro();
+    if (this.partyGuerraTotalStackSum() > 0) {
+      this.pendingCometaArcanoWithoutIntro = true;
+    } else {
+      this.releaseEnemyPhaseAfterWaveIntro();
+    }
   }
 
   /** Modo sandbox: alternar voo do herói (afeta pathfinding/combate e visual 3D). */

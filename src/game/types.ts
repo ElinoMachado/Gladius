@@ -199,6 +199,11 @@ export interface Unit extends CoreStats {
   enemyGrantsBossEssence?: boolean;
   /** Ataque em área: após acertar o alvo, heróis adjacentes ao alvo também levam o mesmo dano base. */
   enemyAttackKind?: "single" | "aoe1";
+  /**
+   * Deslumbro (Cometa arcano): enquanto > 0, +50% dano recebido; −1 após cada fase inimiga completa.
+   * Só inimigos.
+   */
+  deslumbroInstances?: number;
   /** Baseline de stats na criação (só heróis). */
   statBaseline?: HeroStatBaseline;
   /** Equipamento forjado (meta) aplicado ao criar a run. */

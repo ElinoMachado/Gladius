@@ -327,10 +327,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   /* ——— Míticos (6) ——— */
   {
     id: "guerra_total",
-    name: "Guerra total",
+    name: "Cometa arcano",
     rarity: "mythic",
-    description: "+12 de dano e +8 de defesa por acúmulo (máx. 2).",
-    pickBonusPerStack: { dano: 12, defesa: 8 },
+    description:
+      "No início de cada wave: um cometa cai no centro da arena, uma onda de energia causa 20%/40%/75% da vida máxima a cada inimigo (metade em elites e chefes) e aplica 1/2/3 instâncias de Deslumbro. Inimigos deslumbrados recebem +50% de dano de todas as fontes (cada instância expira após uma rodada de ações dos inimigos). Com Lâmina mágica, este golpe pode dar crítico.",
   },
   {
     id: "carne_eterna",
