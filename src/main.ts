@@ -123,7 +123,10 @@ import {
   sumNextHotTickHeal,
   sumNextPoisonTickDamage,
 } from "./game/dotInstances";
-import { deslumbroInstancesCount } from "./game/effectInstances";
+import {
+  bravuraInstancesCount,
+  deslumbroInstancesCount,
+} from "./game/effectInstances";
 import { biomeAt } from "./game/unitFactory";
 import { HERO_STAT_TIP } from "./ui/heroStatRichText";
 import {
@@ -3082,6 +3085,8 @@ function combatSquareSkillHtml(opts: {
   combatHotkey?: string;
   /** Ondas restantes de recarga (mostrado no canto superior esquerdo, branco). */
   cdTurns?: number;
+  /** Ataque básico: usos restantes / máximo (canto superior esquerdo, branco). */
+  usesBadge?: { cur: number; max: number };
   /** Se definido, segundo clique/tecla com a mesma skill pendente cancela. */
   selectKind?: "basic" | "skill";
   selectId?: string;
@@ -3102,13 +3107,17 @@ function combatSquareSkillHtml(opts: {
     opts.cdTurns != null && opts.cdTurns > 0
       ? `<span class="lol-skill-cd-badge" aria-hidden="true">${String(opts.cdTurns)}</span>`
       : "";
+  const usesBadge =
+    opts.usesBadge != null
+      ? `<span class="lol-skill-uses-badge" aria-hidden="true">${escapeHtml(`Usos: ${opts.usesBadge.cur}/${opts.usesBadge.max}`)}</span>`
+      : "";
   let selAttr = "";
   if (opts.selectKind) {
     selAttr += ` data-combat-select-kind="${escapeHtml(opts.selectKind)}"`;
     if (opts.selectKind === "skill" && opts.selectId)
       selAttr += ` data-combat-select-id="${escapeHtml(opts.selectId)}"`;
   }
-  return `<button type="button" class="${cls}"${dis}${st}${hkAttr}${selAttr} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${fill}${opts.iconHtml}<span class="lol-skill-key-wrap"><span class="lol-key">${escapeHtml(opts.hotkey)}</span></span><span class="lol-mana-badge" aria-hidden="true">${escapeHtml(opts.manaBadge)}</span></button>`;
+  return `<button type="button" class="${cls}"${dis}${st}${hkAttr}${selAttr} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${usesBadge}${fill}${opts.iconHtml}<span class="lol-skill-key-wrap"><span class="lol-key">${escapeHtml(opts.hotkey)}</span></span><span class="lol-mana-badge" aria-hidden="true">${escapeHtml(opts.manaBadge)}</span></button>`;
 }
 
 /** Ícone de skill na loja (sem tecla de combate); tooltips iguais ao HUD. */
@@ -4278,9 +4287,20 @@ function tooltipBasicAttack(h: Unit, m: GameModel): string {
   const dmgLine = arauto
     ? `${formatTooltipNumber(raw)} de dano bruto por inimigo no alcance (crítico/defesa por alvo)`
     : `${formatTooltipNumber(raw)} de dano bruto (crítico e defesa do alvo aplicam depois)`;
+  const cap = m.maxBasicAttacksForHero(h);
+  const theirTurn =
+    m.phase === "combat" &&
+    !m.inEnemyPhase &&
+    !m.duel &&
+    m.currentHero()?.id === h.id;
+  const cur = theirTurn ? m.basicLeft : cap;
   return tooltipAbilityHtml("Ataque básico", [
     { label: "Custo de mana:", value: tipInt(0), kind: "mana" },
-    { label: "CDR:", value: "—", kind: "cdr" },
+    {
+      label: "Usos:",
+      value: `${tipInt(cur)}/${tipInt(cap)}`,
+      kind: "fx",
+    },
     { label: "Alcance:", value: formatTooltipNumber(alc), kind: "range" },
     { label: "Dano:", value: dmgLine, kind: "dmg" },
     {
@@ -5543,6 +5563,7 @@ function showCombatHUD(): void {
             <div class="lol-bars-row">
               <div class="lol-portrait-wrap">
                 <div class="lol-portrait" id="lol-portrait"></div>
+                <div class="lol-bravura-badge" id="lol-bravura-badge" hidden aria-hidden="true"></div>
                 <div class="lol-level-badge" id="lol-level">1</div>
               </div>
               <div class="lol-bars-stack">
@@ -5630,6 +5651,9 @@ function showCombatHUD(): void {
   uiRoot.appendChild(combatDockStack);
   mountCombatSandboxDevtools(combatInputSignal);
   const lolPortrait = bottom.querySelector("#lol-portrait") as HTMLElement;
+  const lolBravuraBadge = bottom.querySelector(
+    "#lol-bravura-badge",
+  ) as HTMLElement | null;
   const lolWeaponSlot = bottom.querySelector("#lol-weapon-slot") as HTMLElement;
   const lolPassiveSlot = bottom.querySelector("#lol-passive-slot") as HTMLElement;
   const actionRow = bottom.querySelector("#action-row")!;
@@ -6000,10 +6024,15 @@ function showCombatHUD(): void {
       const heroDisp =
         ub && ub.hp > 0 && ub.occupantId === u.id ? "bunker" : u.name;
       const uid = u.id;
+      const brav = bravuraInstancesCount(u);
+      const bravBadge =
+        brav > 0
+          ? `<span class="turn-order-bravura-badge" role="img" aria-label="Bravura, ${brav} instância(s)">${brav > 1 ? `Br ×${brav}` : "Br"}</span>`
+          : "";
       turnEntries.push({
         unitId: uid,
         rowHtml: (seq: number) =>
-          `<div class="turn-order-row"><span class="turn-order-idx">${seq}</span><span class="${cls}" style="${escapeHtml(bgSt)}" data-unit-id="${escapeHtml(uid)}" role="button" tabindex="0" title="${escapeHtml(heroDisp)}" aria-label="${escapeHtml(heroDisp)}"></span></div>`,
+          `<div class="turn-order-row"><span class="turn-order-idx">${seq}</span><span class="turn-order-tile-wrap"><span class="${cls}" style="${escapeHtml(bgSt)}" data-unit-id="${escapeHtml(uid)}" role="button" tabindex="0" title="${escapeHtml(heroDisp)}" aria-label="${escapeHtml(heroDisp)}"></span>${bravBadge}</span></div>`,
       });
     }
     const focusKey = `${model.inEnemyPhase ? "E" : "P"}:${model.inEnemyPhase ? (model.lastEnemyActedId ?? "") : (model.currentHero()?.id ?? "")}`;
@@ -6199,6 +6228,11 @@ function showCombatHUD(): void {
       clearGameTooltipHandlers(lolPassiveSlot);
       clearGameTooltipHandlers(lolPortrait);
       clearGameTooltipHandlers(lolBiomePill);
+      if (lolBravuraBadge) {
+        lolBravuraBadge.hidden = true;
+        lolBravuraBadge.textContent = "";
+        clearGameTooltipHandlers(lolBravuraBadge);
+      }
     };
 
     if (!h || !h.heroClass) {
@@ -6318,7 +6352,29 @@ function showCombatHUD(): void {
             : "Apenas visualização — não é o turno deste herói.",
       ),
     );
+    if (lolBravuraBadge) {
+      const br = bravuraInstancesCount(h);
+      if (br > 0) {
+        lolBravuraBadge.hidden = false;
+        lolBravuraBadge.removeAttribute("aria-hidden");
+        lolBravuraBadge.setAttribute("aria-label", `Bravura, ${br} instância(s)`);
+        lolBravuraBadge.textContent = br > 1 ? `Br ×${br}` : "Br";
+        bindGameTooltip(lolBravuraBadge, () =>
+          tooltipPassiveHtml(
+            "Bravura",
+            "Instâncias de Bravura concedem ataques básicos extra neste turno (ex.: Alento da morte). Expiram no fim do turno deste herói.",
+          ),
+        );
+      } else {
+        lolBravuraBadge.hidden = true;
+        lolBravuraBadge.setAttribute("aria-hidden", "true");
+        lolBravuraBadge.textContent = "";
+        clearGameTooltipHandlers(lolBravuraBadge);
+      }
+    }
 
+    const capBasic = model.maxBasicAttacksForHero(h);
+    const curBasic = isViewingActive ? model.basicLeft : capBasic;
     const bb = el(
       combatSquareSkillHtml({
         disabled: !isViewingActive || model.basicLeft <= 0,
@@ -6326,8 +6382,9 @@ function showCombatHUD(): void {
         hotkey: "Q",
         combatHotkey: "q",
         manaBadge: manaCostBadgeText(0),
-        ariaLabel: "Ataque básico",
+        ariaLabel: `Ataque básico — Usos ${curBasic} de ${capBasic}`,
         selectKind: "basic",
+        usesBadge: { cur: curBasic, max: capBasic },
       }),
     );
     bindGameTooltip(bb, () => tooltipBasicAttack(h, model));
