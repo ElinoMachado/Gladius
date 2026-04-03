@@ -4173,6 +4173,29 @@ body.enemy-inspect--dragging-body {
   align-items: center;
 }
 
+.artifact-pick-btn__label {
+  display: inline-block;
+}
+
+.artifact-pick-btn__crystal {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.55rem;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: #a8d4f8;
+}
+
+.artifact-pick-btn__crystal-ico {
+  width: 1.05em;
+  height: 1.05em;
+}
+
+.artifact-pick-btn__crystal-num {
+  font-weight: 800;
+}
+
 .artifact-pick-ban-btn--active {
   border-color: rgba(220, 80, 80, 0.85) !important;
   color: #ffb4b4;

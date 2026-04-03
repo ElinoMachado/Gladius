@@ -7500,30 +7500,54 @@ function showLevelPick(): void {
       p.rerollsPaidUsed < ARTIFACT_PICK_PAID_CHARGES_MAX &&
       model.crystalsRun >= ARTIFACT_PICK_PAID_CRYSTAL_COST
     );
+  const rerollCostNow =
+    rerollFree || p.rerollsPaidUsed >= ARTIFACT_PICK_PAID_CHARGES_MAX
+      ? 0
+      : ARTIFACT_PICK_PAID_CRYSTAL_COST;
   let rerollLabel = "";
   if (rerollFree) {
-    rerollLabel =
-      p.rerollsFreeLeft === 1
-        ? "Rerol (1 grátis)"
-        : `Rerol (${p.rerollsFreeLeft} grátis)`;
+    rerollLabel = "Rerol";
   } else if (
     p.rerollsPaidUsed < ARTIFACT_PICK_PAID_CHARGES_MAX &&
     model.crystalsRun >= ARTIFACT_PICK_PAID_CRYSTAL_COST
   ) {
-    rerollLabel = `Rerol (${ARTIFACT_PICK_PAID_CRYSTAL_COST} cristais)`;
+    rerollLabel = "Rerol";
   } else if (p.rerollsPaidUsed >= ARTIFACT_PICK_PAID_CHARGES_MAX) {
-    rerollLabel = "Rerol esgotado";
+    rerollLabel = "Rerol";
   } else {
-    rerollLabel = `Rerol (${ARTIFACT_PICK_PAID_CRYSTAL_COST} cristais — faltam)`;
+    rerollLabel = "Rerol";
   }
+  const banCostNow =
+    p.bansFreeLeft > 0 ||
+    p.bansPaidUsed >= ARTIFACT_PICK_PAID_CHARGES_MAX ||
+    !(
+      p.bansPaidUsed < ARTIFACT_PICK_PAID_CHARGES_MAX &&
+      model.crystalsRun >= ARTIFACT_PICK_PAID_CRYSTAL_COST
+    )
+      ? 0
+      : ARTIFACT_PICK_PAID_CRYSTAL_COST;
   const banBtnActive = p.banMode ? " artifact-pick-ban-btn--active" : "";
   const s = el(`<div class="modal modal--crystal"><div class="modal-inner modal-inner--artifact-pick">
     <h2 class="crystal-modal-title">Escolha um artefato — ${heroLine}</h2>
     <p class="artifact-pick-hint">Passe o rato sobre a carta para ver o próximo nível. Ative <strong>Banir</strong>, paira num artefato (fica vermelho) e clica para retirá-lo da run.</p>
     <div id="opts" class="artifact-pick-grid"></div>
     <div class="artifact-pick-actions artifact-pick-actions--split">
-      <button type="button" class="btn artifact-pick-ban-btn${banBtnActive}" id="btn-artifact-ban-mode" aria-pressed="${p.banMode ? "true" : "false"}">${p.banMode ? "Banir (ativo)" : "Banir"}</button>
-      <button type="button" class="btn" id="btn-artifact-reroll" ${rerollDisabled ? "disabled" : ""}>${rerollLabel}</button>
+      <button type="button" class="btn artifact-pick-ban-btn${banBtnActive}" id="btn-artifact-ban-mode" aria-pressed="${p.banMode ? "true" : "false"}">
+        <span class="artifact-pick-btn__label">${p.banMode ? "Banir (ativo)" : "Banir"}</span>
+        <span class="artifact-pick-btn__crystal" aria-hidden="true">
+          <span class="artifact-pick-btn__crystal-num">${banCostNow}</span>${metaCrystalIconSvgHtml(
+            "artifact-pick-btn__crystal-ico",
+          )}
+        </span>
+      </button>
+      <button type="button" class="btn" id="btn-artifact-reroll" ${rerollDisabled ? "disabled" : ""}>
+        <span class="artifact-pick-btn__label">${rerollLabel}</span>
+        <span class="artifact-pick-btn__crystal" aria-hidden="true">
+          <span class="artifact-pick-btn__crystal-num">${rerollCostNow}</span>${metaCrystalIconSvgHtml(
+            "artifact-pick-btn__crystal-ico",
+          )}
+        </span>
+      </button>
     </div>
   </div></div>`);
   uiRoot.appendChild(s);
