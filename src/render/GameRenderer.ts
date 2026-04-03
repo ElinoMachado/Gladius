@@ -279,6 +279,8 @@ export class GameRenderer {
   private readonly rayGround = new THREE.Raycaster();
   private readonly rayStatus = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  /** Fallback de picking: malha do GLB pode não cobrir o centro (hexes por cima). */
+  private readonly coliseumPickBoxScratch = new THREE.Box3();
   private readonly hitGround = new THREE.Vector3();
   private readonly panDragHitScratch = new THREE.Vector3();
   private readonly panDragBase = new THREE.Vector3();
@@ -3854,9 +3856,24 @@ export class GameRenderer {
     ndcY: number,
   ): boolean {
     if (!this.arenaColiseumMount) return false;
+    if (cam === this.camera) this.applyCameraPose();
+    else cam.updateMatrixWorld(true);
+    this.arenaColiseumMount.updateMatrixWorld(true);
+
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
-    return ray.intersectObject(this.arenaColiseumMount, true).length > 0;
+    if (ray.intersectObject(this.arenaColiseumMount, true).length > 0) return true;
+
+    this.coliseumPickBoxScratch.setFromObject(this.arenaColiseumMount);
+    if (!this.coliseumPickBoxScratch.isEmpty()) {
+      this.coliseumPickBoxScratch.expandByScalar(2.5);
+      if (ray.ray.intersectsBox(this.coliseumPickBoxScratch)) return true;
+    }
+
+    const groundHit = this.editorScratchVec3;
+    if (ray.ray.intersectPlane(this.groundPlane, groundHit) === null) return false;
+    const r = COLISEUM_XZ_MAX * 1.08;
+    return groundHit.x * groundHit.x + groundHit.z * groundHit.z <= r * r;
   }
 
   private intersectGroundWithCamera(
