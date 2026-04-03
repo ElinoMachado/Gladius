@@ -146,16 +146,25 @@ export interface Unit extends CoreStats {
   /** Saiu do bunker neste ciclo: não pode reentrar até ao próprio turno. */
   bunkerReentryBlocked?: boolean;
   /**
-   * DoTs como filas de instâncias: cada tick consome até `dotConsumePerTick` entradas
-   * (FIFO); cada número é dano/cura desse “tick de instância”.
+   * **Instâncias de dano** (DoT): veneno, queimadura, sangramento — filas de ticks de dano;
+   * Amplicador de onda / Dobra temporal alteram quantas entram ou saem por turno.
    */
   poison?: { instances: number[]; sourceId?: string };
+  /** **Instâncias de cura** (HoT): mesma ideia de fila; consumo por turno separado dos DoTs. */
   hot?: { instances: number[]; sourceId?: string };
   bleed?: { instances: number[]; sourceId?: string };
   /** Labareda: dano por instância (tick); bloqueia regeneração natural enquanto houver instâncias. */
   burn?: { instances: number[]; sourceId?: string };
   /** Quantas instâncias de cada DoT são consumidas por turno (padrão 1). */
   dotConsumePerTick?: number;
+  /**
+   * **Instâncias de efeito** (não são dano nem cura por tick): não usam Amplicador de onda
+   * nem Dobra temporal; cada efeito define consumo próprio.
+   */
+  effectInstances?: {
+    /** Deslumbro (Cometa arcano): +50% dano recebido; −1 após cada fase inimiga completa. */
+    deslumbro?: number;
+  };
   /** Nível da arma principal (loja de cristais); escala skills e ultimate da arma. */
   weaponLevel: WeaponLevel;
   /** Progresso 0–1 para ultimate da arma (cura+escudo / golpes / dano sofrido). */
@@ -199,11 +208,6 @@ export interface Unit extends CoreStats {
   enemyGrantsBossEssence?: boolean;
   /** Ataque em área: após acertar o alvo, heróis adjacentes ao alvo também levam o mesmo dano base. */
   enemyAttackKind?: "single" | "aoe1";
-  /**
-   * Deslumbro (Cometa arcano): enquanto > 0, +50% dano recebido; −1 após cada fase inimiga completa.
-   * Só inimigos.
-   */
-  deslumbroInstances?: number;
   /** Baseline de stats na criação (só heróis). */
   statBaseline?: HeroStatBaseline;
   /** Equipamento forjado (meta) aplicado ao criar a run. */

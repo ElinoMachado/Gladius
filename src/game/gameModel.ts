@@ -98,6 +98,10 @@ import {
 import { GOLD_SHOP } from "./data/shops";
 import { computePartyBonus } from "./colorSynergy";
 import {
+  addDeslumbroInstances,
+  deslumbroInstancesCount,
+} from "./effectInstances";
+import {
   clearCombatOutcomeQueue,
   combatOutcomePriority,
   enqueueCombatOutcome,
@@ -879,7 +883,7 @@ export class GameModel {
         fromCometaArcano: true,
         suppressSourceHitSfx: true,
       });
-      e.deslumbroInstances = (e.deslumbroInstances ?? 0) + desN;
+      addDeslumbroInstances(e, desN);
     }
     this.onDeaths();
     this.log("Cometa arcano: a onda de energia atinge os inimigos.");
@@ -913,11 +917,8 @@ export class GameModel {
   private tickDeslumbroEndOfEnemyPhase(): void {
     for (const u of this.units) {
       if (u.isPlayer || u.hp <= 0) continue;
-      const d = u.deslumbroInstances ?? 0;
-      if (d <= 0) continue;
-      const next = d - 1;
-      if (next <= 0) delete u.deslumbroInstances;
-      else u.deslumbroInstances = next;
+      if (deslumbroInstancesCount(u) <= 0) continue;
+      addDeslumbroInstances(u, -1);
     }
   }
 
@@ -2002,7 +2003,7 @@ export class GameModel {
       d *= 2;
     }
     const dHit =
-      !u.isPlayer && (u.deslumbroInstances ?? 0) > 0
+      !u.isPlayer && deslumbroInstancesCount(u) > 0
         ? roundToCombatDecimals(d * 1.5)
         : d;
 
@@ -3051,7 +3052,7 @@ export class GameModel {
     if (useBunkerDefense) {
       dmg = Math.max(1, roundToCombatDecimals(dmg * BUNKER_DAMAGE_TAKEN_MULT));
     }
-    if (!tgt.isPlayer && (tgt.deslumbroInstances ?? 0) > 0) {
+    if (!tgt.isPlayer && deslumbroInstancesCount(tgt) > 0) {
       dmg = roundToCombatDecimals(dmg * 1.5);
     }
     let shieldAbsorb = 0;
@@ -3198,7 +3199,6 @@ export class GameModel {
       });
     }
     if (
-      !opts?.fromCometaArcano &&
       src.isPlayer &&
       src.heroClass &&
       !tgt.isPlayer &&
@@ -3207,7 +3207,9 @@ export class GameModel {
       (dmg > 0 || shieldAbsorb > 0)
     ) {
       this.applyPoison(src, tgt);
-      this.applyLabareda(src, tgt);
+      if (!opts?.fromCometaArcano) {
+        this.applyLabareda(src, tgt);
+      }
     }
     if (tgt === src) {
       this.onDeaths();
@@ -4057,7 +4059,7 @@ export class GameModel {
       }
       if (pd > 0) {
         const pdFinal =
-          !u.isPlayer && (u.deslumbroInstances ?? 0) > 0
+          !u.isPlayer && deslumbroInstancesCount(u) > 0
             ? roundToCombatDecimals(pd * 1.5)
             : pd;
         this.pushCombatFloat({
@@ -4084,7 +4086,7 @@ export class GameModel {
       }
       if (fd > 0) {
         const fdFinal =
-          !u.isPlayer && (u.deslumbroInstances ?? 0) > 0
+          !u.isPlayer && deslumbroInstancesCount(u) > 0
             ? roundToCombatDecimals(fd * 1.5)
             : fd;
         this.pushCombatFloat({
@@ -4135,7 +4137,7 @@ export class GameModel {
       }
       if (bd > 0) {
         const bdFinal =
-          !u.isPlayer && (u.deslumbroInstances ?? 0) > 0
+          !u.isPlayer && deslumbroInstancesCount(u) > 0
             ? roundToCombatDecimals(bd * 1.5)
             : bd;
         this.pushCombatFloat({

@@ -229,7 +229,7 @@ export function describeArtifactAtStack(
       const flat = [50, 120, 210][n - 1] ?? 210;
       const pct = [20, 40, 75][n - 1] ?? 75;
       const ins = [1, 2, 3][n - 1] ?? 3;
-      return `No início da wave: ${flat} + ${pct}% PV máx. por inimigo (metade em elite/chefe), ${ins} instância(s) de Deslumbro (+50% dano recebido).`;
+      return `No início da wave: ${flat} + ${pct}% PV máx. por inimigo (metade em elite/chefe), ${ins} instância(s) de efeito Deslumbro (+50% dano recebido; não é DoT).`;
     }
     case "furacao_ouro":
       return `+${5 * n} ouro na bolsa por eliminação.`;

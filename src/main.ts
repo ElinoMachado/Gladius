@@ -122,6 +122,7 @@ import {
   sumNextHotTickHeal,
   sumNextPoisonTickDamage,
 } from "./game/dotInstances";
+import { deslumbroInstancesCount } from "./game/effectInstances";
 import { biomeAt } from "./game/unitFactory";
 import { HERO_STAT_TIP } from "./ui/heroStatRichText";
 import {
@@ -892,9 +893,9 @@ function enemyStatusTooltipBleedHtml(u: Unit): string {
 }
 
 function enemyStatusTooltipDeslumbroHtml(u: Unit): string {
-  const n = u.deslumbroInstances ?? 0;
+  const n = deslumbroInstancesCount(u);
   if (n <= 0) return "";
-  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Deslumbro</div><p class="game-ui-tooltip-passive">${n} instância(s). +50% de dano recebido de todas as fontes. −1 após cada fase inimiga.</p></div>`;
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Deslumbro</div><p class="game-ui-tooltip-passive">${n} instância(s) de efeito (não é veneno/DoT). +50% de dano recebido. −1 após cada fase inimiga. Não é afetado por Amplicador de onda nem Dobra temporal.</p></div>`;
 }
 
 function fillEnemyInspectStatusRow(host: HTMLElement, u: Unit): void {
@@ -914,9 +915,9 @@ function fillEnemyInspectStatusRow(host: HTMLElement, u: Unit): void {
       `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--bleed" role="img" aria-label="Sangramento">†&nbsp;${bleedInstanceCount(u)}</span>`,
     );
   }
-  if ((u.deslumbroInstances ?? 0) > 0) {
+  if (deslumbroInstancesCount(u) > 0) {
     bits.push(
-      `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--deslumbro" role="img" aria-label="Deslumbro">✦&nbsp;${u.deslumbroInstances}</span>`,
+      `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--deslumbro" role="img" aria-label="Deslumbro">D&nbsp;${deslumbroInstancesCount(u)}</span>`,
     );
   }
   host.innerHTML = bits.length

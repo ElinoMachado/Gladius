@@ -1,5 +1,10 @@
 import type { Unit } from "./types";
 
+/**
+ * Helpers para **instâncias de dano** (veneno, queimadura, sangramento) e **instâncias de cura**
+ * (HoT). Efeitos como Deslumbro vivem em `effectInstances` — ver `effectInstances.ts`.
+ */
+
 /** Quantas instâncias de DoT são consumidas por tick (mínimo 1). */
 export function dotTickConsumeCount(u: Unit): number {
   return Math.max(1, Math.floor(u.dotConsumePerTick ?? 1));

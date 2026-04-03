@@ -15,6 +15,7 @@ import {
   sumNextHotTickHeal,
   sumNextPoisonTickDamage,
 } from "../game/dotInstances";
+import { deslumbroInstancesCount } from "../game/effectInstances";
 
 export type HitFlashTone = "normal" | "blood" | "heal_swirl" | "electric_chain";
 import { BIOME_LABELS } from "../game/data/biomes";
@@ -1174,8 +1175,8 @@ export class GameRenderer {
     const wantHot = !!(u.hot && u.hot.instances.length > 0);
     const wantPoison = !!(u.poison && u.poison.instances.length > 0);
     const wantBleed = !!(u.bleed && u.bleed.instances.length > 0);
-    const wantDeslumbro = !u.isPlayer && (u.deslumbroInstances ?? 0) > 0;
-    const desN = u.deslumbroInstances ?? 0;
+    const wantDeslumbro = !u.isPlayer && deslumbroInstancesCount(u) > 0;
+    const desN = deslumbroInstancesCount(u);
     const sig = `${wantHot ? 1 : 0}-${hotInstanceCount(u)}-${sumNextHotTickHeal(u)}-${wantPoison ? 1 : 0}-${poisonInstanceCount(u)}-${sumNextPoisonTickDamage(u)}-${wantBleed ? 1 : 0}-${bleedInstanceCount(u)}-${sumNextBleedTickDamage(u)}-${dotTickConsumeCount(u)}-${wantDeslumbro ? 1 : 0}-${desN}`;
     if (barRoot.userData.statusSig === sig) return;
     barRoot.userData.statusSig = sig;
@@ -1265,10 +1266,10 @@ export class GameRenderer {
       ix++;
     }
     if (wantDeslumbro) {
-      const dn = u.deslumbroInstances ?? 0;
-      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Deslumbro</div><p class="game-ui-tooltip-passive">${dn} instância(s). +50% de dano recebido de todas as fontes. −1 instância após cada fase inimiga.</p></div>`;
+      const dn = deslumbroInstancesCount(u);
+      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Deslumbro</div><p class="game-ui-tooltip-passive">${dn} instância(s) de efeito. +50% de dano recebido de todas as fontes. −1 após cada fase inimiga (não é DoT; ignora Amplicador/Dobra).</p></div>`;
       const m = this.makeStatusBadgeMesh(
-        "✦",
+        "D",
         dn,
         "#102030",
         "#e3f2ff",
