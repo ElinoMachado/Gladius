@@ -1204,17 +1204,17 @@ export class GameRenderer {
       g.add(ring);
       g.userData.poisonGlowRing = ring;
     }
-    if (wantBurn) {
-      const ring = this.makeStatusGlowRing(0xff6e40, 0.56, 0.7);
-      ring.position.y = 0.023;
-      g.add(ring);
-      g.userData.burnGlowRing = ring;
-    }
     if (wantBleed) {
       const ring = this.makeStatusGlowRing(0xc62828, 0.52, 0.66);
-      ring.position.y = 0.024;
+      ring.position.y = 0.023;
       g.add(ring);
       g.userData.bleedGlowRing = ring;
+    }
+    if (wantBurn) {
+      const ring = this.makeStatusGlowRing(0xff6e40, 0.56, 0.7);
+      ring.position.y = 0.024;
+      g.add(ring);
+      g.userData.burnGlowRing = ring;
     }
     if (wantDeslumbro) {
       const ring = this.makeStatusGlowRing(0x66b3ff, 0.62, 0.78);
@@ -1265,22 +1265,6 @@ export class GameRenderer {
       stack.add(m);
       ix++;
     }
-    if (wantBurn && u.burn) {
-      const bi = burnInstanceCount(u);
-      const bn = sumNextBurnTickDamage(u);
-      const br = dotTickConsumeCount(u);
-      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Labareda</div><p class="game-ui-tooltip-passive">${bi} instância(s) na fila. Próximo tick: ${bn} dano (consome ${br}).</p></div>`;
-      const m = this.makeStatusBadgeMesh(
-        "♨",
-        bi,
-        "#3a1510",
-        "#ffb088",
-        tip,
-      );
-      m.position.set(-0.2 + ix * 0.42, 0, 0.02);
-      stack.add(m);
-      ix++;
-    }
     if (wantBleed && u.bleed) {
       const bi = bleedInstanceCount(u);
       const bn = sumNextBleedTickDamage(u);
@@ -1291,6 +1275,22 @@ export class GameRenderer {
         bi,
         "#301010",
         "#ff8a80",
+        tip,
+      );
+      m.position.set(-0.2 + ix * 0.42, 0, 0.02);
+      stack.add(m);
+      ix++;
+    }
+    if (wantBurn && u.burn) {
+      const bi = burnInstanceCount(u);
+      const bn = sumNextBurnTickDamage(u);
+      const br = dotTickConsumeCount(u);
+      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Labareda</div><p class="game-ui-tooltip-passive">${bi} instância(s) na fila. Próximo tick: ${bn} dano (consome ${br}).</p></div>`;
+      const m = this.makeStatusBadgeMesh(
+        "♨",
+        bi,
+        "#3a1510",
+        "#ffb088",
         tip,
       );
       m.position.set(-0.2 + ix * 0.42, 0, 0.02);

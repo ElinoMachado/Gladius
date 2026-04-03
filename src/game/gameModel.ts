@@ -2967,6 +2967,11 @@ export class GameModel {
       suppressLifesteal?: boolean;
       /** Cometa arcano: não aplica multiplicadores de habilidade nem veneno/Labareda. */
       fromCometaArcano?: boolean;
+      /**
+       * Preenchido com o crítico efetivo no dano (habilidades com Lâmina mágica rerolam;
+       * sem Lâmina em habilidade, o crítico do parâmetro é anulado — ver corpo de `dealDamage`).
+       */
+      skillCritOut?: { value: boolean };
     },
   ): number {
     if (tgt.hp <= 0) return 0;
@@ -3053,6 +3058,7 @@ export class GameModel {
         critMultExtra = 0.25 * lm;
       }
     }
+    if (opts?.skillCritOut) opts.skillCritOut.value = useCrit;
     mit = applyCritMultiplier(
       mit,
       src.danoCritico +
@@ -3943,10 +3949,14 @@ export class GameModel {
         const tg = this.units.find((u) => u.id === enemyId);
         if (!att || !tg || tg.hp <= 0 || this.phase !== "combat") return;
         const crit = rollCrit(att.acertoCritico + roninCritBonus(att));
+        const skillCritOut = { value: false };
         const dealt = this.dealDamage(att, tg, raw, crit, true, false, {
           suppressSourceHitSfx: true,
+          skillCritOut,
         });
-        if (crit && dealt > 0 && tg.hp > 0) {
+        const lm = (att.artifacts["lamina_magica"] ?? 0) > 0;
+        const bleedFromUltCrit = lm ? skillCritOut.value : crit;
+        if (bleedFromUltCrit && dealt > 0 && tg.hp > 0) {
           const T = furacaoBleedTurns(att.weaponLevel);
           const pct = furacaoBleedPct(att.weaponLevel);
           const total = Math.max(1, roundToCombatDecimals(dealt * pct));
