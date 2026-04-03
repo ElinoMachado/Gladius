@@ -5338,18 +5338,24 @@ function spawnCombatFloat(
     | "targetIsPlayer"
     | "bunkerDamage"
     | "poisonDot"
+    | "burnDot"
   >,
 ): void {
   const el = document.createElement("div");
   el.className = "combat-float";
   const poisonDot = ev.kind === "damage" && !!ev.poisonDot;
+  const burnDot = ev.kind === "damage" && !!ev.burnDot;
   const amtStr = formatCombatFloatAmount(amount);
   const text =
-    ev.kind === "damage" && ev.crit && !poisonDot ? `${amtStr}!` : amtStr;
+    ev.kind === "damage" && ev.crit && !poisonDot && !burnDot
+      ? `${amtStr}!`
+      : amtStr;
   el.textContent = text;
   if (ev.kind === "damage") {
     if (poisonDot) {
       el.classList.add("combat-float--dmg-poison");
+    } else if (burnDot) {
+      el.classList.add("combat-float--dmg-burn");
     } else if (ev.bunkerDamage) {
       el.classList.add("combat-float--dmg-bunker");
     } else {
@@ -5359,7 +5365,7 @@ function spawnCombatFloat(
           : "combat-float--dmg-enemy",
       );
     }
-    if (ev.crit && !poisonDot) el.classList.add("combat-float--crit");
+    if (ev.crit && !poisonDot && !burnDot) el.classList.add("combat-float--crit");
   } else if (ev.kind === "shield_absorb") {
     el.classList.add("combat-float--shield-absorb");
   } else if (ev.kind === "shield_gain") {
@@ -7328,6 +7334,8 @@ function loop(): void {
         view.triggerBunkerHitFlashAt(p.bunkerHex.q, p.bunkerHex.r);
       } else if (p.kind === "damage" && p.poisonDot) {
         /* DoT de veneno: só float roxo, sem flash/som de golpe */
+      } else if (p.kind === "damage" && p.burnDot) {
+        /* DoT de queimadura: só float laranja */
       } else if (p.kind === "damage" && p.duelCut) {
         view.triggerUnitHitFlash(p.unitId, p.targetIsPlayer ?? false, "blood");
         playKnifeCut();

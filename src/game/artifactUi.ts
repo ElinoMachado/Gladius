@@ -22,7 +22,8 @@ const SPECIAL_MAX: Record<string, number> = {
   crystal_extra: 4,
   passo_gigante: 3,
   martelo_juiz: 3,
-  manto_espectral: 3,
+  muralha_verdade: 3,
+  manto_espectral: 5,
   guerra_total: 2,
   ira_dimensao: 2,
   carne_eterna: 3,
@@ -140,8 +141,12 @@ export function describeArtifactAtStack(
       return describeTonicoForRun(n, u);
     case "motor_morte":
       return `Ao matar: salto ao vizinho do inimigo mais próximo no bioma do teu hex (hub = todos), básico imediato +${10 * n}% dano; se matar, encadeia. Sem alcance após salto: só o próximo básico leva o bônus.`;
-    case "maos_venenosas":
-      return `Ao causar dano: +2 instâncias de veneno. Causa ${3 * n} de dano. Este efeito é acumulável e ignora a defesa.`;
+    case "maos_venenosas": {
+      const mv = Math.min(3, u?.artifacts["muralha_verdade"] ?? 0);
+      const amp = mv <= 0 ? 0 : [1, 2, 3][mv - 1]!;
+      const inst = 2 + amp;
+      return `Ao causar dano: +${inst} instâncias de veneno. Causa ${3 * n} de dano por instância. Ignora a defesa.${amp > 0 ? ` (Amplicador de onda +${amp}.)` : ""}`;
+    }
     case "ronin":
       return `+${20 * n}% acerto crítico; acima de 100% o excesso não aumenta crítico; cada 5% de excesso → +1 de dano.`;
     case "imortal":
@@ -174,6 +179,16 @@ export function describeArtifactAtStack(
       const pct = 30 * n;
       return `+${pct}% da defesa convertidos em dano bruto (${Math.floor((u?.defesa ?? 0) * (pct / 100))} com defesa atual).`;
     }
+    case "escama_leve": {
+      const d = [2, 4, 6, 8, 10, 12][n - 1] ?? 12;
+      const ins = [1, 1, 2, 2, 3, 3][n - 1] ?? 3;
+      const ar = u ? Math.max(0, u.alcance - (u.statBaseline?.alcance ?? u.alcance)) : 0;
+      return `Ao causar dano: ${ins} instância(s) de queimadura (${d} cada) por inimigo entre 1 e ${1 + ar} hexes do alvo (alcance extra na run = ${ar}). Regen natural bloqueada enquanto queimam.`;
+    }
+    case "muralha_verdade":
+      return `+${[1, 2, 3][n - 1] ?? 3} instância(s) extra(s) nos teus efeitos de dano por instância (veneno, Labareda, sangramento da Furacão, etc.).`;
+    case "manto_espectral":
+      return `+${n} instância(s) de dano (veneno/queimadura/sangramento) consumida(s) por turno em todas as unidades. HoT não muda.`;
     case "pulso_verde":
       return `Ao matar: cura +${5 * n} em você e em cada aliado.`;
     case "seda_vampira":
@@ -257,6 +272,10 @@ export function artifactCodexAllTiersHtml(id: string, u?: Unit): string {
 /** SVG decorativo da “figura” da carta (símbolo central). */
 export function artifactCardFigureSvg(artifactId: string): string {
   const sym: Record<string, string> = {
+    garra_ferro: `<path fill="#5d4037" stroke="#3e2723" stroke-width="1" d="M14 38c2-8 4-14 8-18 2 6 1 12-2 18M20 36c1-7 3-12 6-16 3 5 2 11 0 16M26 34c0-6 2-10 4-13 3 4 3 9 2 13M32 32c-1-5 0-9 2-12 2 3 4 7 3 12"/><path fill="#8d6e63" d="M18 38 L22 22 L26 20 L30 24 L28 38 Z"/><path fill="#ff7043" stroke="#bf360c" stroke-width="0.8" d="M20 24 L24 18 L28 24 L26 28 L22 28 Z"/>`,
+    escama_leve: `<circle cx="24" cy="26" r="10" fill="#e65100" opacity="0.35"/><path fill="#ff6f00" d="M24 10 Q34 18 32 28 Q30 38 24 42 Q18 38 16 28 Q14 18 24 10"/><path fill="#ffca28" d="M24 16 Q28 20 27 26 Q26 32 24 34 Q22 32 21 26 Q20 20 24 16"/><path fill="#fff59d" d="M22 22h4v6h-4z" opacity="0.7"/>`,
+    muralha_verdade: `<path fill="none" stroke="#0277bd" stroke-width="2.5" d="M8 28 Q24 12 40 28"/><path fill="none" stroke="#4fc3f7" stroke-width="2" d="M10 32 Q24 20 38 32"/><path fill="none" stroke="#81d4fa" stroke-width="1.6" d="M12 36 Q24 26 36 36"/><circle cx="24" cy="26" r="4" fill="#01579b"/><circle cx="16" cy="30" r="2" fill="#29b6f6"/><circle cx="32" cy="30" r="2" fill="#29b6f6"/>`,
+    manto_espectral: `<circle cx="24" cy="24" r="14" fill="none" stroke="#7e57c2" stroke-width="1.5" stroke-dasharray="4 3"/><path fill="none" stroke="#b39ddb" stroke-width="2" d="M12 24h24M24 12v24"/><circle cx="24" cy="24" r="6" fill="#5e35b1" opacity="0.5"/><path fill="none" stroke="#d1c4e9" stroke-width="1.2" d="M18 18 Q24 22 30 18 M18 30 Q24 26 30 30"/>`,
     trevo: `<path fill="#2e7d32" d="M24 8c-2 4-6 6-8 10 4 0 8-2 10-6-4 2-6-1-2-4zm0 0c2 4 6 6 8 10-4 0-8-2-10-6 4 2 6-1 2-4zm-8 12c4 3 4 9 0 12 3-4 9-4 12 0-3-4-1-8-5-8-3 4-7 4-7zm16 0c-4 3-4 9 0 12-3-4-9-4-12 0 3-4 1-8 5-8 3 4 7 4 7z"/><circle cx="24" cy="28" r="3" fill="#66bb6a"/>`,
     tonico: `<rect x="14" y="12" width="20" height="26" rx="3" fill="#5c6bc0" stroke="#3949ab"/><path fill="#9fa8da" d="M18 18h12v8H18z"/><path fill="#fff" d="M20 22h2v2h-2zm4 0h2v2h-2zm4 0h2v2h-2z"/>`,
     motor_morte: `<path fill="#ffee58" stroke="#e65100" stroke-width="1.4" stroke-linejoin="round" d="M30 3 L14 25h11l-7 21 22-26h-10l10-17z"/>`,

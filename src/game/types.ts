@@ -152,6 +152,8 @@ export interface Unit extends CoreStats {
   poison?: { instances: number[] };
   hot?: { instances: number[] };
   bleed?: { instances: number[] };
+  /** Labareda: dano por instância (tick); bloqueia regeneração natural enquanto houver instâncias. */
+  burn?: { instances: number[] };
   /** Quantas instâncias de cada DoT são consumidas por turno (padrão 1). */
   dotConsumePerTick?: number;
   /** Nível da arma principal (loja de cristais); escala skills e ultimate da arma. */

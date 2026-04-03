@@ -199,6 +199,13 @@ const ENEMY_APPROACH_PATHFIND_MAX = 100;
 /** Artefato Escudo residual: teto do escudo vindo de roubo com vida cheia (acúmulos 1–6). */
 const ESCUDO_RESIDUAL_CAP_BY_STACK = [100, 250, 400, 600, 900, 1500] as const;
 
+/** Labareda (`escama_leve`): dano por instância no tick (acúmulos 1–6). */
+const LABAREDA_DMG_BY_STACK = [2, 4, 6, 8, 10, 12] as const;
+/** Instâncias aplicadas por inimigo no alcance, por acúmulo. */
+const LABAREDA_INSTANCES_BY_STACK = [1, 1, 2, 2, 3, 3] as const;
+/** Amplicador de onda (`muralha_verdade`): +instâncias em DoTs de dano (1–3 acúmulos). */
+const AMPLICADOR_EXTRA_DOT_INSTANCES = [1, 2, 3] as const;
+
 export interface RunSetup {
   heroes: HeroClassId[];
   /** Um bioma inicial por herói (mesma ordem) */
@@ -256,6 +263,8 @@ export interface CombatFloatEvent {
   floatHex?: { q: number; r: number };
   /** Dano por veneno (tick); float roxo, não crita; ignora crítico de habilidades até haver efeito específico. */
   poisonDot?: boolean;
+  /** Dano por queimadura / Labareda (tick); float laranja. */
+  burnDot?: boolean;
 }
 
 export function roninCritBonusFromArtifacts(
@@ -3089,6 +3098,7 @@ export class GameModel {
       (dmg > 0 || shieldAbsorb > 0)
     ) {
       this.applyPoison(src, tgt);
+      this.applyLabareda(src, tgt);
     }
     if (tgt === src) {
       this.onDeaths();
@@ -3533,14 +3543,67 @@ export class GameModel {
     this.emit();
   }
 
-  /** Mãos venenosas: adiciona 2 instâncias de dano (3×acúmulos cada); soma à fila existente. */
+  /** Alcance total acima do snapshot inicial da run (artefatos, loja, forja já no baseline). */
+  private heroBonusAlcanceNaRun(u: Unit): number {
+    const base = u.statBaseline?.alcance ?? u.alcance;
+    return Math.max(0, u.alcance - base);
+  }
+
+  /** Amplicador de onda: +N instâncias em efeitos de dano por instância deste herói. */
+  private amplicadorOndaExtraInstances(att: Unit): number {
+    const s = Math.min(3, Math.max(0, att.artifacts["muralha_verdade"] ?? 0));
+    if (s <= 0) return 0;
+    return AMPLICADOR_EXTRA_DOT_INSTANCES[s - 1]!;
+  }
+
+  /** Dobra temporal: +consumo/tick de instâncias de dano (soma da party). */
+  private partyDobraTemporalExtraDotConsume(): number {
+    let sum = 0;
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      sum += Math.min(5, h.artifacts["manto_espectral"] ?? 0);
+    }
+    return sum;
+  }
+
+  private dotDamageInstancesConsumedPerTick(u: Unit): number {
+    const base = Math.max(1, Math.floor(u.dotConsumePerTick ?? 1));
+    return base + this.partyDobraTemporalExtraDotConsume();
+  }
+
+  private dotHealInstancesConsumedPerTick(u: Unit): number {
+    return Math.max(1, Math.floor(u.dotConsumePerTick ?? 1));
+  }
+
+  /** Mãos venenosas: instâncias de veneno (3×acúmulos); +extra do Amplicador de onda. */
   private applyPoison(att: Unit, tgt: Unit): void {
     const s = att.artifacts["maos_venenosas"] ?? 0;
     if (s <= 0) return;
     const dmg = 3 * s;
-    const add = Array.from({ length: 2 }, () => dmg);
+    const n = 2 + this.amplicadorOndaExtraInstances(att);
+    const add = Array.from({ length: n }, () => dmg);
     const cur = tgt.poison?.instances ?? [];
     tgt.poison = { instances: [...cur, ...add] };
+  }
+
+  /**
+   * Labareda: a cada dano a inimigo, aplica instâncias de queimadura em inimigos
+   * a 1..(1 + alcance extra na run) hexes do alvo principal. Bloqueia regen natural no tick.
+   */
+  private applyLabareda(att: Unit, tgt: Unit): void {
+    const stacks = Math.min(6, Math.max(0, att.artifacts["escama_leve"] ?? 0));
+    if (stacks <= 0) return;
+    const dmg = LABAREDA_DMG_BY_STACK[stacks - 1]!;
+    const nInst = LABAREDA_INSTANCES_BY_STACK[stacks - 1]!;
+    const maxRing = 1 + this.heroBonusAlcanceNaRun(att);
+    for (const e of this.enemies()) {
+      if (e.hp <= 0 || e.id === tgt.id) continue;
+      const d = hexDistance({ q: tgt.q, r: tgt.r }, { q: e.q, r: e.r });
+      if (d < 1 || d > maxRing) continue;
+      const add = Array.from({ length: nInst }, () => dmg);
+      const cur = e.burn?.instances ?? [];
+      e.burn = { instances: [...cur, ...add] };
+    }
   }
 
   /**
@@ -3760,7 +3823,8 @@ export class GameModel {
           const pct = furacaoBleedPct(att.weaponLevel);
           const total = Math.max(1, roundToCombatDecimals(dealt * pct));
           const per = Math.max(0.01, roundToCombatDecimals(total / T));
-          const add = Array.from({ length: T }, () => per);
+          const extra = this.amplicadorOndaExtraInstances(att);
+          const add = Array.from({ length: T + extra }, () => per);
           const cur = tg.bleed?.instances ?? [];
           tg.bleed = { instances: [...cur, ...add] };
         }
@@ -3842,16 +3906,17 @@ export class GameModel {
   }
 
   /**
-   * Veneno, HoT e sangramento: filas de instâncias; cada tick consome até
-   * `dotConsumePerTick` (defeito 1). Veneno aplica dano direto em HP (ignora defesa).
+   * Veneno, queimadura, sangramento e HoT: filas de instâncias.
+   * Dano por instância usa consumo base + Dobra temporal (party); HoT só o base.
    */
   private applyPoisonAndHotTick(u: Unit): void {
     if (u.hp <= 0) return;
-    const rate = Math.max(1, Math.floor(u.dotConsumePerTick ?? 1));
+    const dmgRate = this.dotDamageInstancesConsumedPerTick(u);
+    const healRate = this.dotHealInstancesConsumedPerTick(u);
 
     if (u.poison && u.poison.instances.length > 0) {
       let pd = 0;
-      const n = Math.min(rate, u.poison.instances.length);
+      const n = Math.min(dmgRate, u.poison.instances.length);
       for (let i = 0; i < n; i++) {
         pd += u.poison.instances.shift()!;
       }
@@ -3870,9 +3935,30 @@ export class GameModel {
       if (u.poison.instances.length === 0) u.poison = undefined;
     }
 
+    if (u.burn && u.burn.instances.length > 0) {
+      let fd = 0;
+      const n = Math.min(dmgRate, u.burn.instances.length);
+      for (let i = 0; i < n; i++) {
+        fd += u.burn.instances.shift()!;
+      }
+      if (fd > 0) {
+        this.pushCombatFloat({
+          unitId: u.id,
+          kind: "damage",
+          amount: fd,
+          crit: false,
+          targetIsPlayer: u.isPlayer,
+          floatHex: { q: u.q, r: u.r },
+          burnDot: true,
+        });
+        u.hp = Math.max(0, u.hp - fd);
+      }
+      if (u.burn.instances.length === 0) u.burn = undefined;
+    }
+
     if (u.hot && u.hot.instances.length > 0 && u.hp > 0) {
       let ht = 0;
-      const n = Math.min(rate, u.hot.instances.length);
+      const n = Math.min(healRate, u.hot.instances.length);
       for (let i = 0; i < n; i++) {
         ht += u.hot.instances.shift()!;
       }
@@ -3894,7 +3980,7 @@ export class GameModel {
 
     if (u.bleed && u.bleed.instances.length > 0) {
       let bd = 0;
-      const n = Math.min(rate, u.bleed.instances.length);
+      const n = Math.min(dmgRate, u.bleed.instances.length);
       for (let i = 0; i < n; i++) {
         bd += u.bleed.instances.shift()!;
       }
@@ -3954,10 +4040,11 @@ export class GameModel {
         u.mana = Math.min(u.maxMana, u.mana + extraMana);
       }
     }
-    let rv =
+    let rvFromRegen =
       bio === "deserto" && !noDesertDrain ? 0 : u.regenVida;
-    rv =
-      Math.floor(rv * regenMult) +
+    if ((u.burn?.instances?.length ?? 0) > 0) rvFromRegen = 0;
+    let rv =
+      Math.floor(rvFromRegen * regenMult) +
       paraisoHp +
       allyDesertHp +
       rulerDesertRegenFlat;

@@ -102,6 +102,7 @@ export function createHeroUnit(
     poison: undefined,
     hot: undefined,
     bleed: undefined,
+    burn: undefined,
     weaponLevel,
     weaponUltMeter: 0,
     displayColor: 0xffffff,
@@ -289,6 +290,7 @@ export function createEnemyUnit(
     poison: undefined,
     hot: undefined,
     bleed: undefined,
+    burn: undefined,
     weaponLevel: 1,
     weaponUltMeter: 0,
   };

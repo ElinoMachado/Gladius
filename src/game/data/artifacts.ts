@@ -39,7 +39,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Mãos venenosas",
     rarity: "common",
     description:
-      "Ao causar dano: +2 instâncias de veneno. Causa 3 de dano. Este efeito é acumulável e ignora a defesa.",
+      "Ao causar dano: +2 instâncias de veneno (mais o bónus do Amplicador de onda, se o tiveres). Causa 3 de dano por instância. Ignora a defesa.",
   },
   {
     id: "ronin",
@@ -64,10 +64,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "escama_leve",
-    name: "Escama leve",
+    name: "Labareda",
     rarity: "common",
-    description: "+1 de defesa por acúmulo.",
-    pickBonusPerStack: { defesa: 1 },
+    description:
+      "Ao causar dano a um inimigo: aplica instâncias de queimadura (dano por tick) a outros inimigos entre 1 e (1 + alcance adicional na run) hexes do alvo. Cada instância causa o dano do teu nível de Labareda. Enquanto queimam, não regeneram vida naturalmente (curas explícitas funcionam). Acúmulos 1–6: dano 2/4/6/8/10/12 e 1/1/2/2/3/3 instâncias por alvo.",
   },
   {
     id: "pulso_verde",
@@ -233,10 +233,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "muralha_verdade",
-    name: "Muralha da verdade",
+    name: "Amplicador de onda",
     rarity: "rare",
-    description: "+4 de defesa por acúmulo.",
-    pickBonusPerStack: { defesa: 4 },
+    description:
+      "+1/+2/+3 instâncias em todos os teus efeitos de dano por instância (ex.: Mãos venenosas, Labareda, sangramento da Furacão). Máx. 3 acúmulos.",
   },
   {
     id: "escudo_residual",
@@ -283,10 +283,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "manto_espectral",
-    name: "Manto espectral",
+    name: "Dobra temporal",
     rarity: "legendary",
-    description: "+10 de sorte por acúmulo (máx. 3).",
-    pickBonusPerStack: { sorte: 10 },
+    description:
+      "Cada acúmulo: +1 instância de dano (veneno, queimadura, sangramento) consumida por turno em todas as unidades (até +5 com 5 acúmulos). HoT não é afetado.",
   },
   {
     id: "anel_dragao",
