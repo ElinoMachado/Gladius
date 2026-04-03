@@ -24,10 +24,13 @@ const PIECE_PREVIEW_YAW: Record<ForgeSlotKind, number> = {
 };
 
 const FIT_MARGIN_BY_KIND: Record<ForgeSlotKind, number> = {
-  helmo: 1.52,
-  capa: 1.58,
-  manoplas: 1.52,
+  helmo: 1.22,
+  capa: 1.26,
+  manoplas: 1.22,
 };
+
+/** Rotação Y contínua (rad/s) — lenta para não desenquadrar com a bbox usada na câmara. */
+const PREVIEW_SPIN_RAD_PER_SEC = 0.42;
 
 /** Centra a AABB do objeto na origem do pai (correcto com rotação no filho). */
 function centerObjectOnOrigin(object: THREE.Object3D): void {
@@ -71,7 +74,7 @@ function fitCameraToObject(
   const distDiagH = (halfDiag * margin) / Math.tan(hFov / 2);
   const distDiag = Math.max(distDiagV, distDiagH);
 
-  const dist = Math.max(distV, distH, distDiag, 0.32);
+  const dist = Math.max(distV, distH, distDiag, 0.26);
 
   const elev = Math.min(size.y * 0.04, 0.1);
   camera.position.set(0, elev, dist);
@@ -172,12 +175,18 @@ export class ForgePiecePreview3D {
       this.camera.updateProjectionMatrix();
       return;
     }
+    const rx = this.pivot.rotation.x;
+    const ry = this.pivot.rotation.y;
+    const rz = this.pivot.rotation.z;
+    this.pivot.rotation.set(0, 0, 0);
     this.pivot.updateMatrixWorld(true);
     fitCameraToObject(
       this.camera,
       this.pivot,
       FIT_MARGIN_BY_KIND[this.previewKind],
     );
+    this.pivot.rotation.set(rx, ry, rz);
+    this.pivot.updateMatrixWorld(true);
   }
 
   private fit(): void {
@@ -197,11 +206,12 @@ export class ForgePiecePreview3D {
     const loop = (now: number): void => {
       if (!this.running) return;
       this.raf = requestAnimationFrame(loop);
-      /* Modelo de frente à câmara, sem rodar o conjunto (evita cortes no quadro). */
-      this.pivot.rotation.set(0, 0, 0);
+      const elapsedSec = (now - t0) * 0.001;
+      this.pivot.rotation.y = elapsedSec * PREVIEW_SPIN_RAD_PER_SEC;
+      this.pivot.rotation.x = Math.sin(elapsedSec * 0.55) * 0.035;
+      this.pivot.rotation.z = 0;
       if (this.tierGlow) {
-        const t = (now - t0) * 0.001;
-        const pulse = 0.86 + 0.14 * Math.sin(t * 2.35);
+        const pulse = 0.86 + 0.14 * Math.sin(elapsedSec * 2.35);
         this.tierGlow.intensity = this.tierGlowBase * pulse;
       }
       this.renderer.render(this.scene, this.camera);
