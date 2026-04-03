@@ -147,10 +147,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "olho_agucado",
-    name: "Olho aguçado",
+    name: "Onda creptante",
     rarity: "uncommon",
-    description: "+4% de acerto crítico por acúmulo.",
-    pickBonusPerStack: { acertoCritico: 4 },
+    description:
+      "Danos e curas por instância (veneno, queimadura, sangramento, HoT) podem dar acerto crítico. +10% ao multiplicador de dano crítico por acúmulo em esses ticks (10%…60% em 6 acúmulos).",
   },
   {
     id: "couraca_reforcada",

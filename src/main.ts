@@ -3524,8 +3524,13 @@ function heroSetupWeaponAbilitiesTooltipHtml(
         kind: "dmg",
       },
       {
-        label: "Regen:",
-        value: `${formatTooltipNumber(effReg)} PV e mana por turno, ${tipInt(regT)} turnos`,
+        label: "Cura (instâncias):",
+        value: `${tipInt(regT)} instância(s) de ${formatTooltipNumber(effReg)} PV (HoT, no tick de turno)`,
+        kind: "fx",
+      },
+      {
+        label: "Mana:",
+        value: `+${formatTooltipNumber(effReg)} mana por turno, ${tipInt(regT)} turnos`,
         kind: "fx",
       },
     ]);
@@ -3664,8 +3669,13 @@ function tooltipWeaponUltimate(h: Unit): string {
         kind: "dmg",
       },
       {
-        label: "Regen:",
-        value: `${formatTooltipNumber(effReg)} PV e mana por turno, ${tipInt(regT)} turnos`,
+        label: "Cura (instâncias):",
+        value: `${tipInt(regT)} instância(s) de ${formatTooltipNumber(effReg)} PV (HoT por turno)`,
+        kind: "fx",
+      },
+      {
+        label: "Mana:",
+        value: `+${formatTooltipNumber(effReg)} mana por turno, ${tipInt(regT)} turnos`,
         kind: "fx",
       },
     ]);
@@ -5405,7 +5415,6 @@ function showCombatHUD(): void {
     <div class="hud">
       ${sandboxHudHtml}
       <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Clique num <strong>inimigo</strong> para ver atributos. Ações abaixo mostram <strong>alcance</strong> em vermelho; repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados · <strong>Esc</strong> pausar.</div>
-      <div class="hud-block">Wave <strong id="wv">1</strong></div>
     </div>
   `);
   const stipendOverlay = el(
@@ -5715,7 +5724,6 @@ function showCombatHUD(): void {
   const update = (): void => {
     const activeHero = model.currentHero();
     const h = lolViewedHero(model);
-    hud.querySelector("#wv")!.textContent = String(model.wave);
     const partyLive = model.getParty().filter((u) => u.hp > 0);
     const sumWaveGold = partyLive.reduce((s, u) => s + u.ouroWave, 0);
     const drainNext = partyLive.reduce(
@@ -5736,6 +5744,7 @@ function showCombatHUD(): void {
           <span class="wave-stipend-bar" style="--wave-tick:0.5"></span>
           <span class="wave-stipend-bar" style="--wave-tick:0.32"></span>
         </div>
+        <div class="wave-stipend-count" role="status" aria-label="Wave atual">Wave <strong id="combat-wave-num">${model.wave}</strong></div>
       </div>`;
     }
     const oddsEl = combatAboveBar.querySelector("#combat-rarity-hint");

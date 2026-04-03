@@ -3583,7 +3583,7 @@ export class GameModel {
     const n = 2 + this.amplicadorOndaExtraInstances(att);
     const add = Array.from({ length: n }, () => dmg);
     const cur = tgt.poison?.instances ?? [];
-    tgt.poison = { instances: [...cur, ...add] };
+    tgt.poison = { instances: [...cur, ...add], sourceId: att.id };
   }
 
   /**
@@ -3602,7 +3602,7 @@ export class GameModel {
       if (d < 1 || d > maxRing) continue;
       const add = Array.from({ length: nInst }, () => dmg);
       const cur = e.burn?.instances ?? [];
-      e.burn = { instances: [...cur, ...add] };
+      e.burn = { instances: [...cur, ...add], sourceId: att.id };
     }
   }
 
@@ -3769,17 +3769,21 @@ export class GameModel {
     const w = h.weaponLevel;
     const flat = paraisoShieldFlat(w);
     const mm = paraisoManaShieldMult(w);
-    const reg = paraisoRegenBonus(w);
+    const regTick = paraisoRegenBonus(w);
     const regT = paraisoRegenTurns(w);
     const potMult = 1 + h.potencialCuraEscudo / 100;
+    const perHp = roundToCombatDecimals(regTick * potMult);
+    const perMana = roundToCombatDecimals(regTick * potMult);
     for (const ally of this.getParty()) {
       if (ally.hp <= 0) continue;
       const shieldRaw = flat + ally.maxMana * mm;
       ally.shieldGGBlue += roundToCombatDecimals(shieldRaw * potMult);
+      const hotAdd = Array.from({ length: regT }, () => perHp);
+      const curH = ally.hot?.instances ?? [];
+      ally.hot = { instances: [...curH, ...hotAdd], sourceId: h.id };
       ally.paraisoRegenBonus = {
         turns: regT,
-        bonusHp: roundToCombatDecimals(reg * potMult),
-        bonusMana: roundToCombatDecimals(reg * potMult),
+        bonusMana: perMana,
       };
     }
     if (!this.devSandboxMode) this.resetWeaponUltCharge(h);
@@ -3826,7 +3830,7 @@ export class GameModel {
           const extra = this.amplicadorOndaExtraInstances(att);
           const add = Array.from({ length: T + extra }, () => per);
           const cur = tg.bleed?.instances ?? [];
-          tg.bleed = { instances: [...cur, ...add] };
+          tg.bleed = { instances: [...cur, ...add], sourceId: att.id };
         }
         this.emit();
       });
@@ -3906,6 +3910,26 @@ export class GameModel {
   }
 
   /**
+   * Onda creptante: cada instância de dano/cura pode critar; +0,1 ao mult. de crítico por acúmulo (máx. 6).
+   */
+  private applyOndaCreptanteInstanceCrit(
+    base: number,
+    sourceId: string | undefined,
+  ): { value: number; crit: boolean } {
+    if (base <= 0) return { value: base, crit: false };
+    if (!sourceId) return { value: base, crit: false };
+    const src = this.units.find((x) => x.id === sourceId);
+    if (!src?.isPlayer) return { value: base, crit: false };
+    const st = Math.min(6, Math.max(0, src.artifacts["olho_agucado"] ?? 0));
+    if (st <= 0) return { value: base, crit: false };
+    const cr = rollCrit(src.acertoCritico + roninCritBonus(src));
+    if (!cr) return { value: base, crit: false };
+    const extra = st * 0.1;
+    const v = applyCritMultiplier(base, src.danoCritico + extra, true);
+    return { value: v, crit: true };
+  }
+
+  /**
    * Veneno, queimadura, sangramento e HoT: filas de instâncias.
    * Dano por instância usa consumo base + Dobra temporal (party); HoT só o base.
    */
@@ -3915,10 +3939,12 @@ export class GameModel {
     const healRate = this.dotHealInstancesConsumedPerTick(u);
 
     if (u.poison && u.poison.instances.length > 0) {
+      const srcId = u.poison.sourceId;
       let pd = 0;
       const n = Math.min(dmgRate, u.poison.instances.length);
       for (let i = 0; i < n; i++) {
-        pd += u.poison.instances.shift()!;
+        const base = u.poison.instances.shift()!;
+        pd += this.applyOndaCreptanteInstanceCrit(base, srcId).value;
       }
       if (pd > 0) {
         this.pushCombatFloat({
@@ -3936,10 +3962,12 @@ export class GameModel {
     }
 
     if (u.burn && u.burn.instances.length > 0) {
+      const srcId = u.burn.sourceId;
       let fd = 0;
       const n = Math.min(dmgRate, u.burn.instances.length);
       for (let i = 0; i < n; i++) {
-        fd += u.burn.instances.shift()!;
+        const base = u.burn.instances.shift()!;
+        fd += this.applyOndaCreptanteInstanceCrit(base, srcId).value;
       }
       if (fd > 0) {
         this.pushCombatFloat({
@@ -3957,10 +3985,12 @@ export class GameModel {
     }
 
     if (u.hot && u.hot.instances.length > 0 && u.hp > 0) {
+      const srcId = u.hot.sourceId;
       let ht = 0;
       const n = Math.min(healRate, u.hot.instances.length);
       for (let i = 0; i < n; i++) {
-        ht += u.hot.instances.shift()!;
+        const base = u.hot.instances.shift()!;
+        ht += this.applyOndaCreptanteInstanceCrit(base, srcId).value;
       }
       if (ht > 0) {
         const h0 = u.hp;
@@ -3979,10 +4009,12 @@ export class GameModel {
     }
 
     if (u.bleed && u.bleed.instances.length > 0) {
+      const srcId = u.bleed.sourceId;
       let bd = 0;
       const n = Math.min(dmgRate, u.bleed.instances.length);
       for (let i = 0; i < n; i++) {
-        bd += u.bleed.instances.shift()!;
+        const base = u.bleed.instances.shift()!;
+        bd += this.applyOndaCreptanteInstanceCrit(base, srcId).value;
       }
       if (bd > 0) {
         this.pushCombatFloat({
@@ -4017,10 +4049,8 @@ export class GameModel {
     const allyDesertHp = this.desertoAllyRegenExtraHp(u);
     const allyDesertMana = this.desertoAllyRegenExtraMana(u);
     let paraisoMana = 0;
-    let paraisoHp = 0;
     if (u.paraisoRegenBonus && u.paraisoRegenBonus.turns > 0) {
       paraisoMana = u.paraisoRegenBonus.bonusMana;
-      paraisoHp = u.paraisoRegenBonus.bonusHp;
       u.paraisoRegenBonus.turns--;
       if (u.paraisoRegenBonus.turns <= 0) u.paraisoRegenBonus = undefined;
     }
@@ -4045,7 +4075,6 @@ export class GameModel {
     if ((u.burn?.instances?.length ?? 0) > 0) rvFromRegen = 0;
     let rv =
       Math.floor(rvFromRegen * regenMult) +
-      paraisoHp +
       allyDesertHp +
       rulerDesertRegenFlat;
     const ton = u.artifacts["tonico"] ?? 0;

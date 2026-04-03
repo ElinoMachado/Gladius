@@ -149,11 +149,11 @@ export interface Unit extends CoreStats {
    * DoTs como filas de instâncias: cada tick consome até `dotConsumePerTick` entradas
    * (FIFO); cada número é dano/cura desse “tick de instância”.
    */
-  poison?: { instances: number[] };
-  hot?: { instances: number[] };
-  bleed?: { instances: number[] };
+  poison?: { instances: number[]; sourceId?: string };
+  hot?: { instances: number[]; sourceId?: string };
+  bleed?: { instances: number[]; sourceId?: string };
   /** Labareda: dano por instância (tick); bloqueia regeneração natural enquanto houver instâncias. */
-  burn?: { instances: number[] };
+  burn?: { instances: number[]; sourceId?: string };
   /** Quantas instâncias de cada DoT são consumidas por turno (padrão 1). */
   dotConsumePerTick?: number;
   /** Nível da arma principal (loja de cristais); escala skills e ultimate da arma. */
@@ -176,10 +176,9 @@ export interface Unit extends CoreStats {
   furiaSavedDano?: number;
   /** PV máx extra adicionados na Fúria (para reverter). */
   furiaExtraMaxHp?: number;
-  /** Bônus de regen do Paraíso na terra. */
+  /** Paraíso na terra: mana extra por turno (a cura de PV é por instâncias em `hot`). */
   paraisoRegenBonus?: {
     turns: number;
-    bonusHp: number;
     bonusMana: number;
   };
   /** Cor de tintura do modelo / retrato (herói ou inimigo). */
