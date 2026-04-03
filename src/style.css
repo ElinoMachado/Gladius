@@ -1037,6 +1037,27 @@ h1 {
   margin-top: 0.1rem;
 }
 
+/* Setup de heróis: altura reservada para forja + sinergias alinhar as 3 colunas */
+.hero-setup-screen .hero-slot-forge {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: 13rem;
+}
+
+.hero-setup-screen .hero-slot-forge__box {
+  min-height: 6.25rem;
+}
+
+.hero-setup-screen .hero-slot-forge-syn {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  min-height: 4.6rem;
+  border-top-color: rgba(201, 162, 39, 0.32);
+}
+
 .hero-slot-forge__title {
   font-size: 0.68rem;
   font-weight: 700;
@@ -1197,6 +1218,26 @@ h1 {
   align-items: flex-start;
 }
 
+.hero-setup-screen .hero-slot-forge-syn__row {
+  align-items: center;
+  min-height: 2.85rem;
+}
+
+.hero-slot-forge-syn__row--placeholder {
+  align-items: center;
+}
+
+.hero-setup-screen .hero-slot-forge-syn__ph {
+  display: inline-block;
+  width: 2.65rem;
+  height: 2.65rem;
+  border-radius: 8px;
+  border: 1px dashed rgba(100, 90, 120, 0.45);
+  background: rgba(0, 0, 0, 0.2);
+  box-sizing: border-box;
+  flex: 0 0 auto;
+}
+
 .hero-slot-forge-syn-ico {
   position: relative;
   flex: 0 0 auto;
@@ -1295,10 +1336,6 @@ h1 {
   line-height: 1.4;
   color: #8a8078;
   font-style: italic;
-}
-
-.hero-setup-screen .hero-slot-forge-syn {
-  border-top-color: rgba(201, 162, 39, 0.32);
 }
 
 .hero-setup-screen .hero-slot-forge-syn__lbl {

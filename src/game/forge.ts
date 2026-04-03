@@ -1255,7 +1255,15 @@ export function heroSlotForgeSynergyStripHtml(L: ForgeHeroLoadout): string {
     present.has(b),
   );
   if (biomes.length === 0) {
-    return `<div class="hero-slot-forge-syn hero-slot-forge-syn--empty" role="status"><span class="hero-slot-forge-syn__empty">Sinergias: equipa elmo, capa e manoplas neste slot para ver os biomas da combinação; só nv3 contam para o tier. Paira nos brasões para ler os efeitos.</span></div>`;
+    const synHint =
+      "Sinergias: equipa elmo, capa e manoplas neste slot para ver os biomas da combinação; só nv3 contam para o tier. Paira nos brasões para ler os efeitos.";
+    const ph = `<span class="hero-slot-forge-syn__ph" aria-hidden="true"></span>`.repeat(
+      3,
+    );
+    return `<div class="hero-slot-forge-syn hero-slot-forge-syn--empty" role="status" aria-label="${escapeForgeHtml(synHint)}">
+    <span class="hero-slot-forge-syn__lbl">Sinergias desta combinação</span>
+    <div class="hero-slot-forge-syn__row hero-slot-forge-syn__row--placeholder" title="${escapeForgeHtml(synHint)}">${ph}</div>
+  </div>`;
   }
   const icons = biomes
     .map((biome) => {
