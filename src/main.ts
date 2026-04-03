@@ -1933,7 +1933,7 @@ function showArenaLayoutEditHud(): void {
   uiRoot.appendChild(
     el(`
     <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar menu</strong> — Clique no coliseu para selecionar (contorno vermelho). Arrasto no modelo: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> ou numérico +/− escala. Câmara (vista isométrica fixa): <kbd>Espaço</kbd>; WASD e <kbd>X</kbd>/<kbd>Z</kbd> no alvo; roda zoom; botão direito pan no chão.
+      <strong>Ajustar menu</strong> — Clique no coliseu para selecionar (contorno vermelho). Arrasto no modelo: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> ou numérico +/− escala. Modo câmara (mesma vista isométrica do jogo): <kbd>Espaço</kbd>; WASD pan; roda zoom; botão direito pan no chão.
       <br /><kbd>Esc</kbd> grava e volta ao menu (vale para o jogo normal e para o sandbox).
     </div>
   `),
