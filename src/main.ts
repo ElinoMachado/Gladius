@@ -9,6 +9,7 @@ import {
   type CombatVfxHint,
 } from "./game/gameModel";
 import { GameRenderer } from "./render/GameRenderer";
+import { preloadForgePieceGlbs } from "./render/forgePieceGlb";
 import { preloadGladiadorGlb } from "./render/gladiatorGlb";
 import { HeroPreview3D } from "./render/HeroPreview3D";
 import { MainMenuSword3D } from "./render/MainMenuSword3D";
@@ -252,8 +253,8 @@ const view = new GameRenderer(canvas);
 
 view.buildHexGrid(model.grid);
 
-preloadGladiadorGlb().then((ok) => {
-  if (ok) render();
+Promise.all([preloadGladiadorGlb(), preloadForgePieceGlbs()]).then(() => {
+  render();
 });
 
 type Setup = {

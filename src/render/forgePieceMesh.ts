@@ -1,5 +1,10 @@
 import * as THREE from "three";
 import type { ForgeEssenceId, ForgeSlotKind } from "../game/types";
+import {
+  cloneForgeCapeGlb,
+  cloneForgeHelmetGlb,
+  cloneForgeManoplasGlb,
+} from "./forgePieceGlb";
 
 const BIOME_HEX: Record<ForgeEssenceId, number> = {
   vulcanico: 0xff4422,
@@ -97,6 +102,15 @@ function addRivet(
 
 /** Elmo detalhado (domo, viseira, guardas, crista por nível). */
 export function buildHelmetForgeDetail(
+  biome: ForgeEssenceId,
+  level: 1 | 2 | 3,
+): THREE.Group {
+  const fromGlb = cloneForgeHelmetGlb(biome, level);
+  if (fromGlb) return fromGlb;
+  return buildHelmetForgeDetailProcedural(biome, level);
+}
+
+function buildHelmetForgeDetailProcedural(
   biome: ForgeEssenceId,
   level: 1 | 2 | 3,
 ): THREE.Group {
@@ -240,6 +254,15 @@ export function buildCapeForgeDetail(
   biome: ForgeEssenceId,
   level: 1 | 2 | 3,
 ): THREE.Group {
+  const fromGlb = cloneForgeCapeGlb(biome, level);
+  if (fromGlb) return fromGlb;
+  return buildCapeForgeDetailProcedural(biome, level);
+}
+
+function buildCapeForgeDetailProcedural(
+  biome: ForgeEssenceId,
+  level: 1 | 2 | 3,
+): THREE.Group {
   const root = new THREE.Group();
   const col = biomeColor(biome);
   const cloth = stdMat(tone(col, 0.75), {
@@ -351,6 +374,15 @@ export function buildCapeForgeDetail(
 
 /** Par de manoplas com placas, dedos e rebites. */
 export function buildManoplasForgeDetail(
+  biome: ForgeEssenceId,
+  level: 1 | 2 | 3,
+): THREE.Group {
+  const fromGlb = cloneForgeManoplasGlb(biome, level);
+  if (fromGlb) return fromGlb;
+  return buildManoplasForgeDetailProcedural(biome, level);
+}
+
+function buildManoplasForgeDetailProcedural(
   biome: ForgeEssenceId,
   level: 1 | 2 | 3,
 ): THREE.Group {
