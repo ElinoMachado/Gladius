@@ -1933,7 +1933,7 @@ function showArenaLayoutEditHud(): void {
   uiRoot.appendChild(
     el(`
     <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar menu</strong> — Coliseu: WASD e arrasto (Shift: altura). Câmara: <kbd>Espaço</kbd>, depois arrasto e Q/E.
+      <strong>Ajustar menu</strong> — Coliseu: WASD (plano), <kbd>X</kbd> altura, <kbd>Z</kbd> profundidade (Shift inverte). Câmara: <kbd>Espaço</kbd>; mesmo <kbd>X</kbd>/<kbd>Z</kbd> para subir e profundidade, arrasto e Q/E.
       <br /><kbd>Esc</kbd> grava e volta ao menu (vale para o jogo normal e para o sandbox).
     </div>
   `),
