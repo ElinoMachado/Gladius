@@ -613,6 +613,10 @@ type PendingCombat =
 
 let movePreviewActive = false;
 let pendingCombat: PendingCombat = null;
+/** Pré-visualização do feixe do Tiro destruidor (hexes + linha 3D). */
+let combatTiroBeamPreviewKeys: Set<string> | null = null;
+let combatTiroBeamPath: { q: number; r: number }[] | null = null;
+let combatTiroAimCacheSig = "";
 /** Evita acumular `keydown` de combate a cada `render()` / `showCombatHUD()`. */
 let combatHotkeysAbort: AbortController | null = null;
 
@@ -1112,6 +1116,9 @@ function bindEnemyInspectPanel(panel: HTMLElement): void {
 function resetCombatSelection(): void {
   movePreviewActive = false;
   pendingCombat = null;
+  combatTiroBeamPreviewKeys = null;
+  combatTiroBeamPath = null;
+  combatTiroAimCacheSig = "";
   combatInspectEnemyId = null;
   combatHoverEnemyId = null;
   combatLolInspectHeroId = null;
@@ -1119,11 +1126,17 @@ function resetCombatSelection(): void {
 
 function applyCombatOverlays(): void {
   if (model.phase !== "combat") {
+    combatTiroBeamPreviewKeys = null;
+    combatTiroBeamPath = null;
+    combatTiroAimCacheSig = "";
     view.clearCombatOverlays();
     return;
   }
   const h = model.currentHero();
   if (!h || h.hp <= 0) {
+    combatTiroBeamPreviewKeys = null;
+    combatTiroBeamPath = null;
+    combatTiroAimCacheSig = "";
     view.clearCombatOverlays();
     return;
   }
@@ -1152,6 +1165,53 @@ function applyCombatOverlays(): void {
       : new Set<string>();
   view.setEnemyInspectMovementOverlay(hoverMoveKeys);
   view.setEnemyInspectAttackOverlay(inspectAtkKeys);
+
+  const showTiroAim =
+    pendingCombat?.kind === "skill" && pendingCombat.id === "tiro_destruidor";
+  view.setTiroDestruidorAimPreview(
+    showTiroAim ? combatTiroBeamPreviewKeys : null,
+    showTiroAim ? combatTiroBeamPath : null,
+  );
+}
+
+/** Atualiza linha de mira do Tiro destruidor ao mover o rato na arena. */
+function updateTiroDestruidorAimPreview(ndcX: number, ndcY: number): void {
+  if (model.phase !== "combat" || model.inEnemyPhase) return;
+  if (pendingCombat?.kind !== "skill" || pendingCombat.id !== "tiro_destruidor") {
+    if (combatTiroAimCacheSig !== "") {
+      combatTiroBeamPreviewKeys = null;
+      combatTiroBeamPath = null;
+      combatTiroAimCacheSig = "";
+      applyCombatOverlays();
+    }
+    return;
+  }
+  const hex = view.pickHex(ndcX, ndcY, model.grid);
+  if (!hex) {
+    if (combatTiroAimCacheSig !== "") {
+      combatTiroBeamPreviewKeys = null;
+      combatTiroBeamPath = null;
+      combatTiroAimCacheSig = "";
+      applyCombatOverlays();
+    }
+    return;
+  }
+  const preview = model.tiroDestruidorAimPreview(hex.q, hex.r);
+  if (!preview) {
+    if (combatTiroAimCacheSig !== "") {
+      combatTiroBeamPreviewKeys = null;
+      combatTiroBeamPath = null;
+      combatTiroAimCacheSig = "";
+      applyCombatOverlays();
+    }
+    return;
+  }
+  const sig = `${[...preview.keys].sort().join("|")}:${preview.path.map((p) => `${p.q},${p.r}`).join(":")}`;
+  if (sig === combatTiroAimCacheSig) return;
+  combatTiroAimCacheSig = sig;
+  combatTiroBeamPreviewKeys = preview.keys;
+  combatTiroBeamPath = preview.path;
+  applyCombatOverlays();
 }
 
 /** Atualiza inimigo sob o rato e hexes de movimento (âmbar) na arena. */
@@ -4391,7 +4451,7 @@ function tooltipTiroDestruidor(h: Unit, m: GameModel, sk: SkillDef): string {
     {
       label: "Efeito:",
       value:
-        "Clica num hex dentro do alcance (não o teu) para disparar na direção desse hex; acerta inimigos ao longo da linha",
+        "Com a skill escolhida, move o rato: vês o feixe e os hexes atingidos. Clica num hex válido (não o teu) para disparar nessa direção.",
       kind: "fx",
     },
   ]);
@@ -7014,6 +7074,12 @@ function showCombatHUD(): void {
 
   canvas.onmousemove = (ev) => {
     if (model.phase === "combat") {
+      const r = canvas.getBoundingClientRect();
+      const ndcX = ((ev.clientX - r.left) / r.width) * 2 - 1;
+      const ndcY = -((ev.clientY - r.top) / r.height) * 2 + 1;
+      if (!model.inEnemyPhase) {
+        updateTiroDestruidorAimPreview(ndcX, ndcY);
+      }
       const st = view.pickStatusTooltip(canvas, ev.clientX, ev.clientY);
       if (st) {
         const tip = getOrCreateGameTooltip();
@@ -7028,9 +7094,6 @@ function showCombatHUD(): void {
         }
         return;
       }
-      const r = canvas.getBoundingClientRect();
-      const ndcX = ((ev.clientX - r.left) / r.width) * 2 - 1;
-      const ndcY = -((ev.clientY - r.top) / r.height) * 2 + 1;
       const hex = view.pickHex(ndcX, ndcY, model.grid);
       const b =
         hex != null ? model.bunkerAtHex(hex.q, hex.r) : undefined;
@@ -7061,6 +7124,16 @@ function showCombatHUD(): void {
     hideGameTooltip();
     if (combatHoverEnemyId !== null) {
       combatHoverEnemyId = null;
+      applyCombatOverlays();
+    }
+    if (
+      pendingCombat?.kind === "skill" &&
+      pendingCombat.id === "tiro_destruidor" &&
+      combatTiroAimCacheSig !== ""
+    ) {
+      combatTiroBeamPreviewKeys = null;
+      combatTiroBeamPath = null;
+      combatTiroAimCacheSig = "";
       applyCombatOverlays();
     }
   };

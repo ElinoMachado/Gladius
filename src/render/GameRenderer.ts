@@ -121,6 +121,9 @@ export class GameRenderer {
   private animRose = 0;
   private moveOverlayGroup: THREE.Group | null = null;
   private attackOverlayGroup: THREE.Group | null = null;
+  /** Hexes do feixe + linha 3D ao apontar o Tiro destruidor. */
+  private tiroAimHexOverlayGroup: THREE.Group | null = null;
+  private tiroAimLineGroup: THREE.Group | null = null;
   private enemyInspectMoveOverlayGroup: THREE.Group | null = null;
   private enemyInspectAttackOverlayGroup: THREE.Group | null = null;
 
@@ -134,7 +137,11 @@ export class GameRenderer {
     { until: number; playerVictim: boolean; tone: HitFlashTone }
   >();
   private readonly atirarBursts: { group: THREE.Group; until: number }[] = [];
-  private readonly plasmaBeamFx: { group: THREE.Group; until: number }[] = [];
+  private readonly plasmaBeamFx: {
+    group: THREE.Group;
+    until: number;
+    startMs: number;
+  }[] = [];
   private readonly flyingProjectiles: {
     mesh: THREE.Mesh;
     x0: number;
@@ -2203,6 +2210,10 @@ export class GameRenderer {
     this.moveOverlayGroup = null;
     this.disposeOverlayGroup(this.attackOverlayGroup);
     this.attackOverlayGroup = null;
+    this.disposeOverlayGroup(this.tiroAimHexOverlayGroup);
+    this.tiroAimHexOverlayGroup = null;
+    this.disposeOverlayGroup(this.tiroAimLineGroup);
+    this.tiroAimLineGroup = null;
     this.disposeOverlayGroup(this.enemyInspectMoveOverlayGroup);
     this.enemyInspectMoveOverlayGroup = null;
     this.disposeOverlayGroup(this.enemyInspectAttackOverlayGroup);
@@ -2223,6 +2234,34 @@ export class GameRenderer {
       ? this.buildHexOverlay(keys, 0xff2222, 0.45, 0.11)
       : null;
     if (this.attackOverlayGroup) this.arenaRoot.add(this.attackOverlayGroup);
+  }
+
+  /**
+   * Mira do Tiro destruidor: hexes atingidos pelo feixe (por cima do overlay de alcance)
+   * e coluna luminosa ao longo do traçado.
+   */
+  setTiroDestruidorAimPreview(
+    beamHexKeys: Set<string> | null,
+    pathQr: { q: number; r: number }[] | null,
+  ): void {
+    this.disposeOverlayGroup(this.tiroAimHexOverlayGroup);
+    this.tiroAimHexOverlayGroup = null;
+    this.disposeOverlayGroup(this.tiroAimLineGroup);
+    this.tiroAimLineGroup = null;
+
+    if (beamHexKeys && beamHexKeys.size > 0) {
+      this.tiroAimHexOverlayGroup = this.buildHexOverlay(
+        beamHexKeys,
+        0xfff8f0,
+        0.52,
+        0.132,
+      );
+      this.arenaRoot.add(this.tiroAimHexOverlayGroup);
+    }
+    if (pathQr && pathQr.length >= 2) {
+      this.tiroAimLineGroup = this.buildTiroAimingBeamVfx(pathQr, true);
+      this.arenaRoot.add(this.tiroAimLineGroup);
+    }
   }
 
   /** Alcance de movimento do inimigo sob o rato (âmbar). */
@@ -2269,6 +2308,53 @@ export class GameRenderer {
       group.add(mesh);
     }
     return group;
+  }
+
+  /**
+   * Coluna de luz ao longo do feixe (mira fina ou pode reutilizar padrão de camadas).
+   */
+  private buildTiroAimingBeamVfx(
+    pathQr: { q: number; r: number }[],
+    preview: boolean,
+  ): THREE.Group {
+    const g = new THREE.Group();
+    const y = preview ? 1.38 : 1.06;
+    const addSeg = (
+      w: number,
+      h: number,
+      color: number,
+      opacity: number,
+      additive: boolean,
+      yLift: number,
+    ) => {
+      for (let i = 0; i < pathQr.length - 1; i++) {
+        const a = axialToWorld(pathQr[i]!.q, pathQr[i]!.r, HEX_SIZE);
+        const b = axialToWorld(pathQr[i + 1]!.q, pathQr[i + 1]!.r, HEX_SIZE);
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const len = Math.max(0.06, Math.hypot(dx, dz));
+        const geo = new THREE.BoxGeometry(w, h, len);
+        const mat = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity,
+          depthWrite: false,
+          blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+        });
+        const m = new THREE.Mesh(geo, mat);
+        const cx = (a.x + b.x) * 0.5;
+        const cz = (a.z + b.z) * 0.5;
+        m.position.set(cx, y + yLift, cz);
+        m.rotation.y = -Math.atan2(dz, dx);
+        g.add(m);
+      }
+    };
+    if (preview) {
+      addSeg(0.24, 0.16, 0x55c8ff, 0.48, false, 0);
+      addSeg(0.11, 0.12, 0xffffff, 0.82, true, 0.025);
+      addSeg(0.2, 0.08, 0xffa0f0, 0.22, true, 0.05);
+    }
+    return g;
   }
 
   private disposeOverlayGroup(g: THREE.Group | null): void {
@@ -2635,59 +2721,90 @@ export class GameRenderer {
     this.atirarBursts.push({ group: burst, until: performance.now() + durationMs });
   }
 
-  /** Feixe de plasma azul (Tiro destruidor); espessura escala com cargas. */
+  /**
+   * Feixe final (Tiro destruidor): coluna larga estilo “ultimate laser” —
+   * bordas em arco-íris (magenta → laranja → ciano), núcleo branco intenso;
+   * espessura e clarão na origem escalam com cargas.
+   */
   triggerTiroDestruidorPlasma(
     pathQr: { q: number; r: number }[],
     charges: number,
   ): void {
     if (pathQr.length < 2) return;
     const ch = Math.max(0, Math.min(5, charges));
-    const w = 0.26 + ch * 0.2;
-    const h = 0.85 + ch * 0.14;
+    const scale = 1 + ch * 0.36;
     const g = new THREE.Group();
-    for (let i = 0; i < pathQr.length - 1; i++) {
-      const a = axialToWorld(pathQr[i]!.q, pathQr[i]!.r, HEX_SIZE);
-      const b = axialToWorld(pathQr[i + 1]!.q, pathQr[i + 1]!.r, HEX_SIZE);
-      const dx = b.x - a.x;
-      const dz = b.z - a.z;
-      const len = Math.max(0.08, Math.hypot(dx, dz));
-      const geo = new THREE.BoxGeometry(w, h, len);
+    const yBeam = 1.02;
+
+    const tagOpacity = (mat: THREE.MeshBasicMaterial, op: number): void => {
+      mat.userData.baseOpacity = op;
+    };
+
+    const addLayer = (
+      width: number,
+      height: number,
+      color: number,
+      opacity: number,
+      additive: boolean,
+      yLift: number,
+    ) => {
+      for (let i = 0; i < pathQr.length - 1; i++) {
+        const a = axialToWorld(pathQr[i]!.q, pathQr[i]!.r, HEX_SIZE);
+        const b = axialToWorld(pathQr[i + 1]!.q, pathQr[i + 1]!.r, HEX_SIZE);
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const len = Math.max(0.08, Math.hypot(dx, dz));
+        const geo = new THREE.BoxGeometry(width, height, len * 1.01);
+        const mat = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity,
+          depthWrite: false,
+          blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+        });
+        tagOpacity(mat, opacity);
+        const m = new THREE.Mesh(geo, mat);
+        const cx = (a.x + b.x) * 0.5;
+        const cz = (a.z + b.z) * 0.5;
+        m.position.set(cx, yBeam + height * 0.38 + yLift, cz);
+        m.rotation.y = -Math.atan2(dz, dx);
+        g.add(m);
+      }
+    };
+
+    const w0 = HEX_SIZE * 0.48 * scale;
+    addLayer(w0 * 1.45, 0.68 * scale, 0xb01fc4, 0.22, false, 0);
+    addLayer(w0 * 1.12, 0.58 * scale, 0xff5522, 0.3, false, 0.005);
+    addLayer(w0 * 0.78, 0.52 * scale, 0x33c8ff, 0.4, false, 0.01);
+    addLayer(w0 * 0.38, 0.44 * scale, 0xfff6d0, 0.58, false, 0.016);
+    addLayer(w0 * 0.16, 0.36 * scale, 0xffffff, 0.92, true, 0.022);
+
+    const o = axialToWorld(pathQr[0]!.q, pathQr[0]!.r, HEX_SIZE);
+    const flareR = 0.24 * scale;
+    const flareLayers: [number, number, number][] = [
+      [0xff66ee, 0.32, 1.28],
+      [0x66eeff, 0.42, 0.82],
+      [0xffffff, 0.88, 0.45],
+    ];
+    for (const [col, op, radMul] of flareLayers) {
       const mat = new THREE.MeshBasicMaterial({
-        color: 0x55ccff,
+        color: col,
         transparent: true,
-        opacity: 0.94,
+        opacity: op,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
       });
-      const m = new THREE.Mesh(geo, mat);
-      const cx = (a.x + b.x) * 0.5;
-      const cz = (a.z + b.z) * 0.5;
-      m.position.set(cx, 1.02 + h * 0.4, cz);
-      m.rotation.y = -Math.atan2(dz, dx);
-      g.add(m);
+      tagOpacity(mat, op);
+      const geo = new THREE.SphereGeometry(flareR * radMul, 14, 12);
+      const sm = new THREE.Mesh(geo, mat);
+      sm.position.set(o.x, yBeam + 0.55 * scale, o.z);
+      g.add(sm);
     }
-    const inner = new THREE.MeshBasicMaterial({
-      color: 0xccffff,
-      transparent: true,
-      opacity: 0.45,
-    });
-    for (let i = 0; i < pathQr.length - 1; i++) {
-      const a = axialToWorld(pathQr[i]!.q, pathQr[i]!.r, HEX_SIZE);
-      const b = axialToWorld(pathQr[i + 1]!.q, pathQr[i + 1]!.r, HEX_SIZE);
-      const dx = b.x - a.x;
-      const dz = b.z - a.z;
-      const len = Math.max(0.08, Math.hypot(dx, dz));
-      const geo = new THREE.BoxGeometry(w * 0.45, h * 0.35, len * 1.02);
-      const m = new THREE.Mesh(geo, inner);
-      const cx = (a.x + b.x) * 0.5;
-      const cz = (a.z + b.z) * 0.5;
-      m.position.set(cx, 1.02 + h * 0.55, cz);
-      m.rotation.y = -Math.atan2(dz, dx);
-      g.add(m);
-    }
+
     this.arenaRoot.add(g);
-    this.plasmaBeamFx.push({
-      group: g,
-      until: performance.now() + 360 + ch * 85,
-    });
+    const startMs = performance.now();
+    const dur = 580 + ch * 125;
+    this.plasmaBeamFx.push({ group: g, until: startMs + dur, startMs });
   }
 
   queueDamageProjectile(
@@ -3186,7 +3303,20 @@ export class GameRenderer {
         this.arenaRoot.remove(b.group);
         this.disposeObject3D(b.group);
         this.plasmaBeamFx.splice(i, 1);
+        continue;
       }
+      const life = (now - b.startMs) / (b.until - b.startMs);
+      const fade = Math.max(0.08, 1 - Math.pow(life, 1.28));
+      const pulse = 0.9 + 0.1 * Math.sin(now * 0.018);
+      b.group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          const m = obj.material as THREE.MeshBasicMaterial & {
+            userData?: { baseOpacity?: number };
+          };
+          const base = m.userData?.baseOpacity ?? m.opacity;
+          m.opacity = Math.min(1, base * fade * pulse);
+        }
+      });
     }
     for (let i = this.flyingProjectiles.length - 1; i >= 0; i--) {
       const p = this.flyingProjectiles[i]!;

@@ -5515,6 +5515,33 @@ export class GameModel {
     return out;
   }
 
+  /**
+   * Pré-visualização do Tiro destruidor: feixe em linha recta até sair do mapa,
+   * na direção do hex `through` (deve estar no alcance e não ser o hex do herói).
+   */
+  tiroDestruidorAimPreview(
+    tq: number,
+    tr: number,
+  ): { keys: Set<string>; path: { q: number; r: number }[] } | null {
+    const h = this.currentHero();
+    if (!h || h.hp <= 0) return null;
+    if (h.heroClass !== "pistoleiro" || h.ultimateId !== "arauto_caos")
+      return null;
+    if (tq === h.q && tr === h.r) return null;
+    const d0 = hexDistance({ q: h.q, r: h.r }, { q: tq, r: tr });
+    const alc = this.effectiveAlcanceForHero(h);
+    if (d0 < 1 || d0 > alc) return null;
+    const beamHexes = hexBeamRayThroughGrid(
+      { q: h.q, r: h.r },
+      { q: tq, r: tr },
+      (qq, rr) => this.grid.has(axialKey(qq, rr)),
+      48,
+    );
+    if (beamHexes.length < 2) return null;
+    const keys = new Set(beamHexes.map((c) => axialKey(c.q, c.r)));
+    return { keys, path: beamHexes.map((c) => ({ q: c.q, r: c.r })) };
+  }
+
   getBasicAttackRangeHexKeys(): Set<string> {
     const h = this.currentHero();
     if (!h || h.hp <= 0) return new Set();
