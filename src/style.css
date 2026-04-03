@@ -7951,6 +7951,125 @@ select.forge-biome-sel option:disabled {
   opacity: 0.92;
 }
 
+/* [Dev] Editor de posição do elmo/capa/manoplas (localStorage). */
+.equipment-layout-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: #141018;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.equipment-layout-overlay__canvas {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+
+.equipment-layout-overlay__hud {
+  flex-shrink: 0;
+  max-height: 42vh;
+  overflow-y: auto;
+  padding: 0.65rem 1rem 0.85rem;
+  border-top: 1px solid rgba(200, 185, 160, 0.18);
+  background: rgba(12, 10, 18, 0.97);
+  color: rgba(230, 224, 210, 0.95);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.equipment-layout-overlay__title {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 0.35rem;
+}
+
+.equipment-layout-overlay__desc {
+  margin: 0 0 0.55rem;
+  opacity: 0.92;
+}
+
+.equipment-layout-overlay__desc kbd {
+  font-size: 0.88em;
+  padding: 0.1em 0.32em;
+  border-radius: 3px;
+  background: rgba(80, 72, 100, 0.55);
+  border: 1px solid rgba(200, 185, 160, 0.2);
+}
+
+.equipment-layout-overlay__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.equipment-layout-overlay__label {
+  font-weight: 700;
+  min-width: 3.2rem;
+  color: rgba(200, 185, 140, 0.95);
+}
+
+.equipment-layout-overlay__btn {
+  padding: 0.32rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid rgba(200, 185, 160, 0.28);
+  background: rgba(48, 42, 58, 0.9);
+  color: rgba(235, 228, 210, 0.98);
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+
+.equipment-layout-overlay__btn:hover {
+  border-color: rgba(212, 175, 85, 0.45);
+}
+
+.equipment-layout-overlay__btn--active {
+  border-color: #c9a227;
+  background: rgba(90, 72, 28, 0.55);
+}
+
+.equipment-layout-overlay__btn--primary {
+  border-color: rgba(100, 160, 120, 0.55);
+  background: rgba(28, 58, 42, 0.65);
+}
+
+.equipment-layout-overlay__btn--danger {
+  border-color: rgba(180, 80, 80, 0.45);
+  background: rgba(58, 28, 28, 0.5);
+}
+
+.equipment-layout-overlay__status {
+  margin: 0.2rem 0 0.1rem;
+  font-weight: 600;
+}
+
+.equipment-layout-overlay__pre {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  opacity: 0.88;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.equipment-layout-overlay__note {
+  margin: 0 0 0.5rem;
+  font-size: 0.72rem;
+  opacity: 0.8;
+}
+
+.equipment-layout-overlay__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .main-menu-version {
   position: fixed;
   top: 1rem;

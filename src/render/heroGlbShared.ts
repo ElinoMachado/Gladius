@@ -1,9 +1,33 @@
 import * as THREE from "three";
 
 export type HeroForgeAttachConfig = {
-  helmet: { y: number; scale: number; x?: number; z?: number };
-  cape: { x: number; y: number; z: number; rotX: number; scale: number };
-  manoplas: { y: number; z: number; scale: number; x?: number };
+  helmet: {
+    y: number;
+    scale: number;
+    x?: number;
+    z?: number;
+    rotX?: number;
+    rotY?: number;
+    rotZ?: number;
+  };
+  cape: {
+    x: number;
+    y: number;
+    z: number;
+    rotX: number;
+    scale: number;
+    rotY?: number;
+    rotZ?: number;
+  };
+  manoplas: {
+    y: number;
+    z: number;
+    scale: number;
+    x?: number;
+    rotX?: number;
+    rotY?: number;
+    rotZ?: number;
+  };
 };
 
 const _meshUnionScratch = new THREE.Box3();

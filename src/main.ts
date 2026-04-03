@@ -19,6 +19,11 @@ import { ShopStall3D } from "./render/ShopStall3D";
 import { CrystalShop3D } from "./render/CrystalShop3D";
 import { BunkerPreview3D } from "./render/BunkerPreview3D";
 import { ForgePiecePreview3D } from "./render/ForgePiecePreview3D";
+import {
+  EquipmentLayoutEditor,
+  type ForgeEditSlot,
+} from "./render/EquipmentLayoutEditor";
+import { clearAllForgeEquipmentLayoutPrefs } from "./render/forgeEquipmentLayoutPrefs";
 import type {
   GamePhase,
   HeroClassId,
@@ -788,6 +793,9 @@ function cancelGoldShopLayoutRaf(): void {
 let artifactCodex3d: ArtifactCodex3D | null = null;
 let enemyCompendium3d: EnemyPreview3D | null = null;
 let mainMenuSword3d: MainMenuSword3D | null = null;
+let equipmentLayoutEditor: EquipmentLayoutEditor | null = null;
+let equipmentLayoutResizeObserver: ResizeObserver | null = null;
+let equipmentLayoutEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
 /** Preview 3D do herói na loja de ouro (atributos à venda). */
 let goldShopHeroPreview3d: HeroPreview3D | null = null;
 /** Pré-visualizações 3D da tela Forja (descartadas ao repintar ou sair do menu). */
@@ -2010,6 +2018,192 @@ function showArenaLayoutEditHud(): void {
   }
 }
 
+function disposeEquipmentLayoutEditor(): void {
+  equipmentLayoutResizeObserver?.disconnect();
+  equipmentLayoutResizeObserver = null;
+  if (equipmentLayoutEscapeHandler) {
+    document.removeEventListener("keydown", equipmentLayoutEscapeHandler, true);
+    equipmentLayoutEscapeHandler = null;
+  }
+  equipmentLayoutEditor?.dispose();
+  equipmentLayoutEditor = null;
+  document.getElementById("equipment-layout-overlay")?.remove();
+}
+
+function refreshEquipmentLayoutHud(): void {
+  const ed = equipmentLayoutEditor;
+  if (!ed) return;
+  const slotLabel = document.getElementById("eq-layout-slot-label");
+  if (slotLabel) {
+    const names: Record<ForgeEditSlot, string> = {
+      helmet: "Elmo",
+      cape: "Capa",
+      manoplas: "Manoplas",
+    };
+    slotLabel.textContent = `Peça ativa: ${names[ed.selectedSlot]}`;
+  }
+  const vals = document.getElementById("eq-layout-values");
+  if (vals) {
+    const a = ed.getAttach();
+    const sk =
+      ed.selectedSlot === "helmet"
+        ? "helmet"
+        : ed.selectedSlot === "cape"
+          ? "cape"
+          : "manoplas";
+    const p = a[sk];
+    const x = "x" in p && p.x !== undefined ? p.x : 0;
+    const z = "z" in p && p.z !== undefined ? p.z : 0;
+    const rotX = "rotX" in p ? (p.rotX ?? 0) : 0;
+    const rotY = "rotY" in p ? (p.rotY ?? 0) : 0;
+    const rotZ = "rotZ" in p ? (p.rotZ ?? 0) : 0;
+    vals.textContent = `pos (${x.toFixed(3)}, ${p.y.toFixed(3)}, ${z.toFixed(3)})  escala ${p.scale.toFixed(3)}  rot (${rotX.toFixed(3)}, ${rotY.toFixed(3)}, ${rotZ.toFixed(3)})`;
+  }
+  const savedBadge = document.getElementById("eq-layout-saved-badge");
+  if (savedBadge) {
+    savedBadge.textContent = ed.hasSavedLayoutForCurrentClass()
+      ? "Esta classe tem layout guardado no jogo."
+      : "A usar posição automática (sem gravação para esta classe).";
+  }
+}
+
+/** [Dev] Editor de posição do elmo/capa/manoplas; grava em localStorage (`gladius-forge-equipment-layout-v1`). */
+function enterEquipmentLayoutEditFromMenu(): void {
+  if (!import.meta.env.DEV) return;
+  disposeEquipmentLayoutEditor();
+  hideGameTooltip();
+  disposeMenu3dPreviews();
+  mainMenuSword3d?.dispose();
+  mainMenuSword3d = null;
+  uiRoot.innerHTML = "";
+  const overlay = el(`
+    <div id="equipment-layout-overlay" class="equipment-layout-overlay">
+      <canvas id="equipment-layout-canvas" class="equipment-layout-overlay__canvas" tabindex="0"></canvas>
+      <div class="equipment-layout-overlay__hud" role="toolbar">
+        <strong class="equipment-layout-overlay__title">Ajustar equipamento</strong>
+        <p class="equipment-layout-overlay__desc">
+          Pré-visualização com três peças forjadas (nv3). Clica numa peça ou escolhe o botão. Arrasto esquerdo: plano horizontal;
+          <kbd>Shift</kbd>+arrasto: altura. Botão direito: orbitar. Roda: zoom.
+          Teclas: <kbd>WASD</kbd> plano, <kbd>Q</kbd>/<kbd>E</kbd> profundidade, <kbd>I</kbd>/<kbd>K</kbd> <kbd>J</kbd>/<kbd>L</kbd> <kbd>U</kbd>/<kbd>O</kbd> rotação, <kbd>[</kbd> <kbd>]</kbd> escala.
+        </p>
+        <div class="equipment-layout-overlay__row">
+          <span class="equipment-layout-overlay__label">Classe</span>
+          <button type="button" class="equipment-layout-overlay__btn" data-eq-class="gladiador">Gladiador</button>
+          <button type="button" class="equipment-layout-overlay__btn" data-eq-class="sacerdotisa">Sacerdotisa</button>
+          <button type="button" class="equipment-layout-overlay__btn" data-eq-class="pistoleiro">Pistoleiro</button>
+        </div>
+        <div class="equipment-layout-overlay__row">
+          <span class="equipment-layout-overlay__label">Peça</span>
+          <button type="button" class="equipment-layout-overlay__btn" data-eq-slot="helmet">Elmo</button>
+          <button type="button" class="equipment-layout-overlay__btn" data-eq-slot="cape">Capa</button>
+          <button type="button" class="equipment-layout-overlay__btn" data-eq-slot="manoplas">Manoplas</button>
+        </div>
+        <p id="eq-layout-slot-label" class="equipment-layout-overlay__status" aria-live="polite"></p>
+        <pre id="eq-layout-values" class="equipment-layout-overlay__pre"></pre>
+        <p id="eq-layout-saved-badge" class="equipment-layout-overlay__note"></p>
+        <div class="equipment-layout-overlay__actions">
+          <button type="button" class="equipment-layout-overlay__btn equipment-layout-overlay__btn--primary" id="eq-layout-save">Gravar esta classe</button>
+          <button type="button" class="equipment-layout-overlay__btn" id="eq-layout-reset-auto">Repor automático (só ecrã)</button>
+          <button type="button" class="equipment-layout-overlay__btn" id="eq-layout-clear-saved">Apagar gravação desta classe</button>
+          <button type="button" class="equipment-layout-overlay__btn equipment-layout-overlay__btn--danger" id="eq-layout-clear-all">Apagar todos os layouts</button>
+          <button type="button" class="equipment-layout-overlay__btn" id="eq-layout-done">Gravar e voltar ao menu (Esc)</button>
+        </div>
+      </div>
+    </div>
+  `);
+  document.getElementById("app")!.appendChild(overlay);
+  const canvas = overlay.querySelector(
+    "#equipment-layout-canvas",
+  ) as HTMLCanvasElement;
+  equipmentLayoutEditor = new EquipmentLayoutEditor(canvas, refreshEquipmentLayoutHud);
+  equipmentLayoutEditor.start();
+  refreshEquipmentLayoutHud();
+
+  const syncClassButtons = (hc: HeroClassId) => {
+    overlay.querySelectorAll("[data-eq-class]").forEach((b) => {
+      (b as HTMLButtonElement).classList.toggle(
+        "equipment-layout-overlay__btn--active",
+        (b as HTMLElement).dataset.eqClass === hc,
+      );
+    });
+  };
+  const syncSlotButtons = (sl: ForgeEditSlot) => {
+    overlay.querySelectorAll("[data-eq-slot]").forEach((b) => {
+      (b as HTMLButtonElement).classList.toggle(
+        "equipment-layout-overlay__btn--active",
+        (b as HTMLElement).dataset.eqSlot === sl,
+      );
+    });
+  };
+
+  const bindClass = (hc: HeroClassId) => {
+    equipmentLayoutEditor?.saveCurrentClassToStorage();
+    equipmentLayoutEditor?.setHeroClass(hc);
+    syncClassButtons(hc);
+    refreshEquipmentLayoutHud();
+  };
+  const bindSlot = (sl: ForgeEditSlot) => {
+    equipmentLayoutEditor?.setSelectedSlot(sl);
+    syncSlotButtons(sl);
+    refreshEquipmentLayoutHud();
+  };
+
+  overlay.querySelectorAll("[data-eq-class]").forEach((b) => {
+    b.addEventListener("click", () => {
+      bindClass((b as HTMLElement).dataset.eqClass as HeroClassId);
+    });
+  });
+  overlay.querySelectorAll("[data-eq-slot]").forEach((b) => {
+    b.addEventListener("click", () => {
+      bindSlot((b as HTMLElement).dataset.eqSlot as ForgeEditSlot);
+    });
+  });
+  overlay.querySelector("#eq-layout-save")!.addEventListener("click", () => {
+    equipmentLayoutEditor?.saveCurrentClassToStorage();
+    refreshEquipmentLayoutHud();
+  });
+  overlay.querySelector("#eq-layout-reset-auto")!.addEventListener("click", () => {
+    equipmentLayoutEditor?.resetCurrentClassToAuto();
+    refreshEquipmentLayoutHud();
+  });
+  overlay.querySelector("#eq-layout-clear-saved")!.addEventListener("click", () => {
+    equipmentLayoutEditor?.clearSavedForCurrentClass();
+    refreshEquipmentLayoutHud();
+  });
+  overlay.querySelector("#eq-layout-clear-all")!.addEventListener("click", () => {
+    if (!confirm("Apagar posições guardadas dos três heróis no localStorage?")) return;
+    clearAllForgeEquipmentLayoutPrefs();
+    equipmentLayoutEditor?.resetCurrentClassToAuto();
+    refreshEquipmentLayoutHud();
+  });
+  const finish = (): void => {
+    equipmentLayoutEditor?.saveCurrentClassToStorage();
+    disposeEquipmentLayoutEditor();
+    showMainMenu();
+  };
+  overlay.querySelector("#eq-layout-done")!.addEventListener("click", finish);
+
+  syncClassButtons("gladiador");
+  syncSlotButtons("helmet");
+
+  equipmentLayoutResizeObserver = new ResizeObserver(() => {
+    equipmentLayoutEditor?.resize();
+  });
+  equipmentLayoutResizeObserver.observe(overlay);
+
+  equipmentLayoutEscapeHandler = (e: KeyboardEvent) => {
+    if (e.code !== "Escape" || !equipmentLayoutEditor) return;
+    e.preventDefault();
+    finish();
+  };
+  document.addEventListener("keydown", equipmentLayoutEscapeHandler, true);
+
+  canvas.focus();
+  requestAnimationFrame(() => {
+    equipmentLayoutEditor?.resize();
+  });
+}
+
 function showMainMenu(): void {
   model.devSandboxMode = false;
   hideGameTooltip();
@@ -2020,7 +2214,8 @@ function showMainMenu(): void {
   const devMenuExtras = import.meta.env.DEV
     ? `<button type="button" class="main-menu-link main-menu-link--sandbox" data-action="dev-sandbox">Modo sandbox (testes)</button>
           <button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-reset-fresh">[Dev] Estado inicial (apagar save)</button>
-          <button type="button" class="main-menu-link main-menu-link--dev" data-action="arena-layout" title="Coliseu 3D e câmara; gravado em localStorage. Esc grava e volta ao menu.">[Dev] Ajustar cena</button>`
+          <button type="button" class="main-menu-link main-menu-link--dev" data-action="arena-layout" title="Coliseu 3D e câmara; gravado em localStorage. Esc grava e volta ao menu.">[Dev] Ajustar cena</button>
+          <button type="button" class="main-menu-link main-menu-link--dev" data-action="equipment-layout" title="Elmo, capa e manoplas por herói; gravado em localStorage.">[Dev] Ajustar equipamento</button>`
     : "";
   const s = el(`
     <div class="main-menu-screen">
@@ -2082,6 +2277,10 @@ function showMainMenu(): void {
           if (!import.meta.env.DEV) break;
           view.enterArenaLayoutEditFromMenu(canvas);
           render();
+          break;
+        case "equipment-layout":
+          if (!import.meta.env.DEV) break;
+          enterEquipmentLayoutEditFromMenu();
           break;
         case "crystal":
           model.phase = "crystal_shop";

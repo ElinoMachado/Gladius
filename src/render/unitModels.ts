@@ -4,7 +4,10 @@ import {
   cloneHeroBodyFromGlb,
   getHeroGlbForgeAttach,
 } from "./heroGlbLoader";
+import { getSanitizedForgeEquipmentAttachForClass } from "./forgeEquipmentLayoutPrefs";
+import type { HeroForgeAttachConfig } from "./heroGlbShared";
 import { resolveHeroForgeAttachFromRig } from "./heroRigAttach";
+import { applyHeroSelectionPreviewAnimations } from "./heroUnitAnimations";
 import { buildEnemyBody3D } from "./enemyModels3d";
 import { forgeVisualKey, resolveEquippedForgeLoadout } from "../game/forge";
 import type { ForgeEssenceId, ForgeHeroLoadout, HeroClassId } from "../game/types";
@@ -86,14 +89,7 @@ const HERO_GLB_TARGET_H: Record<HeroClassId, number> = {
   pistoleiro: 1.42,
 };
 
-const FORGE_ATTACH: Record<
-  HeroClassId,
-  {
-    helmet: { y: number; scale: number; x?: number; z?: number };
-    cape: { x: number; y: number; z: number; rotX: number; scale: number };
-    manoplas: { y: number; z: number; scale: number; x?: number };
-  }
-> = {
+const FORGE_ATTACH: Record<HeroClassId, HeroForgeAttachConfig> = {
   pistoleiro: {
     helmet: { y: 1.28, scale: 0.5 },
     /* Topo da capa ~ombros (caixa torso ~1,18); z atrás da caixa. */
@@ -114,6 +110,54 @@ const FORGE_ATTACH: Record<
   },
 };
 
+/** Preview do editor de equipamento: três peças nv3 (malha visível em todos os slots). */
+export const FORGE_EDITOR_PREVIEW_LOADOUT: ForgeHeroLoadout = {
+  helmoEquipped: "vulcanico",
+  capaEquipped: "vulcanico",
+  manoplasEquipped: "vulcanico",
+  helmoByEssence: { vulcanico: 3 },
+  capaByEssence: { vulcanico: 3 },
+  manoplasByEssence: { vulcanico: 3 },
+};
+
+export function computeAutoForgeAttachForGlbBody(
+  heroClass: HeroClassId,
+  root: THREE.Group,
+  glb: THREE.Object3D,
+): GladiadorForgeAttachConfig {
+  return (
+    resolveHeroForgeAttachFromRig(
+      root,
+      glb,
+      getHeroGlbForgeAttach(heroClass),
+      HERO_GLB_TARGET_H[heroClass],
+    ) ??
+    getHeroGlbForgeAttach(heroClass) ??
+    FORGE_ATTACH[heroClass]
+  );
+}
+
+/** Sem GLB carregado: valores do proxy procedural (editor / fallback). */
+export function getForgeAttachStaticFallback(
+  heroClass: HeroClassId,
+): GladiadorForgeAttachConfig {
+  return FORGE_ATTACH[heroClass];
+}
+
+export function buildHeroEquipmentEditorRoot(
+  heroClass: HeroClassId,
+  displayColor: number,
+  attach: GladiadorForgeAttachConfig,
+): THREE.Group {
+  const root = new THREE.Group();
+  const glb = cloneHeroBodyFromGlb(heroClass, displayColor);
+  if (glb) root.add(glb);
+  root.updateMatrixWorld(true);
+  addForgeMeshes(root, heroClass, FORGE_EDITOR_PREVIEW_LOADOUT, stdMat, attach);
+  if (glb) applyHeroSelectionPreviewAnimations(glb, heroClass);
+  return root;
+}
+
 function addForgeMeshes(
   root: THREE.Group,
   heroClass: HeroClassId,
@@ -130,15 +174,26 @@ function addForgeMeshes(
     const h = buildHelmetForgeDetail(b(R.helmo.biome), R.helmo.level);
     h.scale.setScalar(A.helmet.scale);
     h.position.set(A.helmet.x ?? 0, A.helmet.y, A.helmet.z ?? 0);
+    h.rotation.set(
+      A.helmet.rotX ?? 0,
+      A.helmet.rotY ?? 0,
+      A.helmet.rotZ ?? 0,
+    );
     h.userData.role = "forge";
+    h.userData.forgeSlot = "helmet";
     root.add(h);
   }
   if (R.capa) {
     const c = buildCapeForgeDetail(b(R.capa.biome), R.capa.level);
     c.scale.setScalar(A.cape.scale);
     c.position.set(A.cape.x, A.cape.y, A.cape.z);
-    c.rotation.x = A.cape.rotX;
+    c.rotation.set(
+      A.cape.rotX,
+      A.cape.rotY ?? 0,
+      A.cape.rotZ ?? 0,
+    );
     c.userData.role = "forge";
+    c.userData.forgeSlot = "cape";
     c.traverse((o) => {
       if (o instanceof THREE.Mesh) o.renderOrder = 1;
     });
@@ -151,7 +206,13 @@ function addForgeMeshes(
     );
     m.scale.setScalar(A.manoplas.scale);
     m.position.set(A.manoplas.x ?? 0, A.manoplas.y, A.manoplas.z);
+    m.rotation.set(
+      A.manoplas.rotX ?? 0,
+      A.manoplas.rotY ?? 0,
+      A.manoplas.rotZ ?? 0,
+    );
     m.userData.role = "forge";
+    m.userData.forgeSlot = "manoplas";
     m.traverse((o) => {
       if (o instanceof THREE.Mesh) o.renderOrder = 2;
     });
@@ -174,7 +235,7 @@ function addHeroGlbIfLoaded(
   if (!glb) return false;
   root.add(glb);
   root.updateMatrixWorld(true);
-  const attach =
+  const autoAttach =
     resolveHeroForgeAttachFromRig(
       root,
       glb,
@@ -183,6 +244,11 @@ function addHeroGlbIfLoaded(
     ) ??
     getHeroGlbForgeAttach(heroClass) ??
     FORGE_ATTACH[heroClass];
+  const savedAttach = getSanitizedForgeEquipmentAttachForClass(
+    heroClass,
+    autoAttach,
+  );
+  const attach = savedAttach ?? autoAttach;
   addForgeMeshes(root, heroClass, forgeLoadout, mat, attach);
   if (forma?.formaFinal && forma.ultimateId) {
     applyFormaFinalAugment(
