@@ -227,7 +227,6 @@ export interface Unit extends CoreStats {
 
 export type GamePhase =
   | "main_menu"
-  | "scene_layout"
   | "crystal_shop"
   | "setup_heroes"
   | "setup_biomes"

@@ -33,7 +33,10 @@ import {
   cloneArenaColiseum,
   isArenaColiseumLoaded,
 } from "./arenaColiseumGlb";
-import type { SceneLayoutPrefs } from "../game/sceneLayoutPrefs";
+import {
+  type SceneLayoutPrefs,
+  saveSceneLayoutPrefs,
+} from "../game/sceneLayoutPrefs";
 import {
   connectToSfxOut,
   ensureAudioContext,
@@ -293,16 +296,16 @@ export class GameRenderer {
   private panDragLastAppliedClientX = 0;
   private panDragLastAppliedClientY = 0;
   private suppressCanvasClick = false;
-  private sceneLayoutEditorActive = false;
+  /** Menu principal: permite iniciar sessão ao clicar no coliseu. */
+  private arenaLayoutEditEligible = false;
+  /** Sessão de ajuste (clique no coliseu no menu); Esc grava e fecha. */
+  private arenaLayoutEditActive = false;
+  /** `coliseum`: WASD + arrasto no modelo · `camera`: arrasto, WASD, Q/E (Espaço alterna). */
+  private layoutSubMode: "coliseum" | "camera" = "coliseum";
   /** Em combate/menu: usar `freeCamera` em vez da ortográfica (exceto durante cometa). */
   private usePersistentFreeCamera = false;
-  private editorSnapshot: {
-    mount: THREE.Vector3;
-    camPos: THREE.Vector3;
-    camQuat: THREE.Quaternion;
-    fov: number;
-    usePersp: boolean;
-  } | null = null;
+  /** Se o jogador entrou no modo câmara ou alterou zoom/rotação; senão só gravamos o coliseu. */
+  private arenaLayoutCameraPersonalized = false;
   private readonly orbitTarget = new THREE.Vector3(0, 0, 0);
   private orbitRadius = 175;
   private orbitTheta = 0.62;
@@ -318,12 +321,7 @@ export class GameRenderer {
   private readonly editorLastGround = new THREE.Vector3();
   private readonly editorScratchVec3 = new THREE.Vector3();
   private readonly editorScratchVec3B = new THREE.Vector3();
-  private editorOnPointerDown?: (e: PointerEvent) => void;
-  private editorOnPointerMove?: (e: PointerEvent) => void;
-  private editorOnPointerUp?: (e: PointerEvent) => void;
-  private editorOnWheel?: (e: WheelEvent) => void;
-  /** Se true, o próximo `collectSceneLayoutPrefs` no Guardar grava `freeCamera: null`. */
-  private sceneLayoutNextSaveWithoutFreeCam = false;
+  private arenaLayoutPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly ndcGroundCorners = [
     new THREE.Vector2(-1, -1),
     new THREE.Vector2(1, -1),
@@ -375,6 +373,7 @@ export class GameRenderer {
     window.addEventListener("resize", () => this.resize(canvas));
     this.resize(canvas);
     this.attachCameraControls(canvas);
+    this.attachArenaLayoutControls(canvas);
   }
 
   setCameraInputEnabled(enabled: boolean): void {
@@ -392,13 +391,13 @@ export class GameRenderer {
   /** Câmara usada para render e picking no ecrã atual. */
   private getRenderCamera(): THREE.Camera {
     if (this.cometaArcanoCinematic) return this.camera;
-    if (this.sceneLayoutEditorActive || this.usePersistentFreeCamera)
+    if (this.arenaLayoutEditActive || this.usePersistentFreeCamera)
       return this.freeCamera;
     return this.camera;
   }
 
-  isSceneLayoutEditorActive(): boolean {
-    return this.sceneLayoutEditorActive;
+  isArenaLayoutEditActive(): boolean {
+    return this.arenaLayoutEditActive;
   }
 
   /** Se true, a câmara guardada (perspetiva) está ativa no jogo; pan/zoom de combate ficam desligados. */
@@ -418,7 +417,7 @@ export class GameRenderer {
    * @param alignArena — se true, roda a arena para alinhar o bioma desse hex à câmera (ex.: herói).
    */
   focusOnAxial(q: number, r: number, alignArena = false): void {
-    if (this.usePersistentFreeCamera && !this.sceneLayoutEditorActive) {
+    if (this.usePersistentFreeCamera && !this.arenaLayoutEditActive) {
       if (alignArena) this.setArenaYawFromAxial(q, r);
       return;
     }
@@ -429,7 +428,7 @@ export class GameRenderer {
 
   /** Centraliza na hora (sem lerp), ex.: início do turno do jogador; alinha bioma ao herói. */
   snapCameraToAxial(q: number, r: number): void {
-    if (this.usePersistentFreeCamera && !this.sceneLayoutEditorActive) {
+    if (this.usePersistentFreeCamera && !this.arenaLayoutEditActive) {
       this.setArenaYawFromAxial(q, r);
       return;
     }
@@ -1978,7 +1977,7 @@ export class GameRenderer {
   }
 
   private updateFocusLerp(dt: number): void {
-    if (this.usePersistentFreeCamera && !this.sceneLayoutEditorActive) return;
+    if (this.usePersistentFreeCamera && !this.arenaLayoutEditActive) return;
     if (!this.focusTarget || !this.cameraInputEnabled) return;
     if (this.panDragMoved) return;
     if (this.keysDown.size > 0) {
@@ -1999,7 +1998,7 @@ export class GameRenderer {
   }
 
   private updateCameraPan(dt: number): void {
-    if (this.usePersistentFreeCamera && !this.sceneLayoutEditorActive) return;
+    if (this.usePersistentFreeCamera && !this.arenaLayoutEditActive) return;
     if (!this.cameraInputEnabled || !this.domCanvas) return;
 
     /** Câmera alinhada ao pan atual para o raycast bater com o frame visível. */
@@ -3670,6 +3669,7 @@ export class GameRenderer {
     this.updateFlyingHeroPerFrameMotion(performance.now());
     this.updateFlyingHeroGroundShadows();
     this.updateShieldBubblePulse(dt);
+    this.updateArenaLayoutEditSession(dt);
     if (!cometOn) {
       this.updateFocusLerp(dt);
       if (!this.panDragMoved) {
@@ -3682,7 +3682,7 @@ export class GameRenderer {
     /** Durante arrasto com o rato, não aplicar clamp aqui: o `pointermove` já mexe no pan e o clamp puxava de volta → sacudidela. */
     const draggingCameraPan = this.panPointerDown && this.panDragMoved;
     const freeRig =
-      this.usePersistentFreeCamera || this.sceneLayoutEditorActive;
+      this.usePersistentFreeCamera || this.arenaLayoutEditActive;
     if (!draggingCameraPan && !cometOn && !freeRig) {
       this.clampPanIntoColiseum();
       this.applyCameraPose();
@@ -3766,7 +3766,7 @@ export class GameRenderer {
 
   collectSceneLayoutPrefs(): SceneLayoutPrefs {
     const coliseum = this.getColiseumOffsetForPrefs();
-    if (this.sceneLayoutNextSaveWithoutFreeCam) {
+    if (!this.arenaLayoutCameraPersonalized) {
       return { coliseum, freeCamera: null };
     }
     const freeCamera = {
@@ -3786,68 +3786,12 @@ export class GameRenderer {
     return { coliseum, freeCamera };
   }
 
-  /** Próximo guardar no editor grava só coliseu + câmara ortográfica no jogo. */
-  setSceneLayoutNextSaveWithoutFreeCamera(v: boolean): void {
-    this.sceneLayoutNextSaveWithoutFreeCam = v;
-  }
-
-  enterSceneLayoutEditor(canvas: HTMLCanvasElement): void {
-    if (this.sceneLayoutEditorActive) return;
-    this.sceneLayoutNextSaveWithoutFreeCam = false;
-    this.sceneLayoutEditorActive = true;
-    this.applyCameraPose();
-    if (!this.usePersistentFreeCamera) {
-      this.freeCamera.position.copy(this.camera.position);
-      this.freeCamera.quaternion.copy(this.camera.quaternion);
+  /** Menu principal: permite clicar no coliseu para ajustar cena. */
+  setArenaLayoutEditEligible(eligible: boolean): void {
+    this.arenaLayoutEditEligible = eligible;
+    if (!eligible && this.arenaLayoutEditActive) {
+      this.endArenaLayoutEditSession();
     }
-    this.resize(canvas);
-    this.syncEditorOrbitFromFreeCamera();
-    const m = this.arenaColiseumMount;
-    this.editorSnapshot = {
-      mount: m ? m.position.clone() : new THREE.Vector3(),
-      camPos: this.freeCamera.position.clone(),
-      camQuat: this.freeCamera.quaternion.clone(),
-      fov: this.freeCamera.fov,
-      usePersp: this.usePersistentFreeCamera,
-    };
-    this.editorDragMode = "none";
-    this.attachSceneLayoutEditorListeners(canvas);
-  }
-
-  exitSceneLayoutEditor(canvas: HTMLCanvasElement, save: boolean): void {
-    if (!this.sceneLayoutEditorActive) return;
-    this.detachSceneLayoutEditorListeners(canvas);
-    this.sceneLayoutEditorActive = false;
-    if (!save && this.editorSnapshot) {
-      const s = this.editorSnapshot;
-      if (this.arenaColiseumMount) {
-        this.arenaColiseumMount.position.copy(s.mount);
-      }
-      this.freeCamera.position.copy(s.camPos);
-      this.freeCamera.quaternion.copy(s.camQuat);
-      this.freeCamera.fov = s.fov;
-      this.freeCamera.updateProjectionMatrix();
-      this.usePersistentFreeCamera = s.usePersp;
-    }
-    this.editorSnapshot = null;
-    this.editorDragMode = "none";
-  }
-
-  /** No editor: repor câmara livre a partir da ortográfica de jogo. */
-  resetSceneLayoutCameraToGameDefaults(canvas: HTMLCanvasElement): void {
-    if (!this.sceneLayoutEditorActive) return;
-    this.applyCameraPose();
-    this.freeCamera.position.copy(this.camera.position);
-    this.freeCamera.quaternion.copy(this.camera.quaternion);
-    this.freeCamera.updateProjectionMatrix();
-    this.resize(canvas);
-    this.syncEditorOrbitFromFreeCamera();
-  }
-
-  /** No editor: repor deslocamento do coliseu. */
-  resetColiseumOffsetInEditor(): void {
-    if (!this.sceneLayoutEditorActive || !this.arenaColiseumMount) return;
-    this.arenaColiseumMount.position.set(0, 0, 0);
   }
 
   /** Apaga câmara personalizada guardada (volta à ortográfica no jogo). */
@@ -3894,22 +3838,26 @@ export class GameRenderer {
     };
   }
 
-  private pickColiseumForEditor(ndcX: number, ndcY: number): boolean {
+  private pickColiseumWithCamera(
+    cam: THREE.Camera,
+    ndcX: number,
+    ndcY: number,
+  ): boolean {
     if (!this.arenaColiseumMount) return false;
     const ray = new THREE.Raycaster();
-    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.freeCamera);
-    const hits = ray.intersectObject(this.arenaColiseumMount, true);
-    return hits.length > 0;
+    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
+    return ray.intersectObject(this.arenaColiseumMount, true).length > 0;
   }
 
-  private intersectGroundYForEditor(
+  private intersectGroundWithCamera(
+    cam: THREE.Camera,
     ndcX: number,
     ndcY: number,
     planeY: number,
     out: THREE.Vector3,
   ): boolean {
     const ray = new THREE.Raycaster();
-    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.freeCamera);
+    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), cam);
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY);
     return ray.ray.intersectPlane(plane, out) !== null;
   }
@@ -3925,37 +3873,258 @@ export class GameRenderer {
     mount.position.z += lz;
   }
 
-  private attachSceneLayoutEditorListeners(canvas: HTMLCanvasElement): void {
-    this.editorOnPointerDown = (e: PointerEvent) => {
-      if (e.button !== 0 && e.button !== 2) return;
+  private beginArenaLayoutSession(canvas: HTMLCanvasElement): void {
+    if (this.arenaLayoutEditActive) return;
+    this.arenaLayoutEditActive = true;
+    this.layoutSubMode = "coliseum";
+    this.arenaLayoutCameraPersonalized = this.usePersistentFreeCamera;
+    this.editorDragMode = "none";
+    this.applyCameraPose();
+    if (!this.usePersistentFreeCamera) {
+      this.freeCamera.position.copy(this.camera.position);
+      this.freeCamera.quaternion.copy(this.camera.quaternion);
+    }
+    this.syncEditorOrbitFromFreeCamera();
+    this.resize(canvas);
+    this.scheduleArenaLayoutPersist();
+  }
+
+  private endArenaLayoutEditSession(): void {
+    if (!this.arenaLayoutEditActive) return;
+    this.arenaLayoutEditActive = false;
+    this.layoutSubMode = "coliseum";
+    this.editorDragMode = "none";
+    for (const c of ["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"]) {
+      this.keysDown.delete(c);
+    }
+    if (this.arenaLayoutPersistTimer !== null) {
+      clearTimeout(this.arenaLayoutPersistTimer);
+      this.arenaLayoutPersistTimer = null;
+    }
+    const p = this.collectSceneLayoutPrefs();
+    saveSceneLayoutPrefs(p);
+    this.applySceneLayoutPrefs(p);
+  }
+
+  private scheduleArenaLayoutPersist(): void {
+    if (this.arenaLayoutPersistTimer !== null) {
+      clearTimeout(this.arenaLayoutPersistTimer);
+    }
+    this.arenaLayoutPersistTimer = window.setTimeout(() => {
+      this.arenaLayoutPersistTimer = null;
+      if (!this.arenaLayoutEditActive) return;
+      const p = this.collectSceneLayoutPrefs();
+      saveSceneLayoutPrefs(p);
+      this.applySceneLayoutPrefs(p);
+    }, 320);
+  }
+
+  private updateArenaLayoutEditSession(dt: number): void {
+    if (!this.arenaLayoutEditActive) return;
+    if (this.layoutSubMode === "coliseum" && this.arenaColiseumMount) {
+      const sp = 17 * dt;
+      const ix =
+        (this.keysDown.has("KeyD") ? 1 : 0) -
+        (this.keysDown.has("KeyA") ? 1 : 0);
+      const iz =
+        (this.keysDown.has("KeyS") ? 1 : 0) -
+        (this.keysDown.has("KeyW") ? 1 : 0);
+      if (ix !== 0 || iz !== 0) {
+        this.editorScratchVec3.set(ix * sp, 0, iz * sp);
+        this.applyWorldDeltaToColiseumMountXZ(this.editorScratchVec3);
+        this.scheduleArenaLayoutPersist();
+      }
+    } else if (this.layoutSubMode === "camera") {
+      const sp = 34 * dt;
+      const iw =
+        (this.keysDown.has("KeyW") ? 1 : 0) -
+        (this.keysDown.has("KeyS") ? 1 : 0);
+      const id =
+        (this.keysDown.has("KeyD") ? 1 : 0) -
+        (this.keysDown.has("KeyA") ? 1 : 0);
+      const rot = 1.15 * dt;
+      let moved = false;
+      if (iw !== 0 || id !== 0) {
+        this.freeCamera.updateMatrixWorld(true);
+        const forward = this.editorScratchVec3
+          .set(0, 0, -1)
+          .applyQuaternion(this.freeCamera.quaternion);
+        forward.y = 0;
+        if (forward.lengthSq() > 1e-8) forward.normalize();
+        const right = this.editorScratchVec3B
+          .set(1, 0, 0)
+          .applyQuaternion(this.freeCamera.quaternion);
+        right.y = 0;
+        if (right.lengthSq() > 1e-8) right.normalize();
+        this.orbitTarget.addScaledVector(forward, iw * sp);
+        this.orbitTarget.addScaledVector(right, id * sp);
+        moved = true;
+      }
+      if (this.keysDown.has("KeyQ")) {
+        this.orbitTheta += rot;
+        moved = true;
+      }
+      if (this.keysDown.has("KeyE")) {
+        this.orbitTheta -= rot;
+        moved = true;
+      }
+      if (moved) {
+        this.updateFreeCameraFromOrbit();
+        this.scheduleArenaLayoutPersist();
+      }
+    }
+  }
+
+  private attachArenaLayoutControls(canvas: HTMLCanvasElement): void {
+    const layoutKeys = new Set([
+      "KeyW",
+      "KeyA",
+      "KeyS",
+      "KeyD",
+      "KeyQ",
+      "KeyE",
+    ]);
+
+    window.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) return;
+      if (this.arenaLayoutEditActive && e.code === "Escape" && !e.repeat) {
+        e.preventDefault();
+        this.endArenaLayoutEditSession();
+        return;
+      }
+      if (!this.arenaLayoutEditActive) return;
+      if (e.code === "Space" && !e.repeat) {
+        e.preventDefault();
+        if (this.layoutSubMode === "coliseum") {
+          this.layoutSubMode = "camera";
+          this.arenaLayoutCameraPersonalized = true;
+        } else {
+          this.layoutSubMode = "coliseum";
+        }
+        return;
+      }
+      if (layoutKeys.has(e.code)) {
+        e.preventDefault();
+        this.keysDown.add(e.code);
+      }
+    });
+    window.addEventListener("keyup", (e: KeyboardEvent) => {
+      if (!this.arenaLayoutEditActive) return;
+      if (layoutKeys.has(e.code)) this.keysDown.delete(e.code);
+    });
+
+    const onDown = (e: PointerEvent) => {
+      if (isTypingTarget(e.target)) return;
+      if (!this.arenaLayoutEditEligible && !this.arenaLayoutEditActive) return;
+
+      if (
+        !this.arenaLayoutEditActive &&
+        this.arenaLayoutEditEligible &&
+        e.button === 0
+      ) {
+        const ndc0 = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
+        if (!this.pickColiseumWithCamera(this.camera, ndc0.x, ndc0.y)) return;
+        this.beginArenaLayoutSession(canvas);
+        this.editorLastClientX = e.clientX;
+        this.editorLastClientY = e.clientY;
+        e.preventDefault();
+        e.stopPropagation();
+        const ndc = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
+        this.editorDragMode = "none";
+        if (
+          this.pickColiseumWithCamera(this.freeCamera, ndc.x, ndc.y) &&
+          this.arenaColiseumMount
+        ) {
+          if (e.shiftKey) {
+            this.editorDragMode = "coliseum_y";
+          } else if (
+            this.intersectGroundWithCamera(
+              this.freeCamera,
+              ndc.x,
+              ndc.y,
+              0,
+              this.editorLastGround,
+            )
+          ) {
+            this.editorDragMode = "coliseum_xz";
+          }
+        }
+        if (this.editorDragMode !== "none") {
+          try {
+            canvas.setPointerCapture(e.pointerId);
+          } catch {
+            /* ignore */
+          }
+        }
+        return;
+      }
+
+      if (!this.arenaLayoutEditActive) return;
+
       e.preventDefault();
-      const ndc = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
+      e.stopPropagation();
+
       this.editorLastClientX = e.clientX;
       this.editorLastClientY = e.clientY;
-      if (e.button === 2) {
-        this.editorDragMode = "pan";
-      } else if (
-        this.pickColiseumForEditor(ndc.x, ndc.y) &&
+      const ndc = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
+
+      if (this.layoutSubMode === "camera") {
+        if (e.button === 0) {
+          this.editorDragMode = "orbit";
+        } else if (e.button === 2) {
+          this.editorDragMode = "pan";
+        } else {
+          this.editorDragMode = "none";
+        }
+        if (e.button === 0 || e.button === 2) {
+          try {
+            canvas.setPointerCapture(e.pointerId);
+          } catch {
+            /* ignore */
+          }
+        }
+        return;
+      }
+
+      if (e.button !== 0) {
+        this.editorDragMode = "none";
+        return;
+      }
+      if (
+        this.pickColiseumWithCamera(this.freeCamera, ndc.x, ndc.y) &&
         this.arenaColiseumMount
       ) {
         if (e.shiftKey) {
           this.editorDragMode = "coliseum_y";
-        } else if (this.intersectGroundYForEditor(ndc.x, ndc.y, 0, this.editorLastGround)) {
+        } else if (
+          this.intersectGroundWithCamera(
+            this.freeCamera,
+            ndc.x,
+            ndc.y,
+            0,
+            this.editorLastGround,
+          )
+        ) {
           this.editorDragMode = "coliseum_xz";
         } else {
-          this.editorDragMode = "orbit";
+          this.editorDragMode = "none";
         }
       } else {
-        this.editorDragMode = "orbit";
+        this.editorDragMode = "none";
       }
-      try {
-        canvas.setPointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
+      if (this.editorDragMode !== "none") {
+        try {
+          canvas.setPointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
       }
     };
-    this.editorOnPointerMove = (e: PointerEvent) => {
-      if (this.editorDragMode === "none") return;
+
+    const onMove = (e: PointerEvent) => {
+      if (!this.arenaLayoutEditActive || this.editorDragMode === "none") return;
+      e.preventDefault();
+      e.stopPropagation();
       const ndc = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
       const dx = e.clientX - this.editorLastClientX;
       const dy = e.clientY - this.editorLastClientY;
@@ -3963,7 +4132,6 @@ export class GameRenderer {
       this.editorLastClientY = e.clientY;
       switch (this.editorDragMode) {
         case "orbit": {
-          this.sceneLayoutNextSaveWithoutFreeCam = false;
           this.orbitTheta -= dx * 0.0055;
           this.orbitPhi = THREE.MathUtils.clamp(
             this.orbitPhi - dy * 0.0055,
@@ -3971,10 +4139,10 @@ export class GameRenderer {
             Math.PI - 0.1,
           );
           this.updateFreeCameraFromOrbit();
+          this.scheduleArenaLayoutPersist();
           break;
         }
         case "pan": {
-          this.sceneLayoutNextSaveWithoutFreeCam = false;
           const k = this.orbitRadius * 0.0016;
           this.freeCamera.updateMatrixWorld(true);
           const right = this.editorScratchVec3
@@ -3986,23 +4154,32 @@ export class GameRenderer {
           this.orbitTarget.addScaledVector(right, -dx * k);
           this.orbitTarget.addScaledVector(up, dy * k);
           this.updateFreeCameraFromOrbit();
+          this.scheduleArenaLayoutPersist();
           break;
         }
         case "coliseum_xz": {
           const hit = this.editorScratchVec3;
           if (
-            this.intersectGroundYForEditor(ndc.x, ndc.y, 0, hit) &&
+            this.intersectGroundWithCamera(
+              this.freeCamera,
+              ndc.x,
+              ndc.y,
+              0,
+              hit,
+            ) &&
             this.arenaColiseumMount
           ) {
             const dw = hit.clone().sub(this.editorLastGround);
             this.editorLastGround.copy(hit);
             this.applyWorldDeltaToColiseumMountXZ(dw);
+            this.scheduleArenaLayoutPersist();
           }
           break;
         }
         case "coliseum_y": {
           if (this.arenaColiseumMount) {
             this.arenaColiseumMount.position.y -= dy * 0.065;
+            this.scheduleArenaLayoutPersist();
           }
           break;
         }
@@ -4010,7 +4187,9 @@ export class GameRenderer {
           break;
       }
     };
-    this.editorOnPointerUp = (e: PointerEvent) => {
+
+    const onUp = (e: PointerEvent) => {
+      if (!this.arenaLayoutEditActive) return;
       if (e.button !== 0 && e.button !== 2) return;
       this.editorDragMode = "none";
       try {
@@ -4019,10 +4198,16 @@ export class GameRenderer {
         /* ignore */
       }
     };
-    this.editorOnWheel = (e: WheelEvent) => {
-      if (!this.sceneLayoutEditorActive) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (
+        !this.arenaLayoutEditActive ||
+        this.layoutSubMode !== "camera"
+      )
+        return;
       e.preventDefault();
-      this.sceneLayoutNextSaveWithoutFreeCam = false;
+      e.stopPropagation();
+      this.arenaLayoutCameraPersonalized = true;
       const factor = Math.exp(-e.deltaY * 0.0014);
       this.orbitRadius = THREE.MathUtils.clamp(
         this.orbitRadius * factor,
@@ -4030,28 +4215,25 @@ export class GameRenderer {
         540,
       );
       this.updateFreeCameraFromOrbit();
+      this.scheduleArenaLayoutPersist();
     };
-    canvas.addEventListener("pointerdown", this.editorOnPointerDown);
-    canvas.addEventListener("pointermove", this.editorOnPointerMove);
-    canvas.addEventListener("pointerup", this.editorOnPointerUp);
-    canvas.addEventListener("pointercancel", this.editorOnPointerUp);
-    canvas.addEventListener("wheel", this.editorOnWheel, { passive: false });
-  }
 
-  private detachSceneLayoutEditorListeners(canvas: HTMLCanvasElement): void {
-    if (this.editorOnPointerDown)
-      canvas.removeEventListener("pointerdown", this.editorOnPointerDown);
-    if (this.editorOnPointerMove)
-      canvas.removeEventListener("pointermove", this.editorOnPointerMove);
-    if (this.editorOnPointerUp) {
-      canvas.removeEventListener("pointerup", this.editorOnPointerUp);
-      canvas.removeEventListener("pointercancel", this.editorOnPointerUp);
-    }
-    if (this.editorOnWheel)
-      canvas.removeEventListener("wheel", this.editorOnWheel);
-    this.editorOnPointerDown = undefined;
-    this.editorOnPointerMove = undefined;
-    this.editorOnPointerUp = undefined;
-    this.editorOnWheel = undefined;
+    canvas.addEventListener("pointerdown", onDown, true);
+    canvas.addEventListener("pointermove", onMove, true);
+    canvas.addEventListener("pointerup", onUp, true);
+    canvas.addEventListener("pointercancel", onUp, true);
+    canvas.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    canvas.addEventListener(
+      "contextmenu",
+      (e: MouseEvent) => {
+        if (
+          this.arenaLayoutEditActive &&
+          this.layoutSubMode === "camera"
+        ) {
+          e.preventDefault();
+        }
+      },
+      true,
+    );
   }
 }
