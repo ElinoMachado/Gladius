@@ -55,7 +55,7 @@ const BIOME_HEX_COLOR: Record<BiomeId, number> = {
  */
 const HEX_SIZE = 2.18;
 /** Com o coliseu GLB, hexes/unidades sobem ligeiramente acima da areia (após afundar o modelo). */
-const ARENA_PLAY_SURFACE_Y_WITH_COLISEUM = 0.032;
+const ARENA_PLAY_SURFACE_Y_WITH_COLISEUM = 0.11;
 /** Heróis com `flying`: altura base acima do hex (~4× a elevação inicial). */
 const HERO_FLY_BASE_Y = 1.2;
 /** Oscilação vertical (flutuar) em torno da base. */

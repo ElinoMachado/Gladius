@@ -12,7 +12,7 @@ const ARENA_FIT_MARGIN = 1.1;
  * O chão do GLB costuma ser uma malha espessa; o bbox mínimo alinha a base em Y=0 e a areia visível
  * fica por cima dos hexes. Afundamos o modelo para a superfície da arena ficar abaixo do plano de jogo.
  */
-const COLISEUM_FLOOR_SINK_Y = 0.42;
+const COLISEUM_FLOOR_SINK_Y = 0.58;
 
 /**
  * Raio horizontal no chão até ao vértice mais exterior do grid jogável
