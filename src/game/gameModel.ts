@@ -4988,6 +4988,7 @@ export class GameModel {
 
     this.artifactBannedThisRun.add(artifactId);
     pa.choices = [...keep, ...extra];
+    pa.banMode = false;
     const def = artifactDefById(artifactId);
     this.log(`${u.name}: ${def?.name ?? artifactId} banido nesta run.`);
     this.emit();
