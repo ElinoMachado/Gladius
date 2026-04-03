@@ -8070,6 +8070,21 @@ select.forge-biome-sel option:disabled {
   background: rgba(72, 58, 22, 0.92) !important;
 }
 
+.combat-sandbox-level-btn {
+  flex: 0 0 auto;
+  font-size: 0.68rem !important;
+  padding: 0.2rem 0.45rem !important;
+  border-color: rgba(120, 160, 220, 0.55) !important;
+  color: #c8dcff !important;
+  background: rgba(22, 36, 58, 0.78) !important;
+}
+
+.combat-sandbox-level-btn:hover:not(:disabled) {
+  border-color: #8ab4ff !important;
+  color: #fff !important;
+  background: rgba(32, 52, 88, 0.92) !important;
+}
+
 .combat-sandbox-kill-btn {
   flex: 0 0 auto;
   font-size: 0.68rem !important;

@@ -75,6 +75,7 @@ export const DEFAULT_ARTIFACT_MAX_STACK = 6;
 
 /** Limites explícitos por ID. */
 const SPECIAL_MAX: Record<string, number> = {
+  alento_morte: 1,
   garra_ferro: 6,
   pulso_verde: 12,
   seda_vampira: 10,
@@ -215,6 +216,8 @@ export function describeArtifactAtStack(
       const inst = 2 + amp;
       return `Ao causar dano: +${inst} instâncias de veneno. Causa ${3 * n} de dano por instância. Ignora a defesa.${amp > 0 ? ` (Amplicador de onda +${amp}.)` : ""}`;
     }
+    case "alento_morte":
+      return "Ao iniciar o teu turno, morres de imediato: cada aliado vivo recebe 1 instância de Bravura (+1 ataque básico neste turno; expira no fim do turno de cada um).";
     case "ronin":
       return `+${20 * n}% acerto crítico; acima de 100% o excesso não aumenta crítico; cada 5% de excesso → +1 de dano.`;
     case "imortal":
@@ -362,6 +365,7 @@ export function artifactCardFigureSvg(artifactId: string): string {
     tonico: `<rect x="14" y="12" width="20" height="26" rx="3" fill="#5c6bc0" stroke="#3949ab"/><path fill="#9fa8da" d="M18 18h12v8H18z"/><path fill="#fff" d="M20 22h2v2h-2zm4 0h2v2h-2zm4 0h2v2h-2z"/>`,
     motor_morte: `<path fill="#ffee58" stroke="#e65100" stroke-width="1.4" stroke-linejoin="round" d="M30 3 L14 25h11l-7 21 22-26h-10l10-17z"/>`,
     maos_venenosas: `<path fill="#6a1b9a" d="M18 32 Q24 8 30 32 Z"/><circle cx="20" cy="26" r="2" fill="#ce93d8"/><circle cx="28" cy="26" r="2" fill="#ce93d8"/>`,
+    alento_morte: `<path fill="none" stroke="#78909c" stroke-width="1.4" d="M24 8v32"/><path fill="#b0bec5" d="M16 18c0-4 4-8 8-8s8 4 8 8v6H16v-6z"/><path fill="#37474f" d="M18 26h12v6H18z"/><circle cx="20" cy="22" r="2" fill="#eceff1"/><circle cx="28" cy="22" r="2" fill="#eceff1"/>`,
     ronin: `<path fill="#b71c1c" d="M12 36 L24 10 L36 36 Z" stroke="#3e2723" stroke-width="1"/><path fill="#eceff1" d="M22 20h4v14h-4z"/>`,
     imortal: `<path fill="#c62828" d="M24 12 C32 20 32 32 24 38 C16 32 16 20 24 12"/><path fill="#ffcdd2" d="M24 22v10" stroke="#fff" stroke-width="2"/>`,
     duro_pedra: `<rect x="10" y="14" width="28" height="22" rx="2" fill="#78909c" stroke="#455a64"/><path fill="#546e7a" d="M14 18h20v4H14zm0 8h20v4H14z"/>`,

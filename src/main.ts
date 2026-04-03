@@ -2417,6 +2417,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
       <span class="combat-sandbox-hero-row__name">${escapeHtml(p.name)}</span>
       <div class="combat-sandbox-hero-row__actions">
         <button type="button" class="btn combat-sandbox-fly-btn" data-sandbox-toggle-fly="${escapeHtml(p.id)}" aria-pressed="${p.flying ? "true" : "false"}">${p.flying ? "Aterrar" : "Voar"}</button>
+        <button type="button" class="btn combat-sandbox-level-btn" data-sandbox-level-up="${escapeHtml(p.id)}">Nv+1</button>
         <button type="button" class="btn combat-sandbox-kill-btn" data-sandbox-kill-hero="${escapeHtml(p.id)}">Matar</button>
       </div>
     </div>`,
@@ -2432,7 +2433,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     <p class="combat-sandbox-panel__hero-hint">Herói: <strong>${heroLabelText}</strong> (turno ou primeiro vivo)</p>
     <section class="combat-sandbox-heroes" aria-label="Heróis sandbox">
       <h3 class="shop-sandbox-artifacts__title">Heróis</h3>
-      <p class="shop-sandbox-artifacts__hint">Voar / Aterrar altera o estado de voo (combate + modelo 3D). Matar remove o herói do combate (como morte).</p>
+      <p class="shop-sandbox-artifacts__hint">Voar / Aterrar altera o estado de voo (combate + modelo 3D). Nv+1 sobe um nível sem escolher artefato. Matar remove o herói do combate (como morte).</p>
       ${
         partyKillRows
           ? `<div class="combat-sandbox-heroes__list" role="group">${partyKillRows}</div>`
@@ -2524,6 +2525,14 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
       if (flyBtn && panel.contains(flyBtn)) {
         const fid = flyBtn.dataset.sandboxToggleFly;
         if (fid) model.sandboxToggleHeroFlying(fid);
+        return;
+      }
+      const lvlBtn = (e.target as HTMLElement).closest(
+        "[data-sandbox-level-up]",
+      ) as HTMLButtonElement | null;
+      if (lvlBtn && panel.contains(lvlBtn)) {
+        const lid = lvlBtn.dataset.sandboxLevelUp;
+        if (lid) model.sandboxAddHeroLevel(lid);
         return;
       }
       const btn = (e.target as HTMLElement).closest(

@@ -42,11 +42,11 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
       "Ao causar dano: +2 instâncias de veneno (mais o bónus do Amplicador de onda, se o tiveres). Causa 3 de dano por instância. Ignora a defesa.",
   },
   {
-    id: "ronin",
-    name: "Ronin",
+    id: "alento_morte",
+    name: "Alento da morte",
     rarity: "common",
     description:
-      "+20% acerto crítico por acúmulo. Acima de 100% a chance extra não conta para crítico; cada 5% de excesso viram +1 de dano nos teus golpes.",
+      "Ao iniciar o teu turno, morres imediatamente: cada aliado vivo recebe 1 instância de Bravura. Bravura concede +1 ataque básico neste turno; as instâncias expiram no fim do turno de cada herói (individualmente). Um nível.",
   },
   {
     id: "sylfid",
@@ -120,6 +120,13 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     description: "+25% XP recebida por acúmulo (os efeitos somam).",
   },
   {
+    id: "ronin",
+    name: "Ronin",
+    rarity: "uncommon",
+    description:
+      "+20% acerto crítico por acúmulo. Acima de 100% a chance extra não conta para crítico; cada 5% de excesso viram +1 de dano nos teus golpes.",
+  },
+  {
     id: "imortal",
     name: "Imortal",
     rarity: "uncommon",
@@ -151,13 +158,6 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     rarity: "uncommon",
     description:
       "Danos e curas por instância (veneno, queimadura, sangramento, HoT) podem dar acerto crítico. +10% ao multiplicador de dano crítico por acúmulo em esses ticks (10%…60% em 6 acúmulos).",
-  },
-  {
-    id: "couraca_reforcada",
-    name: "Couraça reforçada",
-    rarity: "uncommon",
-    description: "+2 de defesa por acúmulo.",
-    pickBonusPerStack: { defesa: 2 },
   },
   {
     id: "torrente_menor",

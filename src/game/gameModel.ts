@@ -98,7 +98,10 @@ import {
 import { GOLD_SHOP } from "./data/shops";
 import { computePartyBonus } from "./colorSynergy";
 import {
+  addBravuraInstances,
   addDeslumbroInstances,
+  bravuraInstancesCount,
+  clearBravuraInstances,
   deslumbroInstancesCount,
 } from "./effectInstances";
 import {
@@ -1664,6 +1667,30 @@ export class GameModel {
       this.advanceHeroOrRound();
       return;
     }
+    if ((h.artifacts["alento_morte"] ?? 0) > 0) {
+      for (const ally of this.getParty()) {
+        if (ally.id === h.id || ally.hp <= 0) continue;
+        addBravuraInstances(ally, 1);
+      }
+      this.log(
+        `${h.name}: Alento da morte — cai ao iniciar o turno; aliados recebem Bravura.`,
+      );
+      h.hp = 0;
+      this.onDeaths();
+      if (
+        this.phase === "combat" &&
+        this.getParty().every((u) => u.hp <= 0)
+      ) {
+        this.phase = "defeat";
+        this.meta.crystals += this.crystalsRun;
+        this.saveMeta();
+        this.log("Derrota.");
+        this.emit();
+        return;
+      }
+      this.advanceHeroOrRound();
+      return;
+    }
     h.bunkerReentryBlocked = false;
     const mov = this.heroMovementPool(h);
     this.movementLeft = mov;
@@ -1687,6 +1714,7 @@ export class GameModel {
   endHeroTurn(): void {
     const h = this.currentHero();
     if (h) {
+      clearBravuraInstances(h);
       if (!this.devSandboxMode) {
         for (const k of Object.keys(h.skillCd)) {
           const v = h.skillCd[k] ?? 0;
@@ -2434,6 +2462,7 @@ export class GameModel {
     let cap = 1 + (h.artifacts["braco_forte"] ?? 0);
     const rh = getForgeLevel(h.forgeLoadout, "helmo", "rochoso");
     if (rh === 1 || rh === 2 || rh === 3) cap += rh;
+    cap += bravuraInstancesCount(h);
     return cap;
   }
 
@@ -4929,6 +4958,22 @@ export class GameModel {
     this.log(
       `[Sandbox] ${u.name}: voo ${u.flying ? "ativado" : "desativado"}.`,
     );
+    this.emit();
+  }
+
+  /** Modo sandbox: +1 nível instantâneo (sem pick de artefato). */
+  sandboxAddHeroLevel(heroId: string): void {
+    if (!this.devSandboxMode) return;
+    const u = this.units.find((x) => x.id === heroId);
+    if (!u?.isPlayer || u.hp <= 0) return;
+    if (u.level >= 100) return;
+    u.level++;
+    u.xpToNext = xpCurve(u.level);
+    u.xp = 0;
+    this.syncWeaponPassivesOnLevelUp(u);
+    u.hp = Math.min(u.hp, u.maxHp);
+    u.mana = Math.min(u.mana, u.maxMana);
+    this.log(`[Sandbox] ${u.name}: nível ${u.level}.`);
     this.emit();
   }
 

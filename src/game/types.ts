@@ -164,6 +164,11 @@ export interface Unit extends CoreStats {
   effectInstances?: {
     /** Deslumbro (Cometa arcano): +50% dano recebido; −1 após cada fase inimiga completa. */
     deslumbro?: number;
+    /**
+     * Bravura (Alento da morte): +N ataques básicos extra neste turno; expira no fim do turno deste herói.
+     * Cada instância = +1 ataque básico (consumo visual pelo `basicLeft`); o contador zera no fim do turno.
+     */
+    bravura?: number;
   };
   /** Nível da arma principal (loja de cristais); escala skills e ultimate da arma. */
   weaponLevel: WeaponLevel;
