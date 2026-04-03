@@ -259,6 +259,14 @@ view.setOnArenaLayoutSessionEnd(() => {
   });
 });
 
+view.setOnArenaLayoutEditUiRefresh(() => {
+  queueMicrotask(() => {
+    if (model.phase === "main_menu" && view.isArenaLayoutEditActive()) {
+      showArenaLayoutEditHud();
+    }
+  });
+});
+
 view.buildHexGrid(model.grid);
 
 Promise.all([
@@ -1930,14 +1938,37 @@ function showArenaLayoutEditHud(): void {
   mainMenuSword3d?.dispose();
   mainMenuSword3d = null;
   uiRoot.innerHTML = "";
-  uiRoot.appendChild(
-    el(`
+  const isoChecked = view.getLayoutCameraIsometric() ? "checked" : "";
+  const camSub = view.isArenaLayoutCameraSubMode();
+  const camRow = camSub
+    ? `<div class="arena-layout-edit-hud__cam-row">
+      <label class="arena-layout-edit-hud__iso-toggle" title="Marcado: vista isométrica ortográfica (gravada em localStorage). Desmarcado: câmara livre em perspetiva — alterações não são gravadas.">
+        <span class="arena-layout-edit-hud__iso-icon" aria-hidden="true">◇</span>
+        <input type="checkbox" id="arena-layout-iso-cb" ${isoChecked} />
+        <span>Modo isométrico</span>
+      </label>
+    </div>`
+    : "";
+  const camHint = camSub
+    ? ` <strong>Modo câmara</strong> — <kbd>Espaço</kbd> volta ao coliseu. Com <strong>Modo isométrico</strong>: WASD pan, roda zoom, botão direito pan (gravado). Câmara livre: órbita WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura do alvo, roda distância (não gravado).`
+    : "";
+  const wrap = el(`
     <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar menu</strong> — Clique no coliseu para selecionar (contorno vermelho). Arrasto no modelo: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> ou numérico +/− escala. Modo câmara (mesma vista isométrica do jogo): <kbd>Espaço</kbd>; WASD pan; roda zoom; botão direito pan no chão.
+      <strong>Ajustar cena</strong> — Clique no coliseu para selecionar (contorno vermelho). Arrasto no modelo: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> ou numérico +/− escala.${camHint}
+      <br /><kbd>Espaço</kbd> alterna para o modo câmara (quando no coliseu) ou de volta.
       <br /><kbd>Esc</kbd> grava e volta ao menu (ferramenta de desenvolvimento).
+      ${camRow}
     </div>
-  `),
-  );
+  `);
+  uiRoot.appendChild(wrap);
+  const isoCb = wrap.querySelector(
+    "#arena-layout-iso-cb",
+  ) as HTMLInputElement | null;
+  if (isoCb) {
+    isoCb.addEventListener("change", () => {
+      view.setLayoutCameraIsometric(isoCb.checked);
+    });
+  }
 }
 
 function showMainMenu(): void {
