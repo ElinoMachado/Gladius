@@ -4091,7 +4091,7 @@ body.enemy-inspect--dragging-body {
 .artifact-pick-actions {
   display: flex;
   justify-content: center;
-  margin: 0 0 0.85rem;
+  margin: 0.85rem 0 0;
 }
 
 .artifact-pick-grid {
@@ -4135,6 +4135,40 @@ body.enemy-inspect--dragging-body {
 .artifact-pick-card:focus-visible {
   outline: 2px solid #e8c84a;
   outline-offset: 2px;
+}
+
+.artifact-pick-card__rarity {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: rgba(220, 210, 195, 0.92);
+}
+
+.artifact-pick-card.artifact-rarity--common .artifact-pick-card__rarity {
+  color: #c5c5c5;
+}
+
+.artifact-pick-card.artifact-rarity--uncommon .artifact-pick-card__rarity {
+  color: #81c784;
+}
+
+.artifact-pick-card.artifact-rarity--rare .artifact-pick-card__rarity {
+  color: #64b5f6;
+}
+
+.artifact-pick-card.artifact-rarity--legendary .artifact-pick-card__rarity {
+  color: #e57373;
+}
+
+.artifact-pick-card.artifact-rarity--mythic .artifact-pick-card__rarity {
+  color: #ce93d8;
+}
+
+.artifact-pick-card--special .artifact-pick-card__rarity {
+  color: #e0c896;
 }
 
 .artifact-pick-card__tier {
@@ -4222,44 +4256,56 @@ body.enemy-inspect--dragging-body {
 
 .artifact-rarity-slots__group {
   display: inline-flex;
-  align-items: center;
-  gap: 0.18rem;
+  align-items: stretch;
 }
 
-.artifact-rarity-slots__abbr {
-  display: inline-block;
-  min-width: 0.55rem;
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  color: rgba(200, 190, 175, 0.72);
-  text-align: center;
-  line-height: 1;
-}
-
-.artifact-rarity-slots__dots {
+.artifact-rarity-slots__slots {
   display: inline-flex;
-  align-items: center;
-  gap: 0.14rem;
+  align-items: stretch;
+  gap: 0.12rem;
 }
 
 .artifact-rarity-slot {
   display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+  width: 1rem;
+  height: 1.28rem;
+  border-radius: 5px;
   box-sizing: border-box;
   flex-shrink: 0;
 }
 
-.artifact-rarity-slot--empty {
-  opacity: 0.42;
-  background: transparent;
-  border: 1px dashed rgba(200, 190, 210, 0.35);
+.artifact-rarity-slot--empty.artifact-rarity--common {
+  background: rgba(158, 158, 158, 0.12);
+  border: 1px solid rgba(158, 158, 158, 0.42);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+}
+
+.artifact-rarity-slot--empty.artifact-rarity--uncommon {
+  background: rgba(67, 160, 71, 0.1);
+  border: 1px solid rgba(67, 160, 71, 0.45);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+}
+
+.artifact-rarity-slot--empty.artifact-rarity--rare {
+  background: rgba(25, 118, 210, 0.1);
+  border: 1px solid rgba(25, 118, 210, 0.48);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+}
+
+.artifact-rarity-slot--empty.artifact-rarity--legendary {
+  background: rgba(198, 40, 40, 0.1);
+  border: 1px solid rgba(198, 40, 40, 0.48);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+}
+
+.artifact-rarity-slot--empty.artifact-rarity--mythic {
+  background: rgba(123, 31, 162, 0.12);
+  border: 1px solid rgba(123, 31, 162, 0.5);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
 }
 
 .artifact-rarity-slot--filled {
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.38);
 }
 
 .artifact-rarity-slot--filled.artifact-rarity--common {

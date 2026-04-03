@@ -30,14 +30,6 @@ export const ARTIFACT_RARITY_SLOTS_DISPLAY_ORDER: ArtifactRarity[] = [
   "mythic",
 ];
 
-const RARITY_SLOT_ABBR: Record<ArtifactRarity, string> = {
-  common: "C",
-  uncommon: "I",
-  rare: "R",
-  legendary: "L",
-  mythic: "M",
-};
-
 export function countDistinctArtifactsOfRarity(
   u: Unit,
   rarity: ArtifactRarity,
@@ -459,17 +451,16 @@ export function artifactRaritySlotsStripHtml(u: Unit): string {
     const max = MAX_DISTINCT_ARTIFACTS_BY_RARITY[r];
     const cur = countDistinctArtifactsOfRarity(u, r);
     const label = ARTIFACT_RARITY_LABELS[r];
-    const abbr = RARITY_SLOT_ABBR[r];
     const title = escapeHtml(
       `${label}: ${cur}/${max} tipo(s) distinto(s). Acúmulos do mesmo artefato não ocupam nova vaga.`,
     );
-    const dots = Array.from({ length: max }, (_, i) => {
+    const slots = Array.from({ length: max }, (_, i) => {
       const filled = i < cur;
       return `<span class="artifact-rarity-slot ${artifactRarityClass(r)} ${
         filled ? "artifact-rarity-slot--filled" : "artifact-rarity-slot--empty"
-      }"></span>`;
+      }" aria-hidden="true"></span>`;
     }).join("");
-    return `<div class="artifact-rarity-slots__group" title="${title}"><span class="artifact-rarity-slots__abbr" aria-hidden="true">${abbr}</span><span class="artifact-rarity-slots__dots">${dots}</span></div>`;
+    return `<div class="artifact-rarity-slots__group" title="${title}"><span class="artifact-rarity-slots__slots">${slots}</span></div>`;
   }).join("");
   return `<div class="artifact-rarity-slots" role="group" aria-label="Vagas de tipos distintos por raridade: 3 comuns, 3 incomuns, 2 raros, 2 lendários, 1 mítico">${groups}</div>`;
 }

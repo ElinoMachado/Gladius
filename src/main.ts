@@ -7453,10 +7453,10 @@ function showLevelPick(): void {
   const s = el(`<div class="modal modal--crystal"><div class="modal-inner modal-inner--artifact-pick">
     <h2 class="crystal-modal-title">Escolha um artefato — ${heroLine}</h2>
     <p class="artifact-pick-hint">Passe o rato sobre a carta para ver o próximo nível.</p>
+    <div id="opts" class="artifact-pick-grid"></div>
     <div class="artifact-pick-actions">
       <button type="button" class="btn" id="btn-artifact-reroll">Rerol (1)</button>
     </div>
-    <div id="opts" class="artifact-pick-grid"></div>
   </div></div>`);
   uiRoot.appendChild(s);
   const btnReroll = s.querySelector("#btn-artifact-reroll") as HTMLButtonElement;
@@ -7482,8 +7482,12 @@ function showLevelPick(): void {
     const rCls = rare
       ? artifactRarityClass(rare)
       : "artifact-pick-card--special";
+    const rarityLine = rare
+      ? ARTIFACT_RARITY_LABELS[rare]
+      : "Especial";
     const b = el(
       `<button type="button" class="artifact-pick-card ${rCls}" data-artifact="${escapeHtml(id)}">
+        <span class="artifact-pick-card__rarity">${escapeHtml(rarityLine)}</span>
         <span class="artifact-pick-card__tier">${tier}</span>
         <div class="artifact-pick-card__art">${artifactCardInnerHtml(id)}</div>
         <span class="artifact-pick-card__name">${escapeHtml(dispName)}</span>
