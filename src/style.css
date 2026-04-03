@@ -1356,6 +1356,52 @@ h1 {
   background: linear-gradient(165deg, #25222c, #18161c);
 }
 
+/* Setup: classe no topo + faixa de vagas por raridade (como nas cartas de artefato) */
+.hero-setup-screen .hero-slot-card__head {
+  flex: 0 0 auto;
+  width: 100%;
+  margin-bottom: 0.25rem;
+}
+
+.hero-setup-screen .hero-slot-card__class {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  color: rgba(220, 210, 195, 0.92);
+  margin-bottom: 0.22rem;
+}
+
+.hero-setup-screen .hero-slot-card__class--pistoleiro {
+  color: #d4b878;
+}
+
+.hero-setup-screen .hero-slot-card__class--gladiador {
+  color: #e57373;
+}
+
+.hero-setup-screen .hero-slot-card__class--sacerdotisa {
+  color: #ce93d8;
+}
+
+.hero-setup-screen .hero-slot-card__class--empty-slot {
+  color: rgba(120, 115, 130, 0.88);
+  letter-spacing: 0.18em;
+}
+
+.hero-setup-screen .hero-slot-card__artifact-slots {
+  width: 100%;
+}
+
+.hero-setup-screen .hero-slot-card__artifact-slots .artifact-rarity-slots {
+  flex: 1 1 100%;
+  width: 100%;
+  margin-top: 0;
+  padding-top: 0.1rem;
+}
+
 .hero-slot-weapon-row {
   display: flex;
   flex-wrap: wrap;

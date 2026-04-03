@@ -40,6 +40,7 @@ import {
   artifactPickChoiceTooltip,
   artifactRarityClass,
   artifactRaritySlotsStripHtml,
+  artifactRaritySlotsStripPreviewHtml,
   artifactStackCounterLabel,
   artifactTooltipHtml,
   getArtifactMaxStacks,
@@ -2252,7 +2253,12 @@ function showHeroSetup(): void {
     if (hid) {
       const wl = model.meta.weaponLevelByHeroSlot[i as 0 | 1 | 2];
       const baseD = HEROES[hid].dano;
-      card.innerHTML = `${templateStatsStripHtml(hid)}
+      const className = escapeHtml(HEROES[hid].name);
+      const headHtml = `<div class="hero-slot-card__head">
+        <span class="hero-slot-card__class hero-slot-card__class--${hid}">${className}</span>
+        <div class="hero-slot-card__artifact-slots">${artifactRaritySlotsStripPreviewHtml()}</div>
+      </div>`;
+      card.innerHTML = `${headHtml}${templateStatsStripHtml(hid)}
         <div class="hero-slot-weapon-row" tabindex="0" role="img" aria-label="Arma principal nível ${wl} de 5. Paira para ver skill e ultimate da arma.">
           <span class="hero-slot-weapon-row__lbl">Arma principal</span>
           <span class="hero-slot-weapon-row__nv">nv <strong>${wl}</strong>/5</span>
@@ -2278,7 +2284,11 @@ function showHeroSetup(): void {
       heroSetupPreviewInstances.push(prev);
     } else {
       card.classList.add("hero-slot-card--placeholder");
-      card.innerHTML = `
+      const headHtml = `<div class="hero-slot-card__head">
+        <span class="hero-slot-card__class hero-slot-card__class--empty-slot">—</span>
+        <div class="hero-slot-card__artifact-slots">${artifactRaritySlotsStripPreviewHtml()}</div>
+      </div>`;
+      card.innerHTML = `${headHtml}
         <div class="hero-slot-placeholder">
           <div class="hero-slot-model-host hero-slot-model-host--placeholder"></div>
           <p class="hero-slot-placeholder__txt">Selecione um herói para este slot</p>
