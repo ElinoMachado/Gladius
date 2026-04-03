@@ -175,6 +175,10 @@ import {
   getSandboxNoCdUltReady,
   setSandboxNoCdUltReady,
 } from "./game/sandboxPrefs";
+import {
+  loadSceneLayoutPrefs,
+  saveSceneLayoutPrefs,
+} from "./game/sceneLayoutPrefs";
 import { UNIT_MOVE_SEGMENT_MS } from "./game/combatTiming";
 import {
   BUNKER_EVOLVE_COSTS,
@@ -260,6 +264,7 @@ Promise.all([
   preloadArenaColiseumGlb(),
 ]).then(() => {
   view.attachArenaColiseumDecoration();
+  view.applySceneLayoutPrefs(loadSceneLayoutPrefs());
   render();
 });
 
@@ -1942,6 +1947,7 @@ function showMainMenu(): void {
           <button type="button" class="main-menu-link" data-action="forge">Forja</button>
           <button type="button" class="main-menu-link" data-action="artifacts">Artefatos</button>
           <button type="button" class="main-menu-link" data-action="enemies">Compendium</button>
+          <button type="button" class="main-menu-link" data-action="scene-layout">Ajustar cena 3D</button>
           <button type="button" class="main-menu-link" data-action="exit">Sair</button>
         </nav>
       </div>
@@ -1964,6 +1970,10 @@ function showMainMenu(): void {
           break;
         case "enemies":
           showEnemyCompendium();
+          break;
+        case "scene-layout":
+          model.phase = "scene_layout";
+          render();
           break;
         case "new":
           model.devSandboxMode = false;
@@ -2005,6 +2015,55 @@ function showMainMenu(): void {
           break;
       }
     });
+  });
+}
+
+function showSceneLayoutEditor(): void {
+  hideGameTooltip();
+  uiRoot.innerHTML = "";
+  const s = el(`
+    <div class="scene-layout-screen">
+      <div class="scene-layout-panel game-ui-tooltip-inner">
+        <h2 class="scene-layout-title hero-setup-main-title">Ajustar cena 3D</h2>
+        <p class="scene-layout-help">Esquerdo: rodar vista · Direito: deslocar o alvo · Roda: zoom · Clique no coliseu e arraste: mover no chão (XZ) · Shift + arrastar no coliseu: altura (Y)</p>
+        <div class="scene-layout-actions">
+          <button type="button" class="btn btn-primary" id="scene-layout-save">Guardar e voltar ao menu</button>
+          <button type="button" class="btn" id="scene-layout-back">Voltar sem guardar</button>
+          <button type="button" class="btn" id="scene-layout-cam-game">Câmara como no jogo (só preview)</button>
+          <button type="button" class="btn" id="scene-layout-col-reset">Repor posição do coliseu</button>
+          <button type="button" class="btn" id="scene-layout-clear-cam">Gravar posição do coliseu com câmara normal no jogo</button>
+        </div>
+      </div>
+    </div>
+  `);
+  uiRoot.appendChild(s);
+  view.enterSceneLayoutEditor(canvas);
+  s.querySelector("#scene-layout-save")!.addEventListener("click", () => {
+    const prefs = view.collectSceneLayoutPrefs();
+    saveSceneLayoutPrefs(prefs);
+    view.applySceneLayoutPrefs(prefs);
+    view.setSceneLayoutNextSaveWithoutFreeCamera(false);
+    view.exitSceneLayoutEditor(canvas, true);
+    model.phase = "main_menu";
+    render();
+  });
+  s.querySelector("#scene-layout-back")!.addEventListener("click", () => {
+    view.exitSceneLayoutEditor(canvas, false);
+    model.phase = "main_menu";
+    render();
+  });
+  s.querySelector("#scene-layout-cam-game")!.addEventListener("click", () => {
+    view.resetSceneLayoutCameraToGameDefaults(canvas);
+  });
+  s.querySelector("#scene-layout-col-reset")!.addEventListener("click", () => {
+    view.resetColiseumOffsetInEditor();
+  });
+  s.querySelector("#scene-layout-clear-cam")!.addEventListener("click", () => {
+    const coliseum = view.getColiseumOffsetForPrefs();
+    saveSceneLayoutPrefs({ coliseum, freeCamera: null });
+    view.applySceneLayoutPrefs(loadSceneLayoutPrefs());
+    view.resetSceneLayoutCameraToGameDefaults(canvas);
+    view.setSceneLayoutNextSaveWithoutFreeCamera(true);
   });
 }
 
@@ -7814,7 +7873,12 @@ function render(): void {
   } else if (prevPhase !== "combat") {
     resetCombatSelection();
   }
-  if (model.phase === "main_menu") {
+  if (model.phase === "scene_layout") {
+    canvas.style.opacity = "1";
+    if (prevPhase !== "scene_layout") {
+      showSceneLayoutEditor();
+    }
+  } else if (model.phase === "main_menu") {
     canvas.style.opacity = "0.35";
     showMainMenu();
   } else if (model.phase === "crystal_shop") {
@@ -7903,7 +7967,11 @@ function render(): void {
     showBunkers,
   );
   applyCombatOverlays();
-  view.setCameraInputEnabled(model.phase === "combat" && !runPauseOpen);
+  view.setCameraInputEnabled(
+    model.phase === "combat" &&
+      !runPauseOpen &&
+      !view.usesCustomSceneCamera(),
+  );
 
   /** Run ativa: manter música da arena (evita cair no tema do menu entre waves / loja). */
   const arenaMusicPhase =
@@ -8196,7 +8264,9 @@ function closeRunPauseMenu(): void {
   runPauseStep = "menu";
   runPauseEl?.remove();
   runPauseEl = null;
-  view.setCameraInputEnabled(model.phase === "combat");
+  view.setCameraInputEnabled(
+    model.phase === "combat" && !view.usesCustomSceneCamera(),
+  );
 }
 
 function openRunPauseMenu(): void {
