@@ -1,15 +1,29 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { axialToWorld } from "../game/hex";
+import { axialToWorld, hexDistance } from "../game/hex";
 import arenaUrl from "../models/Arena.glb?url";
 
 /** Manter alinhado com `GameRenderer` (hex + raio da arena). */
 const HEX_SIZE = 2.18;
 const ARENA_HEX_RADIUS = 25;
+/** Folga visual para o anel de hexes caber confortavelmente dentro do coliseu. */
+const ARENA_FIT_MARGIN = 1.1;
 
+/**
+ * Raio horizontal no chão até ao vértice mais exterior do grid jogável
+ * (todos os hexes com distância axial ≤ ARENA_HEX_RADIUS do centro).
+ */
 function outerArenaRadiusWorld(): number {
-  const { x, z } = axialToWorld(ARENA_HEX_RADIUS, 0, HEX_SIZE);
-  return Math.hypot(x, z) + HEX_SIZE * 0.55;
+  let maxC = 0;
+  for (let q = -ARENA_HEX_RADIUS; q <= ARENA_HEX_RADIUS; q++) {
+    for (let r = -ARENA_HEX_RADIUS; r <= ARENA_HEX_RADIUS; r++) {
+      if (hexDistance({ q, r }, { q: 0, r: 0 }) > ARENA_HEX_RADIUS) continue;
+      const { x, z } = axialToWorld(q, r, HEX_SIZE);
+      maxC = Math.max(maxC, Math.hypot(x, z));
+    }
+  }
+  /* Até ao vértice do hex (o mesh usa ~HEX_SIZE como raio do polígono). */
+  return maxC + HEX_SIZE * 0.998;
 }
 
 let templateRoot: THREE.Group | null = null;
@@ -57,14 +71,17 @@ function prepareTemplate(scene: THREE.Object3D): THREE.Group {
   const box = unionMeshWorldBox3(root);
   const size = new THREE.Vector3();
   box.getSize(size);
-  const halfXZ = Math.max(size.x, size.z) / 2;
-  const targetR = outerArenaRadiusWorld() * 1.02;
-  if (halfXZ > 1e-4) {
-    root.scale.setScalar(targetR / halfXZ);
+  /* Escala pela menor semi-dimensão XZ para o anel de hexes caber em planta (modelos alongados). */
+  const halfMinXZ = Math.min(size.x, size.z) / 2;
+  const targetR = outerArenaRadiusWorld() * ARENA_FIT_MARGIN;
+  if (halfMinXZ > 1e-4) {
+    root.scale.setScalar(targetR / halfMinXZ);
   }
   root.updateMatrixWorld(true);
   const box2 = unionMeshWorldBox3(root);
-  root.position.y = -box2.min.y;
+  const cx = (box2.min.x + box2.max.x) / 2;
+  const cz = (box2.min.z + box2.max.z) / 2;
+  root.position.set(-cx, -box2.min.y, -cz);
   root.updateMatrixWorld(true);
   return root;
 }
