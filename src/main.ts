@@ -253,6 +253,12 @@ const damageFloatLayer = document.getElementById("damage-float-layer")!;
 const model = new GameModel();
 const view = new GameRenderer(canvas);
 
+view.setOnArenaLayoutSessionEnd(() => {
+  queueMicrotask(() => {
+    if (model.phase === "main_menu") render();
+  });
+});
+
 view.buildHexGrid(model.grid);
 
 Promise.all([
@@ -1917,6 +1923,23 @@ function showForge(): void {
   });
 }
 
+/** Menu principal: só dica enquanto se ajusta coliseu/câmara (clique passa ao canvas). */
+function showArenaLayoutEditHud(): void {
+  hideGameTooltip();
+  disposeMenu3dPreviews();
+  mainMenuSword3d?.dispose();
+  mainMenuSword3d = null;
+  uiRoot.innerHTML = "";
+  uiRoot.appendChild(
+    el(`
+    <div class="arena-layout-edit-hud" role="status" aria-live="polite">
+      <strong>Ajustar menu</strong> — Coliseu: WASD e arrasto (Shift: altura). Câmara: <kbd>Espaço</kbd>, depois arrasto e Q/E.
+      <br /><kbd>Esc</kbd> grava e volta ao menu (vale para o jogo normal e para o sandbox).
+    </div>
+  `),
+  );
+}
+
 function showMainMenu(): void {
   model.devSandboxMode = false;
   hideGameTooltip();
@@ -1926,7 +1949,6 @@ function showMainMenu(): void {
   uiRoot.innerHTML = "";
   const devMenuExtras = import.meta.env.DEV
     ? `<button type="button" class="main-menu-link main-menu-link--sandbox" data-action="dev-sandbox">Modo sandbox (testes)</button>
-          <button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-arena-layout">[Dev] Ajustar cena</button>
           <button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-reset-fresh">[Dev] Estado inicial (apagar save)</button>`
     : "";
   const s = el(`
@@ -1941,6 +1963,7 @@ function showMainMenu(): void {
         <nav class="main-menu-nav" aria-label="Menu principal">
           <button type="button" class="main-menu-link main-menu-link--primary" data-action="new">Novo jogo</button>
           ${devMenuExtras}
+          <button type="button" class="main-menu-link" data-action="arena-layout" title="Coliseu 3D e ângulo da câmara; aplica-se ao jogo normal e ao sandbox. Esc grava.">Ajustar menu</button>
           <button type="button" class="main-menu-link" data-action="crystal">Loja de cristais</button>
           <button type="button" class="main-menu-link" data-action="forge">Forja</button>
           <button type="button" class="main-menu-link" data-action="artifacts">Artefatos</button>
@@ -1985,9 +2008,9 @@ function showMainMenu(): void {
           setup.colors = ["azul", "verde", "vermelho"];
           render();
           break;
-        case "dev-arena-layout":
-          if (!import.meta.env.DEV) break;
-          view.devEnterArenaLayoutEdit(canvas);
+        case "arena-layout":
+          view.enterArenaLayoutEditFromMenu(canvas);
+          render();
           break;
         case "crystal":
           model.phase = "crystal_shop";
@@ -7822,8 +7845,9 @@ function render(): void {
     resetCombatSelection();
   }
   if (model.phase === "main_menu") {
-    canvas.style.opacity = "0.35";
-    showMainMenu();
+    canvas.style.opacity = view.isArenaLayoutEditActive() ? "1" : "0.35";
+    if (view.isArenaLayoutEditActive()) showArenaLayoutEditHud();
+    else showMainMenu();
   } else if (model.phase === "crystal_shop") {
     canvas.style.opacity = "0.35";
     showCrystalShop();

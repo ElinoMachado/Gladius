@@ -7889,6 +7889,34 @@ select.forge-biome-sel option:disabled {
   pointer-events: none;
 }
 
+/* Ajuste de cena (menu): barra informativa; não rouba cliques ao canvas. */
+.arena-layout-edit-hud {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  max-width: min(560px, 94vw);
+  padding: 0.7rem 1.1rem;
+  border-radius: 10px;
+  background: rgba(12, 10, 18, 0.9);
+  border: 1px solid rgba(200, 185, 160, 0.24);
+  color: rgba(230, 224, 210, 0.96);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+  z-index: 24;
+  box-shadow: 0 4px 22px rgba(0, 0, 0, 0.48);
+}
+
+.arena-layout-edit-hud kbd {
+  font-size: 0.88em;
+  padding: 0.12em 0.38em;
+  border-radius: 4px;
+  background: rgba(80, 72, 100, 0.55);
+  border: 1px solid rgba(200, 185, 160, 0.2);
+}
+
 .main-menu-version {
   position: fixed;
   top: 1rem;

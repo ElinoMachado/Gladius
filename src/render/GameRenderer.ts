@@ -324,6 +324,7 @@ export class GameRenderer {
   private readonly editorScratchVec3 = new THREE.Vector3();
   private readonly editorScratchVec3B = new THREE.Vector3();
   private arenaLayoutPersistTimer: ReturnType<typeof setTimeout> | null = null;
+  private onArenaLayoutSessionEnd: (() => void) | null = null;
   private readonly ndcGroundCorners = [
     new THREE.Vector2(-1, -1),
     new THREE.Vector2(1, -1),
@@ -400,6 +401,11 @@ export class GameRenderer {
 
   isArenaLayoutEditActive(): boolean {
     return this.arenaLayoutEditActive;
+  }
+
+  /** Chamado após `endArenaLayoutEditSession` (ex.: repor o menu principal). */
+  setOnArenaLayoutSessionEnd(cb: (() => void) | null): void {
+    this.onArenaLayoutSessionEnd = cb;
   }
 
   /** Se true, a câmara guardada (perspetiva) está ativa no jogo; pan/zoom de combate ficam desligados. */
@@ -3788,7 +3794,7 @@ export class GameRenderer {
     return { coliseum, freeCamera };
   }
 
-  /** Menu principal: permite clicar no coliseu para ajustar cena. */
+  /** Menu principal: permite iniciar a sessão de ajuste (botão no menu). */
   setArenaLayoutEditEligible(eligible: boolean): void {
     this.arenaLayoutEditEligible = eligible;
     if (!eligible && this.arenaLayoutEditActive) {
@@ -3797,11 +3803,10 @@ export class GameRenderer {
   }
 
   /**
-   * Só em `import.meta.env.DEV`: entra na sessão de ajuste (mesma do clique no coliseu),
-   * útil para atalho a partir do menu.
+   * Entra na sessão de ajuste do coliseu e da câmara (gravado em `localStorage` para run e sandbox).
+   * Só com `setArenaLayoutEditEligible(true)` (ex.: menu principal).
    */
-  devEnterArenaLayoutEdit(canvas: HTMLCanvasElement): void {
-    if (!import.meta.env.DEV) return;
+  enterArenaLayoutEditFromMenu(canvas: HTMLCanvasElement): void {
     if (!this.arenaLayoutEditEligible || this.arenaLayoutEditActive) return;
     this.beginArenaLayoutSession(canvas);
   }
@@ -3931,6 +3936,7 @@ export class GameRenderer {
     const p = this.collectSceneLayoutPrefs();
     saveSceneLayoutPrefs(p);
     this.applySceneLayoutPrefs(p);
+    this.onArenaLayoutSessionEnd?.();
   }
 
   private scheduleArenaLayoutPersist(): void {
@@ -4042,50 +4048,6 @@ export class GameRenderer {
 
     const onDown = (e: PointerEvent) => {
       if (isTypingTarget(e.target)) return;
-      if (!this.arenaLayoutEditEligible && !this.arenaLayoutEditActive) return;
-
-      if (
-        !this.arenaLayoutEditActive &&
-        this.arenaLayoutEditEligible &&
-        e.button === 0
-      ) {
-        const ndc0 = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
-        if (!this.pickColiseumWithCamera(this.camera, ndc0.x, ndc0.y)) return;
-        this.beginArenaLayoutSession(canvas);
-        this.editorLastClientX = e.clientX;
-        this.editorLastClientY = e.clientY;
-        e.preventDefault();
-        e.stopPropagation();
-        const ndc = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
-        this.editorDragMode = "none";
-        if (
-          this.pickColiseumWithCamera(this.freeCamera, ndc.x, ndc.y) &&
-          this.arenaColiseumMount
-        ) {
-          if (e.shiftKey) {
-            this.editorDragMode = "coliseum_y";
-          } else if (
-            this.intersectGroundWithCamera(
-              this.freeCamera,
-              ndc.x,
-              ndc.y,
-              0,
-              this.editorLastGround,
-            )
-          ) {
-            this.editorDragMode = "coliseum_xz";
-          }
-        }
-        if (this.editorDragMode !== "none") {
-          try {
-            canvas.setPointerCapture(e.pointerId);
-          } catch {
-            /* ignore */
-          }
-        }
-        return;
-      }
-
       if (!this.arenaLayoutEditActive) return;
 
       e.preventDefault();
