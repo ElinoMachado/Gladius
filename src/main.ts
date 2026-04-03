@@ -891,6 +891,12 @@ function enemyStatusTooltipBleedHtml(u: Unit): string {
   return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Sangramento</div><p class="game-ui-tooltip-passive">${bi} instância(s) na fila. Próximo tick: ${formatTooltipNumber(bn)} dano (consome ${br}).</p></div>`;
 }
 
+function enemyStatusTooltipDeslumbroHtml(u: Unit): string {
+  const n = u.deslumbroInstances ?? 0;
+  if (n <= 0) return "";
+  return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Deslumbro</div><p class="game-ui-tooltip-passive">${n} instância(s). +50% de dano recebido de todas as fontes. −1 após cada fase inimiga.</p></div>`;
+}
+
 function fillEnemyInspectStatusRow(host: HTMLElement, u: Unit): void {
   const bits: string[] = [];
   if (u.hot && u.hot.instances.length > 0) {
@@ -908,6 +914,11 @@ function fillEnemyInspectStatusRow(host: HTMLElement, u: Unit): void {
       `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--bleed" role="img" aria-label="Sangramento">†&nbsp;${bleedInstanceCount(u)}</span>`,
     );
   }
+  if ((u.deslumbroInstances ?? 0) > 0) {
+    bits.push(
+      `<span class="enemy-inspect-status-badge enemy-inspect-status-badge--deslumbro" role="img" aria-label="Deslumbro">✦&nbsp;${u.deslumbroInstances}</span>`,
+    );
+  }
   host.innerHTML = bits.length
     ? `<div class="enemy-inspect-status-inner">${bits.join("")}</div>`
     : "";
@@ -917,6 +928,8 @@ function fillEnemyInspectStatusRow(host: HTMLElement, u: Unit): void {
   if (p) bindGameTooltip(p as HTMLElement, () => enemyStatusTooltipPoisonHtml(u));
   const b = host.querySelector(".enemy-inspect-status-badge--bleed");
   if (b) bindGameTooltip(b as HTMLElement, () => enemyStatusTooltipBleedHtml(u));
+  const d = host.querySelector(".enemy-inspect-status-badge--deslumbro");
+  if (d) bindGameTooltip(d as HTMLElement, () => enemyStatusTooltipDeslumbroHtml(u));
 }
 
 function enemyInspectPrimaryRows(u: Unit, m: GameModel): [string, string][] {

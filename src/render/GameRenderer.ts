@@ -1105,6 +1105,13 @@ export class GameRenderer {
       (bg.material as THREE.Material).dispose();
       g.userData.bleedGlowRing = undefined;
     }
+    const dg = g.userData.deslumbroGlowRing as THREE.Mesh | undefined;
+    if (dg) {
+      g.remove(dg);
+      dg.geometry.dispose();
+      (dg.material as THREE.Material).dispose();
+      g.userData.deslumbroGlowRing = undefined;
+    }
   }
 
   private makeStatusGlowRing(color: number, inner: number, outer: number): THREE.Mesh {
@@ -1167,7 +1174,9 @@ export class GameRenderer {
     const wantHot = !!(u.hot && u.hot.instances.length > 0);
     const wantPoison = !!(u.poison && u.poison.instances.length > 0);
     const wantBleed = !!(u.bleed && u.bleed.instances.length > 0);
-    const sig = `${wantHot ? 1 : 0}-${hotInstanceCount(u)}-${sumNextHotTickHeal(u)}-${wantPoison ? 1 : 0}-${poisonInstanceCount(u)}-${sumNextPoisonTickDamage(u)}-${wantBleed ? 1 : 0}-${bleedInstanceCount(u)}-${sumNextBleedTickDamage(u)}-${dotTickConsumeCount(u)}`;
+    const wantDeslumbro = !u.isPlayer && (u.deslumbroInstances ?? 0) > 0;
+    const desN = u.deslumbroInstances ?? 0;
+    const sig = `${wantHot ? 1 : 0}-${hotInstanceCount(u)}-${sumNextHotTickHeal(u)}-${wantPoison ? 1 : 0}-${poisonInstanceCount(u)}-${sumNextPoisonTickDamage(u)}-${wantBleed ? 1 : 0}-${bleedInstanceCount(u)}-${sumNextBleedTickDamage(u)}-${dotTickConsumeCount(u)}-${wantDeslumbro ? 1 : 0}-${desN}`;
     if (barRoot.userData.statusSig === sig) return;
     barRoot.userData.statusSig = sig;
     this.clearStatusVisuals(g);
@@ -1189,6 +1198,13 @@ export class GameRenderer {
       ring.position.y = 0.024;
       g.add(ring);
       g.userData.bleedGlowRing = ring;
+    }
+    if (wantDeslumbro) {
+      const ring = this.makeStatusGlowRing(0xe8f4ff, 0.62, 0.78);
+      ring.position.y = 0.026;
+      (ring.material as THREE.MeshBasicMaterial).opacity = 0.52;
+      g.add(ring);
+      g.userData.deslumbroGlowRing = ring;
     }
 
     let stack = barRoot.userData.statusStack as THREE.Group | undefined;
@@ -1242,6 +1258,20 @@ export class GameRenderer {
         bi,
         "#301010",
         "#ff8a80",
+        tip,
+      );
+      m.position.set(-0.2 + ix * 0.42, 0, 0.02);
+      stack.add(m);
+      ix++;
+    }
+    if (wantDeslumbro) {
+      const dn = u.deslumbroInstances ?? 0;
+      const tip = `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Deslumbro</div><p class="game-ui-tooltip-passive">${dn} instância(s). +50% de dano recebido de todas as fontes. −1 instância após cada fase inimiga.</p></div>`;
+      const m = this.makeStatusBadgeMesh(
+        "✦",
+        dn,
+        "#102030",
+        "#e3f2ff",
         tip,
       );
       m.position.set(-0.2 + ix * 0.42, 0, 0.02);

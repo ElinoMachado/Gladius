@@ -81,7 +81,10 @@ import {
 import { COMBAT_BIOMES, BIOME_LABELS } from "./data/biomes";
 import { goldDrainPerTurn } from "./data/shops";
 import { loadMeta, permPercent, saveMeta } from "./metaStore";
-import { getArtifactMaxStacks, randomArtifactChoicesForHero } from "./artifactUi";
+import {
+  canIncrementArtifactStack,
+  randomArtifactChoicesForHero,
+} from "./artifactUi";
 import {
   ARTIFACT_POOL,
   artifactDefById,
@@ -857,6 +860,7 @@ export class GameModel {
   applyCometaArcanoStrike(): void {
     const sumStacks = Math.min(3, this.partyGuerraTotalStackSum());
     if (sumStacks <= 0) return;
+    const flat = ([50, 120, 210] as const)[sumStacks - 1]!;
     const pct = ([0.2, 0.4, 0.75] as const)[sumStacks - 1]!;
     const desN = ([1, 2, 3] as const)[sumStacks - 1]!;
     const src = this.pickCometaArcanoDamageSource();
@@ -865,7 +869,10 @@ export class GameModel {
       if (e.hp <= 0) continue;
       const tier = enemyTierFromId(e.enemyArchetypeId);
       const mult = tier === "grunt" ? 1 : 0.5;
-      const raw = Math.max(0, Math.floor(e.maxHp * pct * mult));
+      const raw = Math.max(
+        0,
+        Math.floor((flat + e.maxHp * pct) * mult),
+      );
       if (raw <= 0) continue;
       this.dealDamage(src, e, raw, false, false, false, {
         suppressLifesteal: true,
@@ -4734,7 +4741,9 @@ export class GameModel {
     }
     const sorteEff = this.effectiveSorte(u);
     const nArt = 3 + this.meta.initialCards;
-    const choices = randomArtifactChoicesForHero(u, nArt, sorteEff);
+    const choices = randomArtifactChoicesForHero(u, nArt, sorteEff, new Set(), {
+      bypassRarityCaps: this.devSandboxMode,
+    });
     if (choices.length === 0) {
       this.log(`${u.name}: sem cartas de level-up disponíveis.`);
     } else {
@@ -4756,7 +4765,9 @@ export class GameModel {
     const u = this.units.find((x) => x.id === pa.unitId);
     if (!u) return;
     const sorteEff = this.effectiveSorte(u);
-    const choices = randomArtifactChoicesForHero(u, pa.choiceCount, sorteEff);
+    const choices = randomArtifactChoicesForHero(u, pa.choiceCount, sorteEff, new Set(), {
+      bypassRarityCaps: this.devSandboxMode,
+    });
     if (choices.length === 0) {
       this.log(`${u.name}: sem cartas de reroll disponíveis.`);
       return;
@@ -4816,9 +4827,13 @@ export class GameModel {
 
   /** +1 acúmulo e bônus de stats da carta (se existir). */
   private incrementArtifactStack(u: Unit, artifactId: string): boolean {
-    const cap = getArtifactMaxStacks(artifactId);
+    if (
+      !canIncrementArtifactStack(u, artifactId, {
+        bypassRarityCaps: this.devSandboxMode,
+      })
+    )
+      return false;
     const prev = u.artifacts[artifactId] ?? 0;
-    if (prev >= cap) return false;
     u.artifacts[artifactId] = prev + 1;
     const def = artifactDefById(artifactId);
     this.applyPickBonusPerStack(u, def?.pickBonusPerStack);
@@ -4915,10 +4930,12 @@ export class GameModel {
     const u = this.units.find((x) => x.id === this.pendingArtifacts!.unitId);
     if (!u) return;
     if (artifactId === "_pick_gold") {
-      this.addHeroOuroWithMetaBonus(u, 75);
+      this.addHeroOuroWithMetaBonus(u, 50);
     } else if (artifactId === "_pick_restore") {
       u.hp = u.maxHp;
       u.mana = u.maxMana;
+    } else if (artifactId === "_pick_crystals") {
+      this.crystalsRun += 5;
     } else {
       if (!this.incrementArtifactStack(u, artifactId)) return;
     }

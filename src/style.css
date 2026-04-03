@@ -2774,6 +2774,12 @@ h1 {
   border-color: #ff8a80;
 }
 
+.enemy-inspect-status-badge--deslumbro {
+  background: #102030;
+  color: #e3f2ff;
+  border-color: #b3d4fc;
+}
+
 .enemy-inspect-list--primary {
   flex: 0 1 auto;
   min-height: 0;

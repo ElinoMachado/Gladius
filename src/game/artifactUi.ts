@@ -10,6 +10,48 @@ import {
   type ArtifactRarity,
 } from "./data/artifactRarity";
 
+/** Na run normal: quantos artefatos *diferentes* por raridade o herói pode ter (acúmulos à parte). */
+export const MAX_DISTINCT_ARTIFACTS_BY_RARITY: Record<ArtifactRarity, number> =
+  {
+    common: 3,
+    uncommon: 3,
+    rare: 2,
+    legendary: 2,
+    mythic: 1,
+  };
+
+export function countDistinctArtifactsOfRarity(
+  u: Unit,
+  rarity: ArtifactRarity,
+): number {
+  let n = 0;
+  for (const id of Object.keys(u.artifacts)) {
+    const stacks = u.artifacts[id] ?? 0;
+    if (stacks <= 0) continue;
+    const d = artifactDefById(id);
+    if (d?.rarity === rarity) n++;
+  }
+  return n;
+}
+
+/** Pode ganhar +1 acúmulo deste artefato (teto de stack e teto de tipos por raridade). */
+export function canIncrementArtifactStack(
+  u: Unit,
+  artifactId: string,
+  opts?: { bypassRarityCaps?: boolean },
+): boolean {
+  if (artifactId.startsWith("_")) return false;
+  const cap = getArtifactMaxStacks(artifactId);
+  const prev = u.artifacts[artifactId] ?? 0;
+  if (prev >= cap) return false;
+  if (prev > 0) return true;
+  if (opts?.bypassRarityCaps) return true;
+  const def = artifactDefById(artifactId);
+  if (!def) return false;
+  const n = countDistinctArtifactsOfRarity(u, def.rarity);
+  return n < MAX_DISTINCT_ARTIFACTS_BY_RARITY[def.rarity];
+}
+
 /** Limite padrão de empilhamento (cartas). */
 export const DEFAULT_ARTIFACT_MAX_STACK = 6;
 
@@ -41,19 +83,16 @@ export function isArtifactVisibleInHud(artifactId: string): boolean {
   return ARTIFACT_POOL.some((a) => a.id === artifactId);
 }
 
-function canTakeArtifact(u: Unit, id: string): boolean {
-  if (id.startsWith("_pick")) return true;
-  return (u.artifacts[id] ?? 0) < getArtifactMaxStacks(id);
-}
-
 export function randomArtifactChoicesForHero(
   u: Unit,
   count: number,
   sorte: number,
   exclude: Set<string> = new Set(),
+  opts?: { bypassRarityCaps?: boolean },
 ): string[] {
   const out: string[] = [];
   const picked = new Set(exclude);
+  const bypass = opts?.bypassRarityCaps ?? false;
 
   const tryPickOne = (): string | null => {
     const primary = rollArtifactRarity(sorte);
@@ -63,7 +102,10 @@ export function randomArtifactChoicesForHero(
     ];
     for (const tr of order) {
       const pool = ARTIFACT_POOL.filter(
-        (a) => a.rarity === tr && !picked.has(a.id) && canTakeArtifact(u, a.id),
+        (a) =>
+          a.rarity === tr &&
+          !picked.has(a.id) &&
+          canIncrementArtifactStack(u, a.id, { bypassRarityCaps: bypass }),
       );
       if (pool.length > 0) {
         return pool[Math.floor(Math.random() * pool.length)]!.id;
@@ -90,6 +132,11 @@ export function randomArtifactChoicesForHero(
       picked.add("_pick_restore");
       continue;
     }
+    if (!picked.has("_pick_crystals")) {
+      out.push("_pick_crystals");
+      picked.add("_pick_crystals");
+      continue;
+    }
     break;
   }
   return out;
@@ -106,11 +153,13 @@ export function artifactRarityClass(r: ArtifactRarity): string {
 export function pickChoiceDisplayName(id: string): string {
   if (id === "_pick_gold") return "Saco de ouro";
   if (id === "_pick_restore") return "Descanso do campeão";
+  if (id === "_pick_crystals") return "Cristais de arena";
   return defOr(id)?.name ?? id;
 }
 
 export function pickChoiceRarity(id: string): ArtifactRarity | null {
-  if (id === "_pick_gold" || id === "_pick_restore") return null;
+  if (id === "_pick_gold" || id === "_pick_restore" || id === "_pick_crystals")
+    return null;
   return defOr(id)?.rarity ?? null;
 }
 
@@ -177,9 +226,10 @@ export function describeArtifactAtStack(
     case "espinhos_reais":
       return `Devolve ${8 * n}% do dano recebido de inimigos ao atacante.`;
     case "guerra_total": {
+      const flat = [50, 120, 210][n - 1] ?? 210;
       const pct = [20, 40, 75][n - 1] ?? 75;
       const ins = [1, 2, 3][n - 1] ?? 3;
-      return `No início da wave: onda ${pct}% PV máx. por inimigo (metade em elite/chefe), ${ins} instância(s) de Deslumbro (+50% dano recebido).`;
+      return `No início da wave: ${flat} + ${pct}% PV máx. por inimigo (metade em elite/chefe), ${ins} instância(s) de Deslumbro (+50% dano recebido).`;
     }
     case "furacao_ouro":
       return `+${5 * n} ouro na bolsa por eliminação.`;
@@ -215,9 +265,11 @@ export function describeArtifactAtStack(
       return `+${eff} movimento (máx. 3 com efeito).`;
     }
     case "_pick_gold":
-      return "+75 ouro na bolsa.";
+      return "+50 ouro na bolsa.";
     case "_pick_restore":
       return "Recupera toda a vida e mana.";
+    case "_pick_crystals":
+      return "+5 cristais na conta da run.";
     default: {
       const d = defOr(id);
       return d?.description ?? id;
@@ -242,7 +294,11 @@ export function artifactStackCounterLabel(id: string, stacks: number): string {
 
 /** Tooltip do codex: todos os tiers. `u` opcional (ex.: loja sandbox) para textos que dependem do herói. */
 export function artifactCodexAllTiersHtml(id: string, u?: Unit): string {
-  if (id === "_pick_gold" || id === "_pick_restore") {
+  if (
+    id === "_pick_gold" ||
+    id === "_pick_restore" ||
+    id === "_pick_crystals"
+  ) {
     return `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(pickChoiceDisplayName(id))}</div><div class="artifact-tt-cur">${escapeHtml(describeArtifactAtStack(id, 1, u))}</div></div>`;
   }
   if (id === "tonico") {
@@ -302,6 +358,7 @@ export function artifactCardFigureSvg(artifactId: string): string {
     olho_agucado: `<ellipse cx="24" cy="26" rx="16" ry="6" fill="none" stroke="#00838f" stroke-width="1.4" opacity="0.85"/><ellipse cx="24" cy="26" rx="11" ry="4" fill="none" stroke="#26c6da" stroke-width="1.2"/><ellipse cx="24" cy="26" rx="6" ry="2.2" fill="none" stroke="#80deea" stroke-width="1"/><circle cx="24" cy="26" r="2.5" fill="#b2ebf2"/><path fill="none" stroke="#4dd0e1" stroke-width="1" d="M8 26 Q24 14 40 26"/>`,
     _pick_gold: `<circle cx="24" cy="24" r="14" fill="#c9a227" stroke="#6a5018"/><circle cx="24" cy="22" r="9" fill="#e8c84a"/><ellipse cx="24" cy="19" rx="6" ry="2.5" fill="#f5d76e"/>`,
     _pick_restore: `<path fill="#43a047" d="M24 8v32M8 24h32" stroke="#1b5e20" stroke-width="3"/><circle cx="24" cy="24" r="12" fill="none" stroke="#66bb6a" stroke-width="2"/>`,
+    _pick_crystals: `<path fill="#7e57c2" d="M24 8l4 8 8 2-6 6 1 9-7-4-7 4 1-9-6-6 8-2z" stroke="#4527a0" stroke-width="0.8"/><path fill="#b39ddb" d="M24 14l2.5 5 5.5 1.2-4 4 .7 5.8-4.7-2.5-4.7 2.5.7-5.8-4-4 5.5-1.2z"/>`,
   };
   return (
     sym[artifactId] ??
@@ -338,7 +395,11 @@ export function artifactTooltipHtml(
 }
 
 export function artifactPickChoiceTooltip(id: string, u: Unit): string {
-  if (id === "_pick_gold" || id === "_pick_restore") {
+  if (
+    id === "_pick_gold" ||
+    id === "_pick_restore" ||
+    id === "_pick_crystals"
+  ) {
     return `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(pickChoiceDisplayName(id))}</div><div class="artifact-tt-cur">${escapeHtml(describeArtifactAtStack(id, 1))}</div></div>`;
   }
   const cur = u.artifacts[id] ?? 0;
