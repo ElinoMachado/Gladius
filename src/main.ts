@@ -3085,8 +3085,10 @@ function combatSquareSkillHtml(opts: {
   combatHotkey?: string;
   /** Ondas restantes de recarga (mostrado no canto superior esquerdo, branco). */
   cdTurns?: number;
-  /** Ataque básico: usos restantes / máximo (canto superior esquerdo, branco). */
+  /** Ataque básico: ataques restantes / máximo (canto superior esquerdo, branco). */
   usesBadge?: { cur: number; max: number };
+  /** Sem badge de mana no canto (ex.: ataque básico). */
+  omitManaBadge?: boolean;
   /** Se definido, segundo clique/tecla com a mesma skill pendente cancela. */
   selectKind?: "basic" | "skill";
   selectId?: string;
@@ -3109,15 +3111,18 @@ function combatSquareSkillHtml(opts: {
       : "";
   const usesBadge =
     opts.usesBadge != null
-      ? `<span class="lol-skill-uses-badge" aria-hidden="true">${escapeHtml(`Usos: ${opts.usesBadge.cur}/${opts.usesBadge.max}`)}</span>`
+      ? `<span class="lol-skill-uses-badge" aria-hidden="true">${escapeHtml(`Ataques: ${opts.usesBadge.cur}/${opts.usesBadge.max}`)}</span>`
       : "";
+  const manaSpan = opts.omitManaBadge
+    ? ""
+    : `<span class="lol-mana-badge" aria-hidden="true">${escapeHtml(opts.manaBadge)}</span>`;
   let selAttr = "";
   if (opts.selectKind) {
     selAttr += ` data-combat-select-kind="${escapeHtml(opts.selectKind)}"`;
     if (opts.selectKind === "skill" && opts.selectId)
       selAttr += ` data-combat-select-id="${escapeHtml(opts.selectId)}"`;
   }
-  return `<button type="button" class="${cls}"${dis}${st}${hkAttr}${selAttr} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${usesBadge}${fill}${opts.iconHtml}<span class="lol-skill-key-wrap"><span class="lol-key">${escapeHtml(opts.hotkey)}</span></span><span class="lol-mana-badge" aria-hidden="true">${escapeHtml(opts.manaBadge)}</span></button>`;
+  return `<button type="button" class="${cls}"${dis}${st}${hkAttr}${selAttr} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${usesBadge}${fill}${opts.iconHtml}<span class="lol-skill-key-wrap"><span class="lol-key">${escapeHtml(opts.hotkey)}</span></span>${manaSpan}</button>`;
 }
 
 /** Ícone de skill na loja (sem tecla de combate); tooltips iguais ao HUD. */
@@ -3177,8 +3182,9 @@ function mountGoldShopHeroSkillsRow(
   append(
     goldShopSkillChipHtml({
       iconHtml: basicAttackIconHtml(),
-      manaBadge: manaCostBadgeText(0),
+      manaBadge: "",
       ariaLabel: "Ataque básico",
+      omitManaBadge: true,
     }),
     () => tooltipBasicAttack(h, m),
   );
@@ -4295,9 +4301,8 @@ function tooltipBasicAttack(h: Unit, m: GameModel): string {
     m.currentHero()?.id === h.id;
   const cur = theirTurn ? m.basicLeft : cap;
   return tooltipAbilityHtml("Ataque básico", [
-    { label: "Custo de mana:", value: tipInt(0), kind: "mana" },
     {
-      label: "Usos:",
+      label: "Ataques:",
       value: `${tipInt(cur)}/${tipInt(cap)}`,
       kind: "fx",
     },
@@ -6381,8 +6386,9 @@ function showCombatHUD(): void {
         iconHtml: basicAttackIconHtml(),
         hotkey: "Q",
         combatHotkey: "q",
-        manaBadge: manaCostBadgeText(0),
-        ariaLabel: `Ataque básico — Usos ${curBasic} de ${capBasic}`,
+        manaBadge: "",
+        omitManaBadge: true,
+        ariaLabel: `Ataque básico — Ataques ${curBasic} de ${capBasic}`,
         selectKind: "basic",
         usesBadge: { cur: curBasic, max: capBasic },
       }),
