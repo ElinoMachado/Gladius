@@ -8142,11 +8142,29 @@ select.forge-biome-sel option:disabled {
 }
 
 .combat-sandbox-panel__pill {
-  margin: 0 0 0.45rem;
+  margin: 0 0 0.35rem;
   font-size: 0.65rem;
   line-height: 1.35;
   color: rgba(180, 210, 235, 0.88);
   font-weight: 600;
+}
+
+.combat-sandbox-panel__toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: #dce8f4;
+  cursor: pointer;
+  user-select: none;
+}
+
+.combat-sandbox-panel__toggle input {
+  margin: 0.12rem 0 0;
+  flex-shrink: 0;
+  accent-color: #c9a227;
 }
 
 .combat-sandbox-panel__row {

@@ -12,6 +12,7 @@ import type {
 import { buildHexArena, getCell, type HexCell } from "./grid";
 import { findPath, reachableHexes } from "./pathfinding";
 import { getSkipEnemyMoveAnim } from "./combatPrefs";
+import { getSandboxNoCdUltReady } from "./sandboxPrefs";
 import { hexDistance } from "./hex";
 import {
   computeMitigatedDamage,
@@ -393,9 +394,14 @@ export class GameModel {
   victoryWave20 = false;
   /**
    * Partida de teste (menu “Modo sandbox”): ouro/cristais/essências elevados,
-   * sem CDR em combate e ultimate da arma sempre disponível.
+   * e (se a opção estiver ligada) sem CDR em combate e ultimate da arma sempre disponível.
    */
   devSandboxMode = false;
+
+  /** Sandbox: CDR desligado + ultimate da arma pronta (`sandboxPrefs`). */
+  sandboxNoCdUltEnabled(): boolean {
+    return this.devSandboxMode && getSandboxNoCdUltReady();
+  }
   /** Cores da run (sinergia VVA escudo/turno) */
   runColors: TeamColor[] = [];
   /** % extra de XP do grupo (ex.: tricolor verde+azul+vermelho). */
@@ -499,6 +505,11 @@ export class GameModel {
     return () => this.listeners.delete(fn);
   }
 
+  /** Notifica subscritores (ex.: após mudar preferências de sandbox fora do modelo). */
+  requestUiUpdate(): void {
+    this.emit();
+  }
+
   private emit(): void {
     for (const u of this.units) snapPlayerVitality(u);
     for (const l of this.listeners) l();
@@ -514,7 +525,10 @@ export class GameModel {
     saveMeta(this.meta);
   }
 
-  /** Mantém economia e cargas “infinitas” enquanto `devSandboxMode` estiver ativo. */
+  /**
+   * Mantém economia ampla enquanto `devSandboxMode` estiver ativo.
+   * CDR zerado e ultimate da arma cheia só se `sandboxNoCdUltEnabled()`.
+   */
   applyDevSandboxBuffs(): void {
     if (!this.devSandboxMode) return;
     const C = 99_999_999;
@@ -528,14 +542,16 @@ export class GameModel {
       if (!u.isPlayer || u.hp <= 0) continue;
       u.ouro = C;
       u.ouroWave = C;
-      if (u.heroClass) {
+      if (u.heroClass && this.sandboxNoCdUltEnabled()) {
         u.weaponUltMeter = 1;
         u.weaponUltHealAcc = 999999;
         u.weaponUltHitAcc = 999999;
         u.weaponUltTakenAcc = 999999;
       }
-      for (const k of Object.keys(u.skillCd)) {
-        u.skillCd[k] = 0;
+      if (this.sandboxNoCdUltEnabled()) {
+        for (const k of Object.keys(u.skillCd)) {
+          u.skillCd[k] = 0;
+        }
       }
     }
   }
@@ -1724,7 +1740,7 @@ export class GameModel {
     const h = this.currentHero();
     if (h) {
       clearBravuraInstances(h);
-      if (!this.devSandboxMode) {
+      if (!this.sandboxNoCdUltEnabled()) {
         for (const k of Object.keys(h.skillCd)) {
           const v = h.skillCd[k] ?? 0;
           if (v > 0) h.skillCd[k] = v - 1;
@@ -2571,13 +2587,13 @@ export class GameModel {
     if (!h || h.hp <= 0) return false;
 
     if (skillId === "bunker_minas") {
-      if (!this.devSandboxMode && (h.skillCd[skillId] ?? 0) > 0) return false;
+      if (!this.sandboxNoCdUltEnabled() && (h.skillCd[skillId] ?? 0) > 0) return false;
       const b = this.bunkerAtHex(h.q, h.r);
       if (!b || b.hp <= 0 || b.occupantId !== h.id) return false;
       const tier = b.tier;
       const mult = bunkerMinasDamageMult(tier);
       const maxR = bunkerMinasMaxRing(tier);
-      if (!this.devSandboxMode)
+      if (!this.sandboxNoCdUltEnabled())
         h.skillCd[skillId] = bunkerMinasCooldownWaves(tier);
       const fromQ = b.q;
       const fromR = b.r;
@@ -2633,7 +2649,7 @@ export class GameModel {
     }
 
     if (skillId === "bunker_tiro_preciso") {
-      if (!this.devSandboxMode && (h.skillCd[skillId] ?? 0) > 0) return false;
+      if (!this.sandboxNoCdUltEnabled() && (h.skillCd[skillId] ?? 0) > 0) return false;
       const b = this.bunkerAtHex(h.q, h.r);
       if (!b || b.occupantId !== h.id || b.tier < 2) return false;
       if (!targetId) return false;
@@ -2644,7 +2660,8 @@ export class GameModel {
         h.pistoleiroBonusDanoWave +
         h.curandeiroDanoWave;
       const raw = roundToCombatDecimals(baseDano * 10);
-      if (!this.devSandboxMode) h.skillCd[skillId] = bunkerTiroCooldownWaves();
+      if (!this.sandboxNoCdUltEnabled())
+        h.skillCd[skillId] = bunkerTiroCooldownWaves();
       this.pendingCombatVfxQueue.push({
         kind: "bunker_mortar",
         fromId: h.id,
@@ -2678,7 +2695,7 @@ export class GameModel {
     if (skillId === "tiro_destruidor") {
       if (h.heroClass !== "pistoleiro" || h.ultimateId !== "arauto_caos")
         return false;
-      if (!this.devSandboxMode && (h.skillCd["tiro_destruidor"] ?? 0) > 0)
+      if (!this.sandboxNoCdUltEnabled() && (h.skillCd["tiro_destruidor"] ?? 0) > 0)
         return false;
       if (!this.devSandboxMode && (h.tiroDestruidorCharges ?? 0) < 1)
         return false;
@@ -2730,7 +2747,7 @@ export class GameModel {
       }
       h.tiroDestruidorCharges = 0;
       h.tiroDestruidorUsedThisTurn = true;
-      if (!this.devSandboxMode)
+      if (!this.sandboxNoCdUltEnabled())
         h.skillCd["tiro_destruidor"] = atirarCooldownWaves(h.weaponLevel);
       this.log(`${h.name}: Tiro destruidor! (${charges} carga(s))`);
       this.queueCombat(delay + 55, () => {
@@ -2745,7 +2762,7 @@ export class GameModel {
       return true;
     }
 
-    if (!this.devSandboxMode && (h.skillCd[skillId] ?? 0) > 0) return false;
+    if (!this.sandboxNoCdUltEnabled() && (h.skillCd[skillId] ?? 0) > 0) return false;
 
     if (
       skillId === "atirar_todo_lado" &&
@@ -2767,7 +2784,7 @@ export class GameModel {
         targetIds,
         shotCount,
       });
-      if (!this.devSandboxMode)
+      if (!this.sandboxNoCdUltEnabled())
         h.skillCd[skillId] = atirarCooldownWaves(h.weaponLevel);
       this.log(`${h.name}: Atirar pra todo lado!`);
 
@@ -2806,7 +2823,7 @@ export class GameModel {
 
     if (skillId === "pisotear" && h.heroClass === "gladiador") {
       if (!h.furiaGiganteTurns || h.furiaGiganteTurns <= 0) return false;
-      if (!this.devSandboxMode && (h.skillCd["pisotear"] ?? 0) > 0)
+      if (!this.sandboxNoCdUltEnabled() && (h.skillCd["pisotear"] ?? 0) > 0)
         return false;
       const mc = pisotearManaCost(h.weaponLevel);
       if (mc > 0 && h.maxMana > 0 && h.mana < mc) return false;
@@ -2823,7 +2840,7 @@ export class GameModel {
       });
       if (targets.length === 0) return false;
       if (mc > 0 && h.maxMana > 0) h.mana -= mc;
-      if (!this.devSandboxMode)
+      if (!this.sandboxNoCdUltEnabled())
         h.skillCd["pisotear"] = pisotearCooldownWaves(h.weaponLevel);
       const targetIds = targets.map((t) => t.id);
       this.pendingCombatVfxQueue.push({
@@ -2874,7 +2891,7 @@ export class GameModel {
         return false;
       if (mc > 0 && h.maxMana > 0) h.mana -= mc;
       this.startDuel(h, tgt);
-      if (!this.devSandboxMode)
+      if (!this.sandboxNoCdUltEnabled())
         h.skillCd[skillId] = ateMorteCooldownWaves(h.weaponLevel);
       return true;
     }
@@ -2884,7 +2901,7 @@ export class GameModel {
       if (h.mana < sm) return false;
       h.mana -= sm;
       this.executeSentenca(h);
-      if (!this.devSandboxMode)
+      if (!this.sandboxNoCdUltEnabled())
         h.skillCd[skillId] = sentencaCooldownWaves(h.weaponLevel);
       this.emit();
       return true;
@@ -3960,7 +3977,7 @@ export class GameModel {
   tryWeaponUltimate(): boolean {
     const h = this.currentHero();
     if (!h || h.hp <= 0 || this.phase !== "combat") return false;
-    if (!this.devSandboxMode && h.weaponUltMeter < 1) return false;
+    if (!this.sandboxNoCdUltEnabled() && h.weaponUltMeter < 1) return false;
     if (h.heroClass === "sacerdotisa") return this.castParaisoNaTerra(h);
     if (h.heroClass === "pistoleiro") return this.castFuracaoBalas(h);
     if (h.heroClass === "gladiador") return this.castFuriaGigante(h);
@@ -3988,7 +4005,7 @@ export class GameModel {
         bonusMana: perMana,
       };
     }
-    if (!this.devSandboxMode) this.resetWeaponUltCharge(h);
+    if (!this.sandboxNoCdUltEnabled()) this.resetWeaponUltCharge(h);
     this.log(`${h.name}: Paraíso na terra!`);
     this.emit();
     return true;
@@ -4008,7 +4025,7 @@ export class GameModel {
       heroId: h.id,
       targetIds,
     });
-    if (!this.devSandboxMode) this.resetWeaponUltCharge(h);
+    if (!this.sandboxNoCdUltEnabled()) this.resetWeaponUltCharge(h);
     this.killLevelUpFlushSuppressed = true;
     this.pendingKillLevelUpFlushHeroIds.clear();
     this.log(`${h.name}: Furacão de balas!`);
@@ -4068,7 +4085,7 @@ export class GameModel {
     h.hp += extra;
     h.dano = Math.max(0.01, roundToCombatDecimals(h.maxHp * 0.1));
     h.furiaGiganteTurns = 3;
-    if (!this.devSandboxMode) this.resetWeaponUltCharge(h);
+    if (!this.sandboxNoCdUltEnabled()) this.resetWeaponUltCharge(h);
     this.log(`${h.name}: Fúria do gigante!`);
     this.emit();
     return true;

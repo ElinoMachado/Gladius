@@ -164,6 +164,10 @@ import {
 import { setArenaCombatMusicFromWave, stopArenaAmbient } from "./audio/arenaAmbient";
 import { ensureMenuThemePlaying, pauseMenuTheme } from "./audio/menuAmbient";
 import { getSkipEnemyMoveAnim, setSkipEnemyMoveAnim } from "./game/combatPrefs";
+import {
+  getSandboxNoCdUltReady,
+  setSandboxNoCdUltReady,
+} from "./game/sandboxPrefs";
 import { UNIT_MOVE_SEGMENT_MS } from "./game/combatTiming";
 import {
   BUNKER_EVOLVE_COSTS,
@@ -2496,7 +2500,11 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     .join("");
   const panel = el(`<aside class="combat-sandbox-panel" id="combat-sandbox-panel" aria-label="Ferramentas de teste sandbox">
     <div class="combat-sandbox-panel__head combat-sandbox-panel__drag-handle" title="Arrastar · tecla A mostrar/ocultar">Sandbox</div>
-    <p class="combat-sandbox-panel__pill">Ouro/cristais/essências amplos · sem CDR · ultimate pronta</p>
+    <p class="combat-sandbox-panel__pill">Ouro/cristais/essências amplos</p>
+    <label class="combat-sandbox-panel__toggle" title="Persiste entre sessões (localStorage)">
+      <input type="checkbox" id="combat-sandbox-no-cd-ult" />
+      <span>Sem CDR · ultimate da arma pronta</span>
+    </label>
     <div class="combat-sandbox-panel__row">
       <label class="combat-sandbox-panel__wave-label" for="combat-sandbox-wave-sel">Recomeçar na wave</label>
       <select id="combat-sandbox-wave-sel" class="combat-sandbox-panel__wave-sel" aria-label="Recomeçar combate nesta wave">${waveOpts}</select>
@@ -2661,6 +2669,20 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     },
     { signal },
   );
+  const noCdUltCb = panel.querySelector(
+    "#combat-sandbox-no-cd-ult",
+  ) as HTMLInputElement | null;
+  if (noCdUltCb) {
+    noCdUltCb.checked = getSandboxNoCdUltReady();
+    noCdUltCb.addEventListener(
+      "change",
+      () => {
+        setSandboxNoCdUltReady(noCdUltCb.checked);
+        model.requestUiUpdate();
+      },
+      { signal },
+    );
+  }
   if (hero) {
     panel.querySelectorAll("[data-sandbox-artifact]").forEach((node) => {
       const btn = node as HTMLElement;
@@ -3250,7 +3272,7 @@ function mountGoldShopHeroSkillsRow(
   row.innerHTML = "";
   if (!h.heroClass) return;
   const tmpl = HEROES[h.heroClass];
-  const cdEff = (cd: number) => (m.devSandboxMode ? 0 : cd);
+  const cdEff = (cd: number) => (m.sandboxNoCdUltEnabled() ? 0 : cd);
   const inGoldShop =
     m.phase === "shop_initial" || m.phase === "shop_wave";
   const append = (html: string, tip: () => string): void => {
@@ -3404,8 +3426,10 @@ function mountGoldShopHeroSkillsRow(
       h.heroClass === "gladiador"
     ) {
       const cls = h.heroClass!;
-      const ready = m.devSandboxMode || h.weaponUltMeter >= 1;
-      const pct = Math.round(m.devSandboxMode ? 100 : h.weaponUltMeter * 100);
+      const ready = m.sandboxNoCdUltEnabled() || h.weaponUltMeter >= 1;
+      const pct = Math.round(
+        m.sandboxNoCdUltEnabled() ? 100 : h.weaponUltMeter * 100,
+      );
       const wname = weaponUltNamePt(cls);
       const wid = weaponUltIconId(cls);
       append(
@@ -6697,7 +6721,7 @@ function showCombatHUD(): void {
       extraDisabled: boolean,
       skillDef: SkillDef,
     ) => {
-      const cdEff = model.devSandboxMode ? 0 : cd;
+      const cdEff = model.sandboxNoCdUltEnabled() ? 0 : cd;
       const dis = cdEff > 0 || extraDisabled || !isViewingActive;
       const key = hotkeys[hotkeyIdx++] ?? "?";
       const manaBadge = manaCostBadgeText(skillDef.manaCost ?? 0);
@@ -6730,7 +6754,9 @@ function showCombatHUD(): void {
     const bunk = model.bunkerAtHex(h.q, h.r);
     const inBunker = !!bunk && bunk.occupantId === h.id;
     if (inBunker && bunk) {
-      const cdM = model.devSandboxMode ? 0 : (h.skillCd["bunker_minas"] ?? 0);
+      const cdM = model.sandboxNoCdUltEnabled()
+        ? 0
+        : (h.skillCd["bunker_minas"] ?? 0);
       const keyW = hotkeys[hotkeyIdx++] ?? "W";
       const bMin = el(
         combatSquareSkillHtml({
@@ -6758,7 +6784,7 @@ function showCombatHUD(): void {
       });
       actionRow.appendChild(bMin);
       if (bunk.tier >= 2) {
-        const cdT = model.devSandboxMode
+        const cdT = model.sandboxNoCdUltEnabled()
           ? 0
           : (h.skillCd["bunker_tiro_preciso"] ?? 0);
         const keyE = hotkeys[hotkeyIdx++] ?? "E";
@@ -6792,7 +6818,9 @@ function showCombatHUD(): void {
       if (h.heroClass === "gladiador") {
         const inFuria = (h.furiaGiganteTurns ?? 0) > 0;
         if (inFuria) {
-          const cd = model.devSandboxMode ? 0 : (h.skillCd["pisotear"] ?? 0);
+          const cd = model.sandboxNoCdUltEnabled()
+            ? 0
+            : (h.skillCd["pisotear"] ?? 0);
           const mc = pisotearManaCost(h.weaponLevel);
           const dis =
             cd > 0 ||
@@ -6846,7 +6874,9 @@ function showCombatHUD(): void {
         for (const sk of tmpl.skills) {
           if (sk.id === "sentenca") {
             const sm = sentencaManaCost(h.weaponLevel);
-            const cdS = model.devSandboxMode ? 0 : (h.skillCd[sk.id] ?? 0);
+            const cdS = model.sandboxNoCdUltEnabled()
+              ? 0
+              : (h.skillCd[sk.id] ?? 0);
             const dis =
               cdS > 0 || h.mana < sm || !isViewingActive;
             const key = hotkeys[hotkeyIdx++] ?? "?";
@@ -6907,9 +6937,10 @@ function showCombatHUD(): void {
         h.heroClass === "gladiador"
       ) {
         const cls = h.heroClass!;
-        const ready = model.devSandboxMode || h.weaponUltMeter >= 1;
+        const ready =
+          model.sandboxNoCdUltEnabled() || h.weaponUltMeter >= 1;
         const pct = Math.round(
-          model.devSandboxMode ? 100 : h.weaponUltMeter * 100,
+          model.sandboxNoCdUltEnabled() ? 100 : h.weaponUltMeter * 100,
         );
         const keyU = hotkeys[hotkeyIdx++] ?? "T";
         const wname = weaponUltNamePt(cls);
