@@ -39,6 +39,7 @@ import {
   artifactCodexAllTiersHtml,
   artifactPickChoiceTooltip,
   artifactRarityClass,
+  artifactRaritySlotsStripHtml,
   artifactStackCounterLabel,
   artifactTooltipHtml,
   getArtifactMaxStacks,
@@ -2658,8 +2659,7 @@ function mountGoldShopArtifactStrip(panel: HTMLElement, h: Unit): void {
   }
 
   if (arts.length === 0) {
-    strip.innerHTML =
-      '<span class="shop-hero-artifacts-empty">Nenhum artefato</span>';
+    strip.innerHTML = `${artifactRaritySlotsStripHtml(h)}<span class="shop-hero-artifacts-empty">Nenhum artefato</span>`;
     return;
   }
   const a0 = goldShopArtifactPage * GOLD_SHOP_ARTIFACT_PAGE_SIZE;
@@ -2675,7 +2675,7 @@ function mountGoldShopArtifactStrip(panel: HTMLElement, h: Unit): void {
     showPager && arts.length > 0
       ? `<div class="shop-hero-artifacts-page-hint" aria-hidden="true">${a0 + 1}–${Math.min(a0 + pageArts.length, arts.length)}/${arts.length}</div>`
       : "";
-  strip.innerHTML = `${rangeHint}<div class="shop-hero-artifacts-cards">${cards}</div>`;
+  strip.innerHTML = `${artifactRaritySlotsStripHtml(h)}${rangeHint}<div class="shop-hero-artifacts-cards">${cards}</div>`;
   strip.querySelectorAll("[data-artifact-id]").forEach((node) => {
     const el = node as HTMLElement;
     const aid = el.dataset.artifactId!;
@@ -5914,8 +5914,7 @@ function showCombatHUD(): void {
         btnArtDown.disabled = combatArtifactStripPage >= maxArtPage;
       }
       if (arts.length === 0) {
-        artStrip.innerHTML =
-          '<span class="combat-artifacts-label">Artefatos</span><span class="combat-artifacts-empty">—</span>';
+        artStrip.innerHTML = `<span class="combat-artifacts-label">Artefatos</span>${artifactRaritySlotsStripHtml(h)}<span class="combat-artifacts-empty">—</span>`;
       } else {
         const a0 = combatArtifactStripPage * COMBAT_ARTIFACT_PAGE_SIZE;
         const artsPage = arts.slice(a0, a0 + COMBAT_ARTIFACT_PAGE_SIZE);
@@ -5930,7 +5929,7 @@ function showCombatHUD(): void {
           showArtPager && arts.length > 0
             ? ` <span class="combat-artifacts-page-hint" aria-hidden="true">${a0 + 1}–${Math.min(a0 + artsPage.length, arts.length)}/${arts.length}</span>`
             : "";
-        artStrip.innerHTML = `<span class="combat-artifacts-label">Artefatos</span>${rangeHint}<div class="combat-artifacts-cards">${cards}</div>`;
+        artStrip.innerHTML = `<span class="combat-artifacts-label">Artefatos</span>${artifactRaritySlotsStripHtml(h)}${rangeHint}<div class="combat-artifacts-cards">${cards}</div>`;
         artStrip.querySelectorAll("[data-artifact-id]").forEach((node) => {
           const el = node as HTMLElement;
           const aid = el.dataset.artifactId!;

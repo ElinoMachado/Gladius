@@ -4004,6 +4004,89 @@ body.enemy-inspect--dragging-body {
   box-shadow: 0 0 16px rgba(156, 39, 176, 0.28) inset;
 }
 
+/* Vagas por raridade: tipos distintos na run (3/3/2/2/1) */
+.artifact-rarity-slots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.32rem 0.45rem;
+  flex: 1 1 100%;
+  width: 100%;
+  padding: 0.14rem 0 0.06rem;
+  margin-top: 0.06rem;
+  border-top: 1px solid rgba(120, 110, 140, 0.18);
+  box-sizing: border-box;
+}
+
+.shop-screen__panel--gold .shop-hero-artifacts-strip .artifact-rarity-slots {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+  margin-bottom: 0.25rem;
+}
+
+.artifact-rarity-slots__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+}
+
+.artifact-rarity-slots__abbr {
+  display: inline-block;
+  min-width: 0.55rem;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: rgba(200, 190, 175, 0.72);
+  text-align: center;
+  line-height: 1;
+}
+
+.artifact-rarity-slots__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.14rem;
+}
+
+.artifact-rarity-slot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.artifact-rarity-slot--empty {
+  opacity: 0.42;
+  background: transparent;
+  border: 1px dashed rgba(200, 190, 210, 0.35);
+}
+
+.artifact-rarity-slot--filled {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.artifact-rarity-slot--filled.artifact-rarity--common {
+  background: linear-gradient(145deg, #b0b0b0, #7a7a7a);
+}
+
+.artifact-rarity-slot--filled.artifact-rarity--uncommon {
+  background: linear-gradient(145deg, #66bb6a, #2e7d32);
+}
+
+.artifact-rarity-slot--filled.artifact-rarity--rare {
+  background: linear-gradient(145deg, #42a5f5, #1565c0);
+}
+
+.artifact-rarity-slot--filled.artifact-rarity--legendary {
+  background: linear-gradient(145deg, #ef5350, #b71c1c);
+}
+
+.artifact-rarity-slot--filled.artifact-rarity--mythic {
+  background: linear-gradient(145deg, #ba68c8, #6a1b9a);
+}
+
 .combat-wave-stipend-overlay {
   position: fixed;
   left: 50%;

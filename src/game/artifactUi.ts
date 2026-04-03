@@ -5,6 +5,7 @@ import {
   type ArtifactDef,
 } from "./data/artifacts";
 import {
+  ARTIFACT_RARITY_LABELS,
   ARTIFACT_RARITY_ORDER,
   rollArtifactRarity,
   type ArtifactRarity,
@@ -19,6 +20,23 @@ export const MAX_DISTINCT_ARTIFACTS_BY_RARITY: Record<ArtifactRarity, number> =
     legendary: 2,
     mythic: 1,
   };
+
+/** Ordem crescente para a faixa de “vagas” na UI (comum → mítico). */
+export const ARTIFACT_RARITY_SLOTS_DISPLAY_ORDER: ArtifactRarity[] = [
+  "common",
+  "uncommon",
+  "rare",
+  "legendary",
+  "mythic",
+];
+
+const RARITY_SLOT_ABBR: Record<ArtifactRarity, string> = {
+  common: "C",
+  uncommon: "I",
+  rare: "R",
+  legendary: "L",
+  mythic: "M",
+};
 
 export function countDistinctArtifactsOfRarity(
   u: Unit,
@@ -427,4 +445,27 @@ function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/**
+ * Faixa de vagas por raridade: quantos **tipos** distintos ainda pode ter (acúmulos do mesmo tipo não ocupam vaga extra).
+ */
+export function artifactRaritySlotsStripHtml(u: Unit): string {
+  const groups = ARTIFACT_RARITY_SLOTS_DISPLAY_ORDER.map((r) => {
+    const max = MAX_DISTINCT_ARTIFACTS_BY_RARITY[r];
+    const cur = countDistinctArtifactsOfRarity(u, r);
+    const label = ARTIFACT_RARITY_LABELS[r];
+    const abbr = RARITY_SLOT_ABBR[r];
+    const title = escapeHtml(
+      `${label}: ${cur}/${max} tipo(s) distinto(s). Acúmulos do mesmo artefato não ocupam nova vaga.`,
+    );
+    const dots = Array.from({ length: max }, (_, i) => {
+      const filled = i < cur;
+      return `<span class="artifact-rarity-slot ${artifactRarityClass(r)} ${
+        filled ? "artifact-rarity-slot--filled" : "artifact-rarity-slot--empty"
+      }"></span>`;
+    }).join("");
+    return `<div class="artifact-rarity-slots__group" title="${title}"><span class="artifact-rarity-slots__abbr" aria-hidden="true">${abbr}</span><span class="artifact-rarity-slots__dots">${dots}</span></div>`;
+  }).join("");
+  return `<div class="artifact-rarity-slots" role="group" aria-label="Vagas de tipos distintos por raridade: 3 comuns, 3 incomuns, 2 raros, 2 lendários, 1 mítico">${groups}</div>`;
 }
