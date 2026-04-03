@@ -5561,15 +5561,25 @@ body.enemy-inspect--dragging-body {
 }
 
 .shop-footer-crystals {
-  margin: 0;
-  font-size: 0.8rem;
-  color: #a8c0e8;
-  letter-spacing: 0.03em;
+  align-self: flex-end;
+  margin: 0 0 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: #d4e8ff;
+  letter-spacing: 0.04em;
 }
 
-.shop-footer-crystals strong {
-  color: #d4e8ff;
+.shop-footer-crystals__num {
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
+}
+
+.shop-footer-crystals__ico {
+  width: 1.2rem;
+  height: 1.2rem;
+  display: block;
 }
 
 .shop-footer__actions {

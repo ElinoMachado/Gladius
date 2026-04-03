@@ -3058,7 +3058,10 @@ function showGoldShop(isInitial: boolean): void {
         </div>
         <div class="shop-footer">
           <p id="shop-footer-msg" class="shop-footer-msg" role="status" hidden></p>
-          <p class="shop-footer-crystals" aria-live="polite">Cristais: <strong>${model.meta.crystals}</strong></p>
+          <div class="shop-footer-crystals" aria-label="Cristais disponíveis">
+            <span class="shop-footer-crystals__num">${model.meta.crystals}</span>
+            ${metaCrystalIconSvgHtml("shop-footer-crystals__ico")}
+          </div>
           <div class="shop-footer__actions">
             <button type="button" class="btn shop-refund-btn" id="shop-refund" ${!canRefund ? "disabled" : ""} aria-label="${escapeHtml(refundAria)}">${refundBtnInner}</button>
             <button type="button" class="btn btn-primary" id="shop-start">${escapeHtml(startBtnLabel)}</button>
