@@ -3794,6 +3794,16 @@ export class GameRenderer {
     }
   }
 
+  /**
+   * Só em `import.meta.env.DEV`: entra na sessão de ajuste (mesma do clique no coliseu),
+   * útil para atalho a partir do menu.
+   */
+  devEnterArenaLayoutEdit(canvas: HTMLCanvasElement): void {
+    if (!import.meta.env.DEV) return;
+    if (!this.arenaLayoutEditEligible || this.arenaLayoutEditActive) return;
+    this.beginArenaLayoutSession(canvas);
+  }
+
   /** Apaga câmara personalizada guardada (volta à ortográfica no jogo). */
   clearPersistedFreeCamera(): void {
     this.usePersistentFreeCamera = false;

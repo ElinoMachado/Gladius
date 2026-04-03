@@ -1926,6 +1926,7 @@ function showMainMenu(): void {
   uiRoot.innerHTML = "";
   const devMenuExtras = import.meta.env.DEV
     ? `<button type="button" class="main-menu-link main-menu-link--sandbox" data-action="dev-sandbox">Modo sandbox (testes)</button>
+          <button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-arena-layout">[Dev] Ajustar cena</button>
           <button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-reset-fresh">[Dev] Estado inicial (apagar save)</button>`
     : "";
   const s = el(`
@@ -1983,6 +1984,10 @@ function showMainMenu(): void {
           setup.biomes = [];
           setup.colors = ["azul", "verde", "vermelho"];
           render();
+          break;
+        case "dev-arena-layout":
+          if (!import.meta.env.DEV) break;
+          view.devEnterArenaLayoutEdit(canvas);
           break;
         case "crystal":
           model.phase = "crystal_shop";
