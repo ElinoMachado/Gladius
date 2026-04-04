@@ -14,6 +14,12 @@ import { preloadBunkerGlbs } from "./render/bunkerGlbLoader";
 import { preloadForgePieceGlbs } from "./render/forgePieceGlb";
 import { preloadAllHeroGlbs } from "./render/heroGlbLoader";
 import { HeroPreview3D } from "./render/HeroPreview3D";
+import {
+  heroPreviewCameraBiomeInitial,
+  heroPreviewCameraGoldShopSolo,
+  heroPreviewCameraGoldShopTurntable,
+  heroPreviewCameraSetupSlotCard,
+} from "./render/heroPreviewCameraPresets";
 import { MainMenuSword3D } from "./render/MainMenuSword3D";
 import { BiomePicker3D } from "./render/BiomePicker3D";
 import { ShopStall3D } from "./render/ShopStall3D";
@@ -2722,10 +2728,7 @@ function showHeroSetup(): void {
         heroSetupWeaponAbilitiesTooltipHtml(hid, wl, baseD),
       );
       const host = card.querySelector(`[data-slot-model="${i}"]`) as HTMLElement;
-      const prev = new HeroPreview3D(host, 220, 300, {
-        cameraZ: 2.95,
-        lookAtY: 0.7,
-      });
+      const prev = new HeroPreview3D(host, 220, 300, heroPreviewCameraSetupSlotCard);
       prev.setHero(
         hid,
         colorHintToDisplayColor(HEROES[hid].colorHint),
@@ -2811,7 +2814,7 @@ function showBiomeSetup(): void {
   uiRoot.appendChild(s);
 
   const host = s.querySelector("#bio-hero-model-host") as HTMLElement;
-  bioHeroPreview = new HeroPreview3D(host, 220, 240);
+  bioHeroPreview = new HeroPreview3D(host, 220, 240, heroPreviewCameraBiomeInitial);
   const slotOrder = partySlotByHeroFromSlots();
   const forgeBio = resolveEquippedForgeLoadoutForMeta(
     model.meta,
@@ -3648,12 +3651,18 @@ function showGoldShop(isInitial: boolean): void {
     if (h.heroClass) {
       if (skillsWrap) skillsWrap.hidden = false;
       goldShopHeroPreview3d = bunkerShop
-        ? new HeroPreview3D(hero3dHost, 400, 300, {
-            cameraZ: 2.95,
-            lookAtY: 0.58,
-            fov: 36,
-          })
-        : new HeroPreview3D(hero3dHost, 220, 260);
+        ? new HeroPreview3D(
+            hero3dHost,
+            400,
+            300,
+            heroPreviewCameraGoldShopTurntable,
+          )
+        : new HeroPreview3D(
+            hero3dHost,
+            220,
+            260,
+            heroPreviewCameraGoldShopSolo,
+          );
       const shopForma =
         h.formaFinal && h.ultimateId
           ? { formaFinal: true as const, ultimateId: h.ultimateId }

@@ -6956,6 +6956,12 @@ body.enemy-inspect--dragging-body {
   justify-content: center;
 }
 
+.biome-hero-model-host canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .biome-hero-model-wrap {
   width: 100%;
   border-radius: 10px;
