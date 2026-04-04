@@ -5133,7 +5133,7 @@ body.enemy-inspect--dragging-body {
     0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
-/* Loja ouro: carrossel 3D (painel de trás visível) + inclinação + seta */
+/* Loja ouro: prato 3D — dois painéis opostos em Z; rotação ~180° troca frente/fundo */
 .shop-viz-flip-wrap {
   margin-bottom: 0.75rem;
 }
@@ -5146,7 +5146,7 @@ body.enemy-inspect--dragging-body {
   transform-style: preserve-3d;
 }
 
-/* Esquerda ligeiramente mais próxima: rotação em Y + leve em X (profundidade) */
+/* Esquerda mais próxima (referência wireframe) */
 .shop-viz-stage {
   flex: 1;
   min-width: 0;
@@ -5155,69 +5155,56 @@ body.enemy-inspect--dragging-body {
   transform-origin: 50% 50%;
 }
 
-.shop-viz-carousel {
-  width: 100%;
-  transform-style: preserve-3d;
-}
-
-.shop-viz-carousel-scene {
-  position: relative;
+.shop-viz-turntable {
   width: 100%;
   height: 268px;
   transform-style: preserve-3d;
-  transform-origin: center center;
 }
 
-.shop-viz-carousel-card {
+.shop-viz-turntable-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform-origin: center center;
+  transition: transform 0.82s cubic-bezier(0.42, 0, 0.18, 1);
+  will-change: transform;
+  /* Virar o prato: bunker fica “atrás” do herói em profundidade; vê-se a lateral do segundo painel */
+  transform: rotateY(22deg);
+}
+
+.shop-viz-turntable-inner--bunker {
+  transform: rotateY(202deg);
+}
+
+.shop-viz-turntable-panel {
   position: absolute;
   left: 0;
-  right: 0;
   top: 0;
   width: 100%;
   height: 100%;
-  max-height: 100%;
   box-sizing: border-box;
   overflow: hidden;
   border-radius: 3px;
   transform-style: preserve-3d;
-  transition:
-    transform 0.58s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.48s ease,
-    filter 0.48s ease;
-  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
-/* Frente: herói — bunker recua à direita, visível atrás */
-.shop-viz-carousel:not(.shop-viz-carousel--bunker) .shop-viz-carousel-card--hero {
-  transform: translateZ(44px) scale(1);
-  opacity: 1;
-  z-index: 4;
-  filter: brightness(1);
-  pointer-events: auto;
+.shop-viz-turntable-panel--hero {
+  transform: rotateY(0deg) translateZ(76px);
 }
 
-.shop-viz-carousel:not(.shop-viz-carousel--bunker) .shop-viz-carousel-card--bunker {
-  transform: translateZ(-102px) translateX(30%) scale(0.76) rotateY(-26deg);
-  opacity: 0.52;
-  z-index: 1;
-  filter: brightness(0.72);
+.shop-viz-turntable-panel--bunker {
+  transform: rotateY(180deg) translateZ(76px);
+}
+
+.shop-viz-turntable-inner:not(.shop-viz-turntable-inner--bunker)
+  .shop-viz-turntable-panel--bunker {
   pointer-events: none;
 }
 
-/* Frente: bunker — herói recua à esquerda */
-.shop-viz-carousel--bunker .shop-viz-carousel-card--bunker {
-  transform: translateZ(44px) scale(1);
-  opacity: 1;
-  z-index: 4;
-  filter: brightness(1);
-  pointer-events: auto;
-}
-
-.shop-viz-carousel--bunker .shop-viz-carousel-card--hero {
-  transform: translateZ(-102px) translateX(-30%) scale(0.76) rotateY(26deg);
-  opacity: 0.52;
-  z-index: 1;
-  filter: brightness(0.72);
+.shop-viz-turntable-inner--bunker .shop-viz-turntable-panel--hero {
   pointer-events: none;
 }
 
@@ -5229,27 +5216,27 @@ body.enemy-inspect--dragging-body {
   max-height: 152px;
 }
 
-.shop-viz-carousel-card .shop-bunker-viz-layout__preview {
+.shop-viz-turntable-panel .shop-bunker-viz-layout__preview {
   width: 148px;
   max-width: 42%;
 }
 
-.shop-viz-carousel-card .shop-bunker-viz-layout__3d-host {
+.shop-viz-turntable-panel .shop-bunker-viz-layout__3d-host {
   min-height: 148px;
   height: 148px;
   max-height: 148px;
 }
 
-.shop-viz-carousel-card .shop-bunker-viz-layout {
+.shop-viz-turntable-panel .shop-bunker-viz-layout {
   gap: 0.55rem 0.85rem;
   padding: 0.15rem 0.05rem 0;
 }
 
-.shop-viz-carousel-card .shop-bunker-viz-layout__col {
+.shop-viz-turntable-panel .shop-bunker-viz-layout__col {
   padding: 0.1rem 0.05rem 0.15rem 0.2rem;
 }
 
-.shop-viz-carousel-card .shop-bunker-viz-layout__hint {
+.shop-viz-turntable-panel .shop-bunker-viz-layout__hint {
   margin: 0.35rem 0 0;
   font-size: 0.65rem;
   line-height: 1.35;
@@ -5259,36 +5246,36 @@ body.enemy-inspect--dragging-body {
   overflow: hidden;
 }
 
-.shop-viz-carousel-card .shop-hero-stats-col {
+.shop-viz-turntable-panel .shop-hero-stats-col {
   gap: 0.35rem;
 }
 
-.shop-viz-carousel-card .shop-hero-artifacts-section {
+.shop-viz-turntable-panel .shop-hero-artifacts-section {
   margin-top: 0.25rem;
 }
 
-.shop-viz-carousel-card .shop-hero-stats-head {
+.shop-viz-turntable-panel .shop-hero-stats-head {
   margin-bottom: 0.28rem;
   font-size: 0.7rem;
 }
 
-.shop-viz-carousel-card .shop-viz-flip-entity-title {
+.shop-viz-turntable-panel .shop-viz-flip-entity-title {
   margin-bottom: 0.38rem;
   padding: 0.28rem 0.4rem 0.32rem;
   font-size: 0.72rem;
 }
 
-.shop-viz-carousel-card .gold-shop-hero-stats-grid.lol-stats-list {
+.shop-viz-turntable-panel .gold-shop-hero-stats-grid.lol-stats-list {
   margin-top: 0.05rem;
   margin-bottom: 0.25rem;
 }
 
-.shop-viz-carousel-card .shop-bunker-skills-block {
+.shop-viz-turntable-panel .shop-bunker-skills-block {
   margin-top: 0.25rem;
   padding-top: 0.45rem;
 }
 
-.shop-viz-carousel-card .gold-shop-hero-skills-row {
+.shop-viz-turntable-panel .gold-shop-hero-skills-row {
   gap: 0.4rem;
 }
 
@@ -5374,7 +5361,7 @@ body.enemy-inspect--dragging-body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .shop-viz-carousel-card {
+  .shop-viz-turntable-inner {
     transition: none;
   }
 
@@ -5392,7 +5379,7 @@ body.enemy-inspect--dragging-body {
     transform: perspective(920px) rotateY(-7deg) rotateX(2deg);
   }
 
-  .shop-viz-carousel-scene {
+  .shop-viz-turntable {
     height: 288px;
   }
 
@@ -5439,8 +5426,8 @@ body.enemy-inspect--dragging-body {
   padding: 1.15rem 1.2rem 1.25rem;
 }
 
-.shop-screen__panel--gold .shop-viz-carousel-card .shop-hero-viz,
-.shop-screen__panel--gold .shop-viz-carousel-card .shop-bunker-viz.shop-hero-viz {
+.shop-screen__panel--gold .shop-viz-turntable-panel .shop-hero-viz,
+.shop-screen__panel--gold .shop-viz-turntable-panel .shop-bunker-viz.shop-hero-viz {
   margin-top: 0;
   margin-bottom: 0;
   padding: 0.55rem 0.65rem 0.6rem;

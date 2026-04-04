@@ -3500,7 +3500,7 @@ function showGoldShop(isInitial: boolean): void {
       ? (() => {
           const carouselBunker =
             goldShopVizFocus === "bunker"
-              ? " shop-viz-carousel--bunker"
+              ? " shop-viz-turntable-inner--bunker"
               : "";
           const heroGridHidden = goldShopVizFocus === "bunker" ? " hidden" : "";
           const bunkGridHidden = goldShopVizFocus === "hero" ? " hidden" : "";
@@ -3509,9 +3509,9 @@ function showGoldShop(isInitial: boolean): void {
           return `<div class="shop-viz-flip-wrap">
         <div class="shop-viz-flip-row">
           <div class="shop-viz-stage">
-            <div id="shop-viz-carousel" class="shop-viz-carousel${carouselBunker}">
-              <div class="shop-viz-carousel-scene">
-                <div class="shop-viz-carousel-card shop-viz-carousel-card--hero">
+            <div class="shop-viz-turntable">
+              <div id="shop-viz-carousel" class="shop-viz-turntable-inner${carouselBunker}">
+                <div class="shop-viz-turntable-panel shop-viz-turntable-panel--hero">
                   <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
                     <p class="shop-viz-flip-entity-title">${escapeHtml(h.name)}</p>
                     <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host gold-shop-hero-3d-host--carousel" aria-hidden="true"></div>
@@ -3519,7 +3519,7 @@ function showGoldShop(isInitial: boolean): void {
                     </div>
                   </div>
                 </div>
-                <div class="shop-viz-carousel-card shop-viz-carousel-card--bunker">
+                <div class="shop-viz-turntable-panel shop-viz-turntable-panel--bunker">
                   <div class="shop-bunker-viz shop-hero-viz" aria-label="Bunker da arena">
                     <p class="shop-viz-flip-entity-title">Bunker da arena</p>
                     ${goldShopBunkerSectionHtml(bunkerShop)}
@@ -4636,7 +4636,7 @@ function applyGoldShopVizFocus(panel: HTMLElement, hasBunker: boolean): void {
   const chev = toggle?.querySelector(".shop-viz-flip-arrow__chevron");
   const txt = toggle?.querySelector(".shop-viz-flip-arrow__text");
   const bunker = goldShopVizFocus === "bunker";
-  carousel?.classList.toggle("shop-viz-carousel--bunker", bunker);
+  carousel?.classList.toggle("shop-viz-turntable-inner--bunker", bunker);
   if (heroGrid) {
     heroGrid.hidden = bunker;
     if (bunker) heroGrid.setAttribute("aria-hidden", "true");
