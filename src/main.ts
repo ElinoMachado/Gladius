@@ -283,33 +283,10 @@ view.setOnArenaLayoutSessionEnd(() => {
   });
 });
 
-function mountArenaLayoutPickList(container: HTMLElement): void {
-  const cat = view.getArenaLayoutEditCatalog();
-  const sel = view.getArenaLayoutEditSelectedId();
-  const parts: string[] = [
-    `<div class="arena-layout-pick-list__head">Elementos 3D</div>`,
-  ];
-  for (const c of cat) {
-    const active = c.id === sel ? " arena-layout-pick-list__item--active" : "";
-    parts.push(
-      `<button type="button" class="arena-layout-pick-list__item${active}" data-pick-id="${escapeHtml(c.id)}">${escapeHtml(c.label)}</button>`,
-    );
-  }
-  container.innerHTML = parts.join("");
-  container.querySelectorAll<HTMLButtonElement>(".arena-layout-pick-list__item").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const pid = btn.dataset.pickId;
-      if (pid) view.selectArenaLayoutObjectById(pid);
-    });
-  });
-}
-
 function refreshArenaLayoutEditSidebar(): void {
   if (!view.isArenaLayoutEditActive()) return;
   const hint = document.getElementById("arena-layout-dynamic-hint");
-  const list = document.getElementById("arena-layout-pick-list");
   if (hint) hint.textContent = view.getArenaLayoutEditSelectionHint();
-  if (list) mountArenaLayoutPickList(list);
 }
 
 view.setOnArenaLayoutEditUiRefresh(() => {
@@ -2062,9 +2039,8 @@ function showArenaLayoutEditHud(): void {
   uiRoot.innerHTML = "";
   const wrap = el(`
     <div class="arena-layout-edit-shell">
-      <aside class="arena-layout-pick-list" id="arena-layout-pick-list" aria-label="Modelos 3D na cena"></aside>
       <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar cena</strong> — <strong>Lista à esquerda</strong>: escolhe o modelo (x-ray no resto). <strong>A câmara não entra no JSON</strong>. <strong>Espaço</strong> = voo livre (arrasto esq. olhar, <kbd>WASD</kbd>, <kbd>Q</kbd>/<kbd>E</kbd>, roda). Fora do voo: <strong>botão direito</strong> arrasta o plano; <strong>roda</strong> zoom; <strong>Shift+roda</strong> inclina a vista em torno do alvo (melhor para alturas); no voo, <strong>Shift+roda</strong> ajusta o pitch. <strong>Realce violeta</strong> na forja. Objeto: arrasto plano; Shift+arrasto altura; <kbd>X</kbd>/<kbd>Z</kbd>; <kbd>[</kbd> <kbd>]</kbd>. <strong>Bunker</strong> <kbd>1</kbd>–<kbd>3</kbd>.
+      <strong>Ajustar cena</strong> — Cena com coliseu, trono, bunkers (todos os biomas) e figuras de heróis/inimigos como no início da run. <strong>Câmara em tempo real</strong> (não grava no JSON). Seleciona clicando no 3D; <strong>realce violeta</strong> como em «Ajustar equipamento». Fora do voo: botão direito arrasta o plano, roda zoom. <strong><kbd>Espaço</kbd></strong>: voo livre (arrasto esquerdo olhar, <kbd>WASD</kbd>, <kbd>Q</kbd>/<kbd>E</kbd>, roda zoom). Objeto: arrasto plano, <kbd>Shift</kbd>+arrasto altura, <kbd>WASD</kbd>/<kbd>X</kbd>/<kbd>Z</kbd> fino, <kbd>[</kbd> <kbd>]</kbd> escala. Bunker: <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> modelo e altura Y por nível.
       <br /><span id="arena-layout-dynamic-hint" class="arena-layout-edit-hud__dynamic">${escapeHtml(view.getArenaLayoutEditSelectionHint())}</span>
       <br /><kbd>Esc</kbd> grava e volta ao menu.
       <div class="arena-layout-edit-hud__copy-row">
@@ -2075,8 +2051,6 @@ function showArenaLayoutEditHud(): void {
     </div>
   `);
   uiRoot.appendChild(wrap);
-  const pickList = wrap.querySelector("#arena-layout-pick-list") as HTMLElement;
-  mountArenaLayoutPickList(pickList);
   wrap.querySelector("#arena-layout-copy-json")!.addEventListener("click", async () => {
     const fb = wrap.querySelector("#arena-layout-copy-json-feedback") as HTMLElement;
     const raw = JSON.stringify(view.collectSceneLayoutPrefs(), null, 2);
@@ -2300,7 +2274,7 @@ function showMainMenu(): void {
   const devMenuExtras = import.meta.env.DEV
     ? `<button type="button" class="main-menu-link main-menu-link--sandbox" data-action="dev-sandbox">Modo sandbox (testes)</button>
           <button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-reset-fresh">[Dev] Estado inicial (apagar save)</button>
-          <button type="button" class="main-menu-link main-menu-link--dev" data-action="arena-layout" title="Coliseu, bunkers, atores; câmara não grava. Espaço = voo livre. Esc grava.">[Dev] Ajustar cena</button>
+          <button type="button" class="main-menu-link main-menu-link--dev" data-action="arena-layout" title="Cena inicial completa; câmara live (Espaço = voo). Esc grava. Copiar JSON para o repo.">[Dev] Ajustar cena</button>
           <button type="button" class="main-menu-link main-menu-link--dev" data-action="equipment-layout" title="Elmo, capa e manoplas por herói; gravado em localStorage.">[Dev] Ajustar equipamento</button>`
     : "";
   const s = el(`

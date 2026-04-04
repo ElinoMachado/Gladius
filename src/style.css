@@ -7930,75 +7930,12 @@ select.forge-biome-sel option:disabled {
   pointer-events: none;
 }
 
-/* Ajuste de cena: shell full-screen (pointer-events none); lista e barra com auto. */
+/* Ajuste de cena: shell full-screen (pointer-events none); HUD com auto nos botões. */
 .arena-layout-edit-shell {
   position: fixed;
   inset: 0;
   z-index: 24;
   pointer-events: none;
-}
-
-.arena-layout-pick-list {
-  position: absolute;
-  left: max(0.45rem, env(safe-area-inset-left, 0px));
-  top: 50%;
-  transform: translateY(-50%);
-  width: min(12.5rem, 36vw);
-  max-height: min(78vh, 560px);
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 0.5rem 0.45rem;
-  border-radius: 10px;
-  background: rgba(12, 10, 18, 0.94);
-  border: 1px solid rgba(200, 185, 160, 0.28);
-  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.55);
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
-  text-align: left;
-}
-
-.arena-layout-pick-list__head {
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: rgba(200, 185, 240, 0.88);
-  padding: 0.15rem 0.35rem 0.35rem;
-  border-bottom: 1px solid rgba(200, 185, 160, 0.15);
-  margin-bottom: 0.15rem;
-}
-
-.arena-layout-pick-list__item {
-  display: block;
-  width: 100%;
-  margin: 0;
-  padding: 0.42rem 0.5rem;
-  border-radius: 6px;
-  border: 1px solid rgba(90, 82, 104, 0.55);
-  background: rgba(32, 28, 42, 0.88);
-  color: rgba(228, 222, 210, 0.96);
-  font-size: 0.74rem;
-  font-weight: 600;
-  line-height: 1.25;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease;
-}
-
-.arena-layout-pick-list__item:hover {
-  background: rgba(48, 42, 62, 0.95);
-  border-color: rgba(180, 160, 220, 0.45);
-}
-
-.arena-layout-pick-list__item--active {
-  border-color: rgba(160, 120, 220, 0.85);
-  background: rgba(56, 38, 78, 0.92);
-  color: #f0e8ff;
-  box-shadow: 0 0 0 1px rgba(130, 90, 200, 0.35) inset;
 }
 
 /* Ajuste de cena (menu): barra informativa; não rouba cliques ao canvas. */
