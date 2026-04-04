@@ -8012,6 +8012,48 @@ select.forge-biome-sel option:disabled {
   opacity: 0.92;
 }
 
+/* Lista do compendium ao selecionar o inimigo de referência (ajuste de cena). */
+.arena-layout-enemy-picker-wrap {
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(200, 185, 160, 0.15);
+  pointer-events: auto;
+  max-width: min(420px, 88vw);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.arena-layout-enemy-picker__label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(200, 185, 240, 0.9);
+  margin-bottom: 0.35rem;
+  text-align: center;
+}
+
+.arena-layout-enemy-select {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(140, 128, 170, 0.45);
+  background: rgba(28, 24, 38, 0.96);
+  color: rgba(236, 230, 248, 0.98);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.arena-layout-enemy-select:focus {
+  outline: 2px solid rgba(201, 162, 39, 0.55);
+  outline-offset: 2px;
+}
+
 .arena-layout-edit-hud__copy-row {
   display: flex;
   flex-wrap: wrap;

@@ -283,10 +283,42 @@ view.setOnArenaLayoutSessionEnd(() => {
   });
 });
 
+function ensureArenaLayoutEnemySelectOptions(sel: HTMLSelectElement): void {
+  if (sel.options.length > 0) return;
+  for (const e of allEnemyArchetypesSorted()) {
+    const opt = document.createElement("option");
+    opt.value = e.id;
+    opt.textContent = e.compendiumTag
+      ? `${e.name} — ${e.compendiumTag}`
+      : e.name;
+    sel.appendChild(opt);
+  }
+}
+
 function refreshArenaLayoutEditSidebar(): void {
   if (!view.isArenaLayoutEditActive()) return;
   const hint = document.getElementById("arena-layout-dynamic-hint");
   if (hint) hint.textContent = view.getArenaLayoutEditSelectionHint();
+  const wrap = document.getElementById("arena-layout-enemy-picker-wrap");
+  const sel = document.getElementById(
+    "arena-layout-enemy-select",
+  ) as HTMLSelectElement | null;
+  if (!wrap || !sel) return;
+  const show = view.isArenaLayoutEnemySelected();
+  wrap.hidden = !show;
+  wrap.setAttribute("aria-hidden", show ? "false" : "true");
+  if (!show) return;
+  ensureArenaLayoutEnemySelectOptions(sel);
+  const pid = view.getArenaLayoutEnemyPreviewArchetypeId();
+  let found = false;
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i]!.value === pid) {
+      sel.selectedIndex = i;
+      found = true;
+      break;
+    }
+  }
+  if (!found && sel.options.length) sel.selectedIndex = 0;
 }
 
 view.setOnArenaLayoutEditUiRefresh(() => {
@@ -2040,8 +2072,12 @@ function showArenaLayoutEditHud(): void {
   const wrap = el(`
     <div class="arena-layout-edit-shell">
       <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar cena</strong> — Coliseu, trono, bunkers (todos os biomas), três heróis e <strong>um</strong> inimigo de referência (troca com <kbd>,</kbd> / <kbd>.</kbd> por todo o compendium; altura Y por tipo). <strong>Câmara em tempo real</strong> (não grava no JSON). Realce violeta como em «Ajustar equipamento». Fora do voo: botão direito arrasta o plano, roda zoom. <kbd>Espaço</kbd>: voo livre. Objeto: arrasto plano, <kbd>Shift</kbd>+arrasto altura, <kbd>WASD</kbd>/<kbd>X</kbd>/<kbd>Z</kbd>, <kbd>[</kbd> <kbd>]</kbd> escala. Bunker: <kbd>1</kbd>–<kbd>3</kbd> modelo.
+      <strong>Ajustar cena</strong> — Coliseu, trono, bunkers, três heróis e um inimigo de referência (ao clicar nele abre a lista do compendium). <strong>Câmara em tempo real</strong> (não grava no JSON). Realce violeta como em «Ajustar equipamento». Fora do voo: botão direito arrasta o plano, roda zoom. <kbd>Espaço</kbd>: voo livre. Bunker: <kbd>1</kbd>–<kbd>3</kbd> modelo.
       <br /><span id="arena-layout-dynamic-hint" class="arena-layout-edit-hud__dynamic">${escapeHtml(view.getArenaLayoutEditSelectionHint())}</span>
+      <div id="arena-layout-enemy-picker-wrap" class="arena-layout-enemy-picker-wrap" hidden aria-hidden="true">
+        <label class="arena-layout-enemy-picker__label" for="arena-layout-enemy-select">Inimigo do compendium</label>
+        <select id="arena-layout-enemy-select" class="arena-layout-enemy-select" aria-label="Escolher inimigo do compendium"></select>
+      </div>
       <br /><kbd>Esc</kbd> grava e volta ao menu.
       <div class="arena-layout-edit-hud__copy-row">
         <button type="button" class="btn" id="arena-layout-copy-json">Copiar JSON (repo)</button>
@@ -2051,6 +2087,10 @@ function showArenaLayoutEditHud(): void {
     </div>
   `);
   uiRoot.appendChild(wrap);
+  wrap.querySelector("#arena-layout-enemy-select")!.addEventListener("change", (ev) => {
+    const v = (ev.target as HTMLSelectElement).value;
+    if (v) view.applyArenaLayoutEnemyPreviewFromUi(v);
+  });
   wrap.querySelector("#arena-layout-copy-json")!.addEventListener("click", async () => {
     const fb = wrap.querySelector("#arena-layout-copy-json-feedback") as HTMLElement;
     const raw = JSON.stringify(view.collectSceneLayoutPrefs(), null, 2);

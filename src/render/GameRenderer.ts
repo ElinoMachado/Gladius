@@ -4942,7 +4942,7 @@ export class GameRenderer {
       const pid =
         pidRaw && ENEMY_BY_ID[pidRaw] ? pidRaw : "gladinio";
       const nm = ENEMY_BY_ID[pid]?.name ?? pid;
-      return `Inimigo (compendium): ${nm} — <kbd>,</kbd> / <kbd>.</kbd> anterior/seguinte; altura Y grava por tipo no JSON.`;
+      return `Inimigo: ${nm} — usa a lista abaixo (ou <kbd>,</kbd> / <kbd>.</kbd>); altura Y grava por tipo no JSON.`;
     }
     if (uid?.startsWith("layout-hero-")) {
       return `Herói ${uid} — posição/escala gravam no JSON.`;
@@ -4959,6 +4959,29 @@ export class GameRenderer {
       return `Bunker (${bio ?? "?"}) — 1/2/3 modelo; altura Y com X/Z grava neste nível (${pv}).`;
     }
     return "Objeto selecionado.";
+  }
+
+  isArenaLayoutEnemySelected(): boolean {
+    return (
+      this.arenaLayoutEditActive &&
+      this.layoutSelectedRoot?.userData.unitId === "layout-enemy"
+    );
+  }
+
+  getArenaLayoutEnemyPreviewArchetypeId(): string {
+    const g = this.unitMeshes.get("layout-enemy");
+    const pid = g?.userData.layoutEnemyPreviewArchetypeId as string | undefined;
+    if (pid && ENEMY_BY_ID[pid]) return pid;
+    const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
+    const p2 = snap.layoutEnemyEditor?.previewArchetypeId;
+    if (p2 && ENEMY_BY_ID[p2]) return p2;
+    return "gladinio";
+  }
+
+  applyArenaLayoutEnemyPreviewFromUi(archetypeId: string): void {
+    if (!this.arenaLayoutEditActive) return;
+    if (!ENEMY_BY_ID[archetypeId]) return;
+    this.setLayoutEnemyPreviewArchetypeId(archetypeId);
   }
 
   private setLayoutBunkerPreviewTier(t: BunkerRenderTier): void {
