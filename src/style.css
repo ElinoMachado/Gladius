@@ -101,6 +101,11 @@ body {
   pointer-events: auto;
 }
 
+/* Mais específico que `#ui-root > *`, senão o shell full-screen bloqueia o canvas (ajuste de cena). */
+#ui-root > .arena-layout-edit-shell {
+  pointer-events: none;
+}
+
 /* Stack da barra de combate: só botões e barra recebem cliques; o resto do ecrã passa para o mapa. */
 #ui-root > .combat-bottom-stack {
   pointer-events: none;
@@ -7930,12 +7935,11 @@ select.forge-biome-sel option:disabled {
   pointer-events: none;
 }
 
-/* Ajuste de cena: shell full-screen (pointer-events none); HUD com auto nos botões. */
+/* Ajuste de cena: shell full-screen; `pointer-events` em `#ui-root > .arena-layout-edit-shell`. */
 .arena-layout-edit-shell {
   position: fixed;
   inset: 0;
   z-index: 24;
-  pointer-events: none;
 }
 
 /* Ajuste de cena (menu): barra informativa; não rouba cliques ao canvas. */
