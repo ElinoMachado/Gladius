@@ -21,7 +21,12 @@ import { deslumbroInstancesCount } from "../game/effectInstances";
 
 export type HitFlashTone = "normal" | "blood" | "heal_swirl" | "electric_chain";
 import { BIOME_LABELS, COMBAT_BIOMES } from "../game/data/biomes";
-import { enemyTierFromId, waveConfigFromIndex } from "../game/data/enemies";
+import {
+  allEnemyArchetypesSorted,
+  ENEMY_BY_ID,
+  enemyTierFromId,
+  waveConfigFromIndex,
+} from "../game/data/enemies";
 import type { BiomeId } from "../game/types";
 import { buildUnitBodyGroup, modelKeyForUnit } from "./unitModels";
 import {
@@ -43,10 +48,10 @@ import {
   type BunkerLayoutEntry,
   type LayoutActorEntry,
   type LayoutActorPose,
+  type LayoutEnemyEditorPrefs,
   type SceneLayoutPrefs,
   bunkerMountYOffset,
   cloneSceneLayoutPrefs,
-  isLayoutEnemyActorId,
   loadSceneLayoutPrefs,
   saveSceneLayoutPrefs,
 } from "../game/sceneLayoutPrefs";
@@ -2453,7 +2458,33 @@ export class GameRenderer {
       g.userData.isPlayer = u.isPlayer;
       g.visible = true;
       this.enemyDeathMeshRemoveAt.delete(u.id);
-      const mk = modelKeyForUnit(u);
+      const snapForLayout = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
+      const lee = snapForLayout.layoutEnemyEditor;
+      if (u.id === "layout-enemy") {
+        const fromSnap = lee?.previewArchetypeId;
+        if (
+          g.userData.layoutEnemyPreviewArchetypeId == null &&
+          typeof fromSnap === "string" &&
+          ENEMY_BY_ID[fromSnap]
+        ) {
+          g.userData.layoutEnemyPreviewArchetypeId = fromSnap;
+        }
+      }
+      const previewEnemyId =
+        u.id === "layout-enemy"
+          ? (() => {
+              const pid = g.userData.layoutEnemyPreviewArchetypeId as
+                | string
+                | undefined;
+              return pid && ENEMY_BY_ID[pid]
+                ? pid
+                : (u.enemyArchetypeId ?? "gladinio");
+            })()
+          : undefined;
+      const mk =
+        u.id === "layout-enemy" && previewEnemyId
+          ? `e:${previewEnemyId}`
+          : modelKeyForUnit(u);
       if (g.userData.modelKey !== mk) {
         for (let i = g.children.length - 1; i >= 0; i--) {
           const ch = g.children[i]!;
@@ -2464,7 +2495,13 @@ export class GameRenderer {
           this.disposeObject3D(ch);
           g.remove(ch);
         }
-        const body = buildUnitBodyGroup(u);
+        const body =
+          u.id === "layout-enemy" && previewEnemyId
+            ? buildUnitBodyGroup({
+                ...u,
+                enemyArchetypeId: previewEnemyId,
+              })
+            : buildUnitBodyGroup(u);
         body.userData.role = "body";
         g.add(body);
         g.userData.modelKey = mk;
@@ -2498,13 +2535,20 @@ export class GameRenderer {
           let wz = z;
           if (u.id.startsWith("layout-")) {
             const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
-            const la = snap.layoutActors?.[u.id];
-            if (la) {
-              if (isLayoutEnemyActorId(u.id)) {
-                const oy =
-                  typeof la.y === "number" && Number.isFinite(la.y) ? la.y : 0;
-                wy += oy;
-              } else {
+            if (u.id === "layout-enemy") {
+              const pid =
+                (g.userData.layoutEnemyPreviewArchetypeId as string | undefined) &&
+                ENEMY_BY_ID[g.userData.layoutEnemyPreviewArchetypeId as string]
+                  ? (g.userData.layoutEnemyPreviewArchetypeId as string)
+                  : (snap.layoutEnemyEditor?.previewArchetypeId &&
+                    ENEMY_BY_ID[snap.layoutEnemyEditor.previewArchetypeId]
+                      ? snap.layoutEnemyEditor.previewArchetypeId
+                      : (u.enemyArchetypeId ?? "gladinio"));
+              const oy = snap.layoutEnemyEditor?.yByArchetype?.[pid];
+              if (typeof oy === "number" && Number.isFinite(oy)) wy += oy;
+            } else {
+              const la = snap.layoutActors?.[u.id];
+              if (la) {
                 const pose = la as LayoutActorPose;
                 wx += pose.x ?? 0;
                 wy += pose.y ?? 0;
@@ -2521,14 +2565,12 @@ export class GameRenderer {
       /** 2× no gigante: evita cobrir inimigos no raycast (antes 5×). */
       const furyScale =
         u.isPlayer && (u.furiaGiganteTurns ?? 0) > 0 ? 2 : 1;
-      const layoutLa = u.id.startsWith("layout-")
-        ? (this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs()).layoutActors?.[
-            u.id
-          ]
-        : undefined;
+      const layoutSnap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
+      const layoutLa =
+        u.id.startsWith("layout-") && u.id !== "layout-enemy"
+          ? layoutSnap.layoutActors?.[u.id]
+          : undefined;
       const layoutActorSc =
-        u.id.startsWith("layout-") &&
-        !isLayoutEnemyActorId(u.id) &&
         layoutLa &&
         "scale" in layoutLa &&
         typeof layoutLa.scale === "number"
@@ -4240,6 +4282,18 @@ export class GameRenderer {
     }
     this.applyBunkerMountsPoseFromPrefs();
     this.applyThroneLayoutPose(this.playSurfaceYOffset());
+    const legMesh = this.unitMeshes.get("layout-enemy");
+    if (legMesh) {
+      delete (
+        legMesh.userData as {
+          layoutEnemyPreviewArchetypeId?: string;
+          modelKey?: string;
+        }
+      ).layoutEnemyPreviewArchetypeId;
+      delete (
+        legMesh.userData as { layoutEnemyPreviewArchetypeId?: string; modelKey?: string }
+      ).modelKey;
+    }
   }
 
   private applyBunkerMountsPoseFromPrefs(): void {
@@ -4320,25 +4374,47 @@ export class GameRenderer {
       scale: THREE.MathUtils.clamp(tg.scale.x, 0.02, 48),
     };
     for (const [id, g] of this.unitMeshes) {
-      if (!id.startsWith("layout-")) continue;
+      if (!id.startsWith("layout-") || id === "layout-enemy") continue;
       const q = g.userData.layoutActorAxialQ as number | undefined;
       const r = g.userData.layoutActorAxialR as number | undefined;
       if (q === undefined || r === undefined) continue;
       const baseW = axialToWorld(q, r, HEX_SIZE);
       const flyY = Number(g.userData.layoutActorFlyY) || 0;
       const baseY = py + flyY;
-      if (isLayoutEnemyActorId(id)) {
-        out[id] = { y: g.position.y - baseY };
-      } else {
-        out[id] = {
-          x: g.position.x - baseW.x,
-          y: g.position.y - baseY,
-          z: g.position.z - baseW.z,
-          scale: THREE.MathUtils.clamp(g.scale.x, 0.02, 48),
-        };
-      }
+      out[id] = {
+        x: g.position.x - baseW.x,
+        y: g.position.y - baseY,
+        z: g.position.z - baseW.z,
+        scale: THREE.MathUtils.clamp(g.scale.x, 0.02, 48),
+      };
     }
     return out;
+  }
+
+  private mergeLayoutEnemyEditorFromScene(
+    base: LayoutEnemyEditorPrefs | undefined,
+  ): LayoutEnemyEditorPrefs {
+    const yByArchetype: Partial<Record<string, number>> = {
+      ...(base?.yByArchetype ?? {}),
+    };
+    let previewArchetypeId = base?.previewArchetypeId ?? "gladinio";
+    if (!ENEMY_BY_ID[previewArchetypeId]) previewArchetypeId = "gladinio";
+    const g = this.unitMeshes.get("layout-enemy");
+    if (g) {
+      const pidRaw = g.userData.layoutEnemyPreviewArchetypeId as
+        | string
+        | undefined;
+      if (pidRaw && ENEMY_BY_ID[pidRaw]) previewArchetypeId = pidRaw;
+      const q = g.userData.layoutActorAxialQ as number | undefined;
+      const r = g.userData.layoutActorAxialR as number | undefined;
+      if (q !== undefined && r !== undefined) {
+        const py = this.playSurfaceYOffset();
+        const flyY = Number(g.userData.layoutActorFlyY) || 0;
+        const baseY = py + flyY;
+        yByArchetype[previewArchetypeId] = g.position.y - baseY;
+      }
+    }
+    return { previewArchetypeId, yByArchetype };
   }
 
   getColiseumOffsetForPrefs(): { x: number; y: number; z: number } {
@@ -4383,16 +4459,24 @@ export class GameRenderer {
     const bunkerLayout = this.mergeBunkerLayoutFromMounts({
       ...(snap.bunkerLayout ?? {}),
     });
+    const defaultLee: LayoutEnemyEditorPrefs = {
+      previewArchetypeId: "gladinio",
+      yByArchetype: {},
+    };
     if (this.arenaLayoutEditActive) {
       const layoutActors = this.mergeLayoutActorsFromScene({
         ...(snap.layoutActors ?? {}),
       });
+      const layoutEnemyEditor = this.mergeLayoutEnemyEditorFromScene(
+        snap.layoutEnemyEditor ?? defaultLee,
+      );
       const fc = this.layoutEditFrozenFreeCamera;
       return {
         coliseum,
         coliseumScale,
         bunkerLayout,
         layoutActors,
+        layoutEnemyEditor,
         freeCamera: fc
           ? {
               position: [...fc.position] as [number, number, number],
@@ -4413,6 +4497,7 @@ export class GameRenderer {
         coliseumScale,
         bunkerLayout,
         layoutActors: snap.layoutActors ?? {},
+        layoutEnemyEditor: snap.layoutEnemyEditor ?? defaultLee,
         freeCamera: null,
       };
     }
@@ -4423,6 +4508,7 @@ export class GameRenderer {
       coliseumScale,
       bunkerLayout,
       layoutActors: snap.layoutActors ?? {},
+      layoutEnemyEditor: snap.layoutEnemyEditor ?? defaultLee,
       freeCamera,
     };
   }
@@ -4848,8 +4934,15 @@ export class GameRenderer {
       return "Trono — mesmos controlos que o coliseu.";
     }
     const uid = s.userData.unitId as string | undefined;
-    if (uid?.startsWith("layout-enemy-")) {
-      return `Inimigo ${uid} — só a altura (Y) grava no JSON; X/Z no ecrã são só para ver na sessão.`;
+    if (uid === "layout-enemy") {
+      const gMesh = this.unitMeshes.get("layout-enemy");
+      const pidRaw = gMesh?.userData.layoutEnemyPreviewArchetypeId as
+        | string
+        | undefined;
+      const pid =
+        pidRaw && ENEMY_BY_ID[pidRaw] ? pidRaw : "gladinio";
+      const nm = ENEMY_BY_ID[pid]?.name ?? pid;
+      return `Inimigo (compendium): ${nm} — <kbd>,</kbd> / <kbd>.</kbd> anterior/seguinte; altura Y grava por tipo no JSON.`;
     }
     if (uid?.startsWith("layout-hero-")) {
       return `Herói ${uid} — posição/escala gravam no JSON.`;
@@ -4901,6 +4994,18 @@ export class GameRenderer {
     this.arenaLayoutEditActive = true;
     this.setLayoutSelectedRoot(null);
     this.layoutEligibleForDragAfterDown = false;
+    const legBegin = this.unitMeshes.get("layout-enemy");
+    if (legBegin) {
+      delete (
+        legBegin.userData as {
+          layoutEnemyPreviewArchetypeId?: string;
+          modelKey?: string;
+        }
+      ).layoutEnemyPreviewArchetypeId;
+      delete (
+        legBegin.userData as { layoutEnemyPreviewArchetypeId?: string; modelKey?: string }
+      ).modelKey;
+    }
     this.layoutEditFlyMode = false;
     this.arenaLayoutCameraPersonalized = this.usePersistentFreeCamera;
     this.editorDragMode = "none";
@@ -4940,6 +5045,43 @@ export class GameRenderer {
     this.resize(canvas);
     this.initLayoutEditOrbitFromFreeCamera();
     this.scheduleArenaLayoutPersist();
+    this.onArenaLayoutEditUiRefresh?.();
+  }
+
+  private cycleLayoutEnemyPreview(delta: number): void {
+    const uid = this.layoutSelectedRoot?.userData.unitId as string | undefined;
+    if (uid !== "layout-enemy") return;
+    const g = this.unitMeshes.get("layout-enemy");
+    if (!g) return;
+    const cat = allEnemyArchetypesSorted();
+    if (!cat.length) return;
+    let cur = g.userData.layoutEnemyPreviewArchetypeId as string | undefined;
+    if (!cur || !ENEMY_BY_ID[cur]) cur = cat[0]!.id;
+    let idx = cat.findIndex((e) => e.id === cur);
+    if (idx < 0) idx = 0;
+    idx = (idx + delta + cat.length) % cat.length;
+    this.setLayoutEnemyPreviewArchetypeId(cat[idx]!.id);
+  }
+
+  private setLayoutEnemyPreviewArchetypeId(archId: string): void {
+    if (!ENEMY_BY_ID[archId]) return;
+    const g = this.unitMeshes.get("layout-enemy");
+    if (!g) return;
+    const py = this.playSurfaceYOffset();
+    const q = g.userData.layoutActorAxialQ as number | undefined;
+    const r = g.userData.layoutActorAxialR as number | undefined;
+    if (q === undefined || r === undefined) return;
+    const baseW = axialToWorld(q, r, HEX_SIZE);
+    const flyY = Number(g.userData.layoutActorFlyY) || 0;
+    const baseY = py + flyY;
+    const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
+    const oy = snap.layoutEnemyEditor?.yByArchetype?.[archId] ?? 0;
+    g.userData.layoutEnemyPreviewArchetypeId = archId;
+    delete (g.userData as { modelKey?: string }).modelKey;
+    g.position.set(baseW.x, baseY + oy, baseW.z);
+    this.scheduleArenaLayoutPersist();
+    this.clearLayoutSelectionEmissive(g);
+    this.applyLayoutSelectionEmissive(g);
     this.onArenaLayoutEditUiRefresh?.();
   }
 
@@ -5082,6 +5224,19 @@ export class GameRenderer {
         return;
       }
       if (!e.repeat) {
+        const selUid = this.layoutSelectedRoot?.userData.unitId as
+          | string
+          | undefined;
+        if (e.code === "Comma" && selUid === "layout-enemy") {
+          e.preventDefault();
+          this.cycleLayoutEnemyPreview(-1);
+          return;
+        }
+        if (e.code === "Period" && selUid === "layout-enemy") {
+          e.preventDefault();
+          this.cycleLayoutEnemyPreview(1);
+          return;
+        }
         if (e.code === "Digit1") {
           e.preventDefault();
           this.setLayoutBunkerPreviewTier(0);

@@ -739,7 +739,7 @@ export class GameModel {
     hGun.id = "layout-hero-pistoleiro";
     const bio = (q: number, r: number): BiomeId =>
       biomeAt(this.grid, q, r) as BiomeId;
-    const eGlad = createEnemyUnit(
+    const ePreview = createEnemyUnit(
       ENEMY_BY_ID["gladinio"]!,
       1,
       3,
@@ -747,19 +747,8 @@ export class GameModel {
       -2,
       bio(3, -2),
     );
-    eGlad.id = "layout-enemy-gladinio";
-    const eEsc = createEnemyUnit(ESCRAVO, 1, 3, 0, -4, bio(0, -4));
-    eEsc.id = "layout-enemy-escravo";
-    const eLeao = createEnemyUnit(
-      ENEMY_BY_ID["leao_selvagem"]!,
-      1,
-      3,
-      -3,
-      -3,
-      bio(-3, -3),
-    );
-    eLeao.id = "layout-enemy-leao";
-    return [hGlad, hPriest, hGun, eGlad, eEsc, eLeao];
+    ePreview.id = "layout-enemy";
+    return [hGlad, hPriest, hGun, ePreview];
   }
 
   /** Resumo da wave (UI do overlay antes da loja / vitória). */

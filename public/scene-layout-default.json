@@ -7,6 +7,10 @@
   "coliseumScale": 2.606331295967002,
   "bunkerLayout": {},
   "layoutActors": {},
+  "layoutEnemyEditor": {
+    "previewArchetypeId": "gladinio",
+    "yByArchetype": {}
+  },
   "freeCamera": {
     "position": [
       85.35167713282732,

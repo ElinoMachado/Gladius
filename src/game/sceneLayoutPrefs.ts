@@ -1,5 +1,6 @@
 import bundledDefaults from "./sceneLayoutDefaults.json";
 import { COMBAT_BIOMES } from "./data/biomes";
+import { ENEMY_BY_ID } from "./data/enemies";
 import type { BiomeId } from "./types";
 
 const LS_KEY = "gladius-scene-layout-v1";
@@ -27,17 +28,16 @@ export type LayoutActorPose = {
   scale: number;
 };
 
+export type LayoutActorEntry = LayoutActorPose;
+
 /**
- * Inimigos de referência no editor (`layout-enemy-*`): só a altura Y (offset vertical)
- * é guardada; X/Z seguem sempre o hex da unidade.
+ * Editor de cena: um único placeholder `layout-enemy`; troca-se o modelo do compendium
+ * e grava-se altura Y por `archetypeId`.
  */
-export type LayoutEnemyHeightOnly = { y: number };
-
-export type LayoutActorEntry = LayoutActorPose | LayoutEnemyHeightOnly;
-
-export function isLayoutEnemyActorId(id: string): boolean {
-  return id.startsWith("layout-enemy-");
-}
+export type LayoutEnemyEditorPrefs = {
+  previewArchetypeId: string;
+  yByArchetype: Partial<Record<string, number>>;
+};
 
 export type SceneLayoutPrefs = {
   /** Deslocamento extra do grupo que contém o GLB do coliseu (mundo → local do arenaRoot). */
@@ -46,8 +46,10 @@ export type SceneLayoutPrefs = {
   coliseumScale: number;
   /** Por bioma de combate: ajuste fino da mesh do bunker (editor de cena). */
   bunkerLayout: Partial<Record<BiomeId, BunkerLayoutEntry>>;
-  /** Trono + unidades sintéticas do editor (`throne`, `layout-hero-*` pose completa; `layout-enemy-*` só `{ y }`). */
+  /** Trono + heróis sintéticos (`layout-hero-*`) — pose completa. */
   layoutActors?: Partial<Record<string, LayoutActorEntry>>;
+  /** Inimigo de referência único no editor: modelo do compendium + Y por id. */
+  layoutEnemyEditor?: LayoutEnemyEditorPrefs;
   /** Câmara livre (perspetiva); null = usar câmara ortográfica de combate. */
   freeCamera: null | {
     position: [number, number, number];
@@ -61,6 +63,10 @@ const SAFE_FALLBACK: SceneLayoutPrefs = {
   coliseumScale: 1,
   bunkerLayout: {},
   layoutActors: {},
+  layoutEnemyEditor: {
+    previewArchetypeId: "gladinio",
+    yByArchetype: {},
+  },
   freeCamera: null,
 };
 
@@ -90,15 +96,6 @@ function clonePrefs(p: SceneLayoutPrefs): SceneLayoutPrefs {
   const la: Partial<Record<string, LayoutActorEntry>> = {};
   for (const [k, a] of Object.entries(p.layoutActors ?? {})) {
     if (!a || typeof a !== "object") continue;
-    if (isLayoutEnemyActorId(k)) {
-      const y =
-        typeof (a as LayoutEnemyHeightOnly).y === "number" &&
-        Number.isFinite((a as LayoutEnemyHeightOnly).y)
-          ? (a as LayoutEnemyHeightOnly).y
-          : 0;
-      la[k] = { y };
-      continue;
-    }
     const pose = a as LayoutActorPose;
     la[k] = {
       x: pose.x,
@@ -107,11 +104,25 @@ function clonePrefs(p: SceneLayoutPrefs): SceneLayoutPrefs {
       scale: pose.scale,
     };
   }
+  const lee = p.layoutEnemyEditor;
+  const yba: Partial<Record<string, number>> = {
+    ...(lee?.yByArchetype ?? {}),
+  };
   return {
     coliseum: { ...p.coliseum },
     coliseumScale: p.coliseumScale,
     bunkerLayout: bl,
     layoutActors: la,
+    layoutEnemyEditor: lee
+      ? {
+          previewArchetypeId:
+            typeof lee.previewArchetypeId === "string" &&
+            ENEMY_BY_ID[lee.previewArchetypeId]
+              ? lee.previewArchetypeId
+              : "gladinio",
+          yByArchetype: yba,
+        }
+      : { previewArchetypeId: "gladinio", yByArchetype: {} },
     freeCamera: p.freeCamera
       ? {
           position: [...p.freeCamera.position] as [number, number, number],
@@ -167,6 +178,13 @@ function normalizeBunkerLayoutEntry(
   return entry;
 }
 
+/** Chaves antigas (três inimigos na cena) → id de arquétipo no compendium. */
+const LEGACY_LAYOUT_ENEMY_ACTOR_KEY: Record<string, string> = {
+  "layout-enemy-gladinio": "gladinio",
+  "layout-enemy-escravo": "escravo",
+  "layout-enemy-leao": "leao_selvagem",
+};
+
 function normalizeLayoutActors(
   raw: unknown,
 ): Partial<Record<string, LayoutActorEntry>> {
@@ -175,12 +193,8 @@ function normalizeLayoutActors(
   const out: Partial<Record<string, LayoutActorEntry>> = {};
   for (const [k, v] of Object.entries(o)) {
     if (!v || typeof v !== "object") continue;
+    if (LEGACY_LAYOUT_ENEMY_ACTOR_KEY[k]) continue;
     const a = v as Record<string, unknown>;
-    if (isLayoutEnemyActorId(k)) {
-      const y = typeof a.y === "number" && Number.isFinite(a.y) ? a.y : 0;
-      out[k] = { y };
-      continue;
-    }
     const x = typeof a.x === "number" && Number.isFinite(a.x) ? a.x : 0;
     const y = typeof a.y === "number" && Number.isFinite(a.y) ? a.y : 0;
     const z = typeof a.z === "number" && Number.isFinite(a.z) ? a.z : 0;
@@ -191,6 +205,46 @@ function normalizeLayoutActors(
     out[k] = { x, y, z, scale };
   }
   return out;
+}
+
+function migrateLegacyLayoutEnemyActorYs(
+  raw: unknown,
+): Partial<Record<string, number>> {
+  if (!raw || typeof raw !== "object") return {};
+  const o = raw as Record<string, unknown>;
+  const yMerged: Partial<Record<string, number>> = {};
+  for (const [k, arch] of Object.entries(LEGACY_LAYOUT_ENEMY_ACTOR_KEY)) {
+    const v = o[k];
+    if (!v || typeof v !== "object") continue;
+    const a = v as Record<string, unknown>;
+    const y = typeof a.y === "number" && Number.isFinite(a.y) ? a.y : 0;
+    yMerged[arch] = y;
+  }
+  return yMerged;
+}
+
+function normalizeLayoutEnemyEditor(
+  raw: unknown,
+  migratedYs: Partial<Record<string, number>>,
+): LayoutEnemyEditorPrefs {
+  let previewArchetypeId = "gladinio";
+  const yByArchetype: Partial<Record<string, number>> = { ...migratedYs };
+  if (raw && typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    const pid = o.previewArchetypeId;
+    if (typeof pid === "string" && ENEMY_BY_ID[pid]) {
+      previewArchetypeId = pid;
+    }
+    const yba = o.yByArchetype;
+    if (yba && typeof yba === "object") {
+      for (const [k, v] of Object.entries(yba)) {
+        if (typeof v === "number" && Number.isFinite(v) && ENEMY_BY_ID[k]) {
+          yByArchetype[k] = v;
+        }
+      }
+    }
+  }
+  return { previewArchetypeId, yByArchetype };
 }
 
 function normalizeBunkerLayout(
@@ -248,12 +302,18 @@ function normalizeSceneLayoutPrefs(o: unknown): SceneLayoutPrefs {
       };
     }
     const bunkerLayout = normalizeBunkerLayout(raw.bunkerLayout);
+    const migratedEnemyY = migrateLegacyLayoutEnemyActorYs(raw.layoutActors);
     const layoutActors = normalizeLayoutActors(raw.layoutActors);
+    const layoutEnemyEditor = normalizeLayoutEnemyEditor(
+      raw.layoutEnemyEditor,
+      migratedEnemyY,
+    );
     return {
       coliseum: { x: cx, y: cy, z: cz },
       coliseumScale: cScale,
       bunkerLayout,
       layoutActors,
+      layoutEnemyEditor,
       freeCamera,
     };
   } catch {

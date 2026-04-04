@@ -2040,7 +2040,7 @@ function showArenaLayoutEditHud(): void {
   const wrap = el(`
     <div class="arena-layout-edit-shell">
       <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar cena</strong> — Cena com coliseu, trono, bunkers (todos os biomas) e figuras de heróis/inimigos como no início da run. <strong>Câmara em tempo real</strong> (não grava no JSON). Seleciona clicando no 3D; <strong>realce violeta</strong> como em «Ajustar equipamento». Fora do voo: botão direito arrasta o plano, roda zoom. <strong><kbd>Espaço</kbd></strong>: voo livre (arrasto esquerdo olhar, <kbd>WASD</kbd>, <kbd>Q</kbd>/<kbd>E</kbd>, roda zoom). Objeto: arrasto plano, <kbd>Shift</kbd>+arrasto altura, <kbd>WASD</kbd>/<kbd>X</kbd>/<kbd>Z</kbd> fino, <kbd>[</kbd> <kbd>]</kbd> escala. Bunker: <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> modelo e altura Y por nível.
+      <strong>Ajustar cena</strong> — Coliseu, trono, bunkers (todos os biomas), três heróis e <strong>um</strong> inimigo de referência (troca com <kbd>,</kbd> / <kbd>.</kbd> por todo o compendium; altura Y por tipo). <strong>Câmara em tempo real</strong> (não grava no JSON). Realce violeta como em «Ajustar equipamento». Fora do voo: botão direito arrasta o plano, roda zoom. <kbd>Espaço</kbd>: voo livre. Objeto: arrasto plano, <kbd>Shift</kbd>+arrasto altura, <kbd>WASD</kbd>/<kbd>X</kbd>/<kbd>Z</kbd>, <kbd>[</kbd> <kbd>]</kbd> escala. Bunker: <kbd>1</kbd>–<kbd>3</kbd> modelo.
       <br /><span id="arena-layout-dynamic-hint" class="arena-layout-edit-hud__dynamic">${escapeHtml(view.getArenaLayoutEditSelectionHint())}</span>
       <br /><kbd>Esc</kbd> grava e volta ao menu.
       <div class="arena-layout-edit-hud__copy-row">
