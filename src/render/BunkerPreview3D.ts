@@ -24,6 +24,7 @@ export class BunkerPreview3D {
   private running = false;
   private previewTier: BunkerRenderTier = 0;
   private onResize = (): void => this.fit();
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(host: HTMLElement) {
     this.host = host;
@@ -35,9 +36,11 @@ export class BunkerPreview3D {
     this.renderer.setClearColor(0x000000, 0);
     host.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 40);
-    this.camera.position.set(2.4, 1.15, 2.5);
-    this.camera.lookAt(0, 0.45, 0);
+    /* Enquadramento loja: GLB com chaminé/fumo precisa de margem no topo; vista simétrica
+     * e lookAt ligeiramente à esquerda do pivot corrige modelo “puxado” para a esquerda. */
+    this.camera = new THREE.PerspectiveCamera(41, 1, 0.1, 40);
+    this.camera.position.set(2.78, 0.98, 2.78);
+    this.camera.lookAt(-0.12, 0.34, 0);
 
     const amb = new THREE.AmbientLight(0xfff0e0, 0.55);
     const key = new THREE.DirectionalLight(0xffffff, 0.95);
@@ -48,10 +51,15 @@ export class BunkerPreview3D {
 
     this.bunkerModel = createBunkerVisualGroup(0);
     this.root.add(this.bunkerModel);
+    /* Desce um pouco no quadro (pivot GLB tende a ficar alto). */
+    this.root.position.y = -0.07;
     this.scene.add(this.root);
 
     window.addEventListener("resize", this.onResize);
+    this.resizeObserver = new ResizeObserver(() => this.fit());
+    this.resizeObserver.observe(host);
     this.fit();
+    requestAnimationFrame(() => this.fit());
   }
 
   setTier(tier: BunkerRenderTier): void {
@@ -70,6 +78,7 @@ export class BunkerPreview3D {
   private fit(): void {
     const w = Math.max(this.host.clientWidth, 160);
     const h = Math.max(this.host.clientHeight, 140);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(h, 1);
     this.camera.updateProjectionMatrix();
@@ -97,6 +106,8 @@ export class BunkerPreview3D {
 
   dispose(): void {
     window.removeEventListener("resize", this.onResize);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.stop();
     disposeObject3D(this.root);
     this.root.clear();

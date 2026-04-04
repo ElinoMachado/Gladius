@@ -5645,6 +5645,12 @@ body.enemy-inspect--dragging-body {
   box-sizing: border-box;
 }
 
+.shop-bunker-viz-layout__3d-host canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .shop-bunker-viz-layout__col {
   flex: 1 1 200px;
   min-width: 0;
