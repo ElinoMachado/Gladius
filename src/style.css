@@ -119,7 +119,8 @@ body {
 .combat-corner-layer {
   position: fixed;
   inset: 0;
-  z-index: 5;
+  /* Acima de `.combat-bottom-stack` (6): triângulos e texto não ficam por baixo do HUD. */
+  z-index: 8;
   pointer-events: none;
   --combat-stack-h: 200px;
 }

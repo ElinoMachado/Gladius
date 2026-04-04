@@ -5618,6 +5618,14 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   const effDef =
     coreDefHero + (h.isPlayer ? m.montanhosoAllyDefBonus(h) : 0);
   const movPool = m.heroMovementPool(h);
+  /** No combate, no turno deste herói: movimento na grelha = restantes / pool (inteiros). */
+  const heroMovCombatTurn =
+    h.isPlayer &&
+    !!h.heroClass &&
+    m.phase === "combat" &&
+    !m.inEnemyPhase &&
+    !m.duel &&
+    m.currentHero()?.id === h.id;
   const effAlc = m.effectiveAlcanceForHero(h);
   const roch = bio === "rochoso" && !ign;
   const rochCritTileAdd =
@@ -5826,8 +5834,16 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       });
     }
     const movDeltaCore = movPool - b.movimento;
-    const movDisp = formatTooltipNumber(movPool);
-    const movPair = valWithDelta(movDisp, movDeltaCore, "int");
+    const movPoolIntStr = tipInt(movPool);
+    const movDisp = heroMovCombatTurn
+      ? `${tipInt(m.movementLeft)}/${movPoolIntStr}`
+      : movPoolIntStr;
+    const movPair = heroMovCombatTurn
+      ? { html: escapeHtml(movDisp), plain: movDisp }
+      : valWithDelta(movPoolIntStr, movDeltaCore, "int");
+    const movDetailCore = heroMovCombatTurn
+      ? `${movDisp} (restantes / máximo neste turno)`
+      : movPair.plain;
     const pantHexSlow =
       bio === "pantano" &&
       !ign &&
@@ -5835,19 +5851,18 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     const pantExtra = pantHexSlow
       ? ` <span class="lol-stat-delta lol-stat-delta--down">(−50% mobilidade)</span>`
       : "";
+    const pantTail = pantHexSlow ? " — hexes no pântano custam 2 pontos" : "";
     cells.push({
       icon: "mov",
       label: "Movimento",
       value: movDisp,
       valueHtml: movPair.html + pantExtra,
-      tooltipValue:
-        movPair.plain +
-        (pantHexSlow ? " — hexes no pântano custam 2 pontos" : ""),
+      tooltipValue: movDetailCore + pantTail,
       statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "mov",
         display: movDisp,
-        detailPlain: `${movPair.plain}${pantHexSlow ? " — hexes no pântano custam 2 pontos" : ""}`,
+        detailPlain: `${movDetailCore}${pantTail}`,
       }),
     });
 
@@ -6118,20 +6133,27 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     const pantF = pantHexSlowElse
       ? ` <span class="lol-stat-delta lol-stat-delta--down">(−50% mobilidade)</span>`
       : "";
-    const movElseDisp = formatTooltipNumber(movPool);
+    const movPoolElseStr = tipInt(movPool);
+    const movElseDisp = heroMovCombatTurn
+      ? `${tipInt(m.movementLeft)}/${movPoolElseStr}`
+      : movPoolElseStr;
+    const movElseDetail = heroMovCombatTurn
+      ? `${movElseDisp} (restantes / máximo neste turno)`
+      : movElseDisp;
+    const pantTailElse = pantHexSlowElse
+      ? " — hexes no pântano custam 2 pontos"
+      : "";
     cells.push({
       icon: "mov",
       label: "Movimento",
       value: movElseDisp,
       valueHtml: escapeHtml(movElseDisp) + pantF,
-      tooltipValue:
-        movElseDisp +
-        (pantHexSlowElse ? " — hexes no pântano custam 2 pontos" : ""),
+      tooltipValue: movElseDetail + pantTailElse,
       statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "mov",
         display: movElseDisp,
-        detailPlain: `${movElseDisp}${pantHexSlowElse ? " — hexes no pântano custam 2 pontos" : ""}`,
+        detailPlain: `${movElseDetail}${pantTailElse}`,
       }),
     });
     cells.push({
