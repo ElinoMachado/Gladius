@@ -975,6 +975,207 @@ function writeSkipInitialShopEmptyConfirm(on: boolean): void {
   }
 }
 
+/** Sem ações: não voltar a perguntar — passa o turno automaticamente quando não houver mais jogadas. */
+const LS_COMBAT_NO_ACTIONS_AUTO_END_SKIP =
+  "gladiadores-combat-no-actions-auto-end-skip";
+
+function readCombatNoActionsAutoEndSkip(): boolean {
+  try {
+    return localStorage.getItem(LS_COMBAT_NO_ACTIONS_AUTO_END_SKIP) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeCombatNoActionsAutoEndSkip(on: boolean): void {
+  try {
+    localStorage.setItem(LS_COMBAT_NO_ACTIONS_AUTO_END_SKIP, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Modal “sem ações” já visível (evita reabrir a cada `update`). */
+let combatNoActionsModalVisible = false;
+let combatNoActionsModalEl: HTMLElement | null = null;
+
+function disposeCombatNoActionsModal(): void {
+  combatNoActionsModalEl?.remove();
+  combatNoActionsModalEl = null;
+  combatNoActionsModalVisible = false;
+}
+
+/**
+ * Espelha a barra de combate: movimento, básico, skills do contexto atual, ultimate da arma, Especialista.
+ */
+function heroHasAnyEnabledCombatAction(m: GameModel, h: Unit): boolean {
+  if (!h.heroClass || h.hp <= 0) return true;
+  if (m.phase !== "combat" || m.inEnemyPhase || m.duel) return true;
+
+  const sandboxCd = m.sandboxNoCdUltEnabled();
+  const tmpl = HEROES[h.heroClass];
+  const bunk = m.bunkerAtHex(h.q, h.r);
+  const inBunker = !!bunk && bunk.occupantId === h.id;
+
+  if (m.movementLeft > 0) {
+    const reach = m.reachableForCurrentHero();
+    const cur = axialKey(h.q, h.r);
+    for (const k of reach.keys()) {
+      if (k !== cur) return true;
+    }
+  }
+
+  if (m.basicLeft > 0) {
+    const keys = m.getBasicAttackRangeHexKeys();
+    for (const e of m.enemies()) {
+      if (e.hp <= 0) continue;
+      if (
+        keys.has(axialKey(e.q, e.r)) &&
+        m.validateEnemyForBasicAttack(e.id)
+      )
+        return true;
+    }
+  }
+
+  if (inBunker && bunk) {
+    const cdM = sandboxCd ? 0 : (h.skillCd["bunker_minas"] ?? 0);
+    if (cdM <= 0) return true;
+    if (bunk.tier >= 2) {
+      const cdT = sandboxCd ? 0 : (h.skillCd["bunker_tiro_preciso"] ?? 0);
+      if (cdT <= 0) return true;
+    }
+    return false;
+  }
+
+  if (h.heroClass === "gladiador") {
+    const inFuria = (h.furiaGiganteTurns ?? 0) > 0;
+    if (inFuria) {
+      const cd = sandboxCd ? 0 : (h.skillCd["pisotear"] ?? 0);
+      const mc = pisotearManaCost(h.weaponLevel);
+      if (cd <= 0 && (mc <= 0 || h.maxMana <= 0 || h.mana >= mc))
+        return true;
+    } else {
+      const mc = ateMorteManaCost(h.weaponLevel);
+      const cd = sandboxCd ? 0 : (h.skillCd["ate_a_morte"] ?? 0);
+      if (cd <= 0 && (mc <= 0 || h.maxMana <= 0 || h.mana >= mc)) return true;
+    }
+  } else {
+    for (const sk of tmpl.skills) {
+      if (sk.id === "sentenca") {
+        const sm = sentencaManaCost(h.weaponLevel);
+        const cdS = sandboxCd ? 0 : (h.skillCd[sk.id] ?? 0);
+        if (cdS <= 0 && h.mana >= sm) return true;
+        continue;
+      }
+      if (
+        sk.id === "atirar_todo_lado" &&
+        h.heroClass === "pistoleiro" &&
+        h.ultimateId === "arauto_caos"
+      ) {
+        const tiroCharges = h.tiroDestruidorCharges ?? 0;
+        const tiroNoCharges = !m.devSandboxMode && tiroCharges < 1;
+        const cdT = sandboxCd ? 0 : (h.skillCd["tiro_destruidor"] ?? 0);
+        if (!tiroNoCharges && cdT <= 0) return true;
+        continue;
+      }
+      const cd = sandboxCd ? 0 : (h.skillCd[sk.id] ?? 0);
+      if (cd <= 0) return true;
+    }
+  }
+
+  if (
+    h.heroClass === "sacerdotisa" ||
+    h.heroClass === "pistoleiro" ||
+    h.heroClass === "gladiador"
+  ) {
+    if (sandboxCd || (h.weaponUltMeter ?? 0) >= 1) return true;
+  }
+
+  if (h.ultimateId === "especialista_destruicao") return true;
+
+  return false;
+}
+
+function resumeMovementPreviewAfterHeroAction(): void {
+  if (model.phase !== "combat" || model.inEnemyPhase) return;
+  const h = model.currentHero();
+  if (!h || !h.heroClass || h.hp <= 0) return;
+  if (model.movementLeft <= 0) return;
+  const reach = model.reachableForCurrentHero();
+  const cur = axialKey(h.q, h.r);
+  for (const k of reach.keys()) {
+    if (k !== cur) {
+      movePreviewActive = true;
+      return;
+    }
+  }
+}
+
+function maybeCombatNoActionsAutoEndOrModal(runUpdate: () => void): void {
+  if (model.phase !== "combat" || model.inEnemyPhase || model.duel) return;
+  if (model.hasPendingCombatSchedule()) return;
+  if (view.isUnitMoveAnimating()) return;
+  if (pendingCombat != null) return;
+  if (combatNoActionsModalVisible) return;
+
+  const cur = model.currentHero();
+  const viewed = lolViewedHero(model);
+  if (!cur?.isPlayer || !viewed || viewed.id !== cur.id || !cur.heroClass)
+    return;
+  if (cur.hp <= 0) return;
+
+  if (heroHasAnyEnabledCombatAction(model, cur)) return;
+
+  if (readCombatNoActionsAutoEndSkip()) {
+    resetCombatSelection();
+    model.endHeroTurn();
+    runUpdate();
+    return;
+  }
+
+  combatNoActionsModalVisible = true;
+  disposeCombatNoActionsModal();
+  const overlay = el(`<div class="shop-modal-overlay combat-no-actions-modal-overlay" aria-hidden="false">
+    <div class="shop-modal" role="dialog" aria-modal="true" aria-labelledby="combat-no-actions-title">
+      <h2 id="combat-no-actions-title" class="shop-modal__title">Sem mais ações?</h2>
+      <p class="shop-modal__body">Não tens movimento útil, ataques básicos, habilidades prontas nem ultimate da arma disponível. Queres que o jogo <strong>passe o teu turno automaticamente</strong> sempre que isto acontecer?</p>
+      <label class="shop-modal__check"><input type="checkbox" id="combat-no-actions-skip-future" /> Não mostrar esta pergunta novamente</label>
+      <div class="shop-modal__actions">
+        <button type="button" class="btn" id="combat-no-actions-decline">Não, fico no turno</button>
+        <button type="button" class="btn btn-primary" id="combat-no-actions-confirm">Sim, passar automaticamente</button>
+      </div>
+    </div>
+  </div>`);
+  combatNoActionsModalEl = overlay;
+  uiRoot.appendChild(overlay);
+
+  const close = (): void => {
+    overlay.remove();
+    if (combatNoActionsModalEl === overlay) combatNoActionsModalEl = null;
+    combatNoActionsModalVisible = false;
+  };
+
+  overlay.querySelector("#combat-no-actions-confirm")!.addEventListener(
+    "click",
+    () => {
+      const cb = overlay.querySelector(
+        "#combat-no-actions-skip-future",
+      ) as HTMLInputElement | null;
+      if (cb?.checked) writeCombatNoActionsAutoEndSkip(true);
+      resetCombatSelection();
+      model.endHeroTurn();
+      close();
+      runUpdate();
+    },
+  );
+  overlay.querySelector("#combat-no-actions-decline")!.addEventListener(
+    "click",
+    () => {
+      close();
+    },
+  );
+}
+
 function readCombatLogVisible(): boolean {
   const s = localStorage.getItem(COMBAT_LOG_VISIBLE_LS);
   if (s === null) return false;
@@ -1328,21 +1529,34 @@ function applyCombatOverlays(): void {
       if (k !== cur) moveKeys.add(k);
     }
   }
+  /** Durante seleção de alvo ou execução (fila VFX), inimigo sob o rato + hexes do herói confundem — esconder. */
+  const suppressMoveRangeForEnemyHover =
+    combatHoverEnemyId != null &&
+    (pendingCombat != null || model.hasPendingCombatSchedule());
+  if (suppressMoveRangeForEnemyHover) {
+    moveKeys = new Set();
+    atkKeys = new Set();
+    combatTiroBeamPreviewKeys = null;
+    combatTiroBeamPath = null;
+    combatTiroAimCacheSig = "";
+  }
   view.setMovementOverlay(moveKeys);
   view.setAttackOverlay(atkKeys);
   const hoverMoveKeys =
-    combatHoverEnemyId != null
-      ? model.enemyMovementPreviewKeys(combatHoverEnemyId)
-      : new Set<string>();
+    suppressMoveRangeForEnemyHover || combatHoverEnemyId == null
+      ? new Set<string>()
+      : model.enemyMovementPreviewKeys(combatHoverEnemyId);
   const inspectAtkKeys =
-    combatInspectEnemyId != null
-      ? model.enemyAttackPreviewKeys(combatInspectEnemyId)
-      : new Set<string>();
+    suppressMoveRangeForEnemyHover || combatInspectEnemyId == null
+      ? new Set<string>()
+      : model.enemyAttackPreviewKeys(combatInspectEnemyId);
   view.setEnemyInspectMovementOverlay(hoverMoveKeys);
   view.setEnemyInspectAttackOverlay(inspectAtkKeys);
 
   const showTiroAim =
-    pendingCombat?.kind === "skill" && pendingCombat.id === "tiro_destruidor";
+    !suppressMoveRangeForEnemyHover &&
+    pendingCombat?.kind === "skill" &&
+    pendingCombat.id === "tiro_destruidor";
   view.setTiroDestruidorAimPreview(
     showTiroAim ? combatTiroBeamPreviewKeys : null,
     showTiroAim ? combatTiroBeamPath : null,
@@ -1352,6 +1566,25 @@ function applyCombatOverlays(): void {
 /** Atualiza linha de mira do Tiro destruidor ao mover o rato na arena. */
 function updateTiroDestruidorAimPreview(ndcX: number, ndcY: number): void {
   if (model.phase !== "combat" || model.inEnemyPhase) return;
+  const clearTiroAim = (): void => {
+    if (combatTiroAimCacheSig === "") return;
+    combatTiroBeamPreviewKeys = null;
+    combatTiroBeamPath = null;
+    combatTiroAimCacheSig = "";
+    applyCombatOverlays();
+  };
+  if (combatHoverEnemyId != null && model.hasPendingCombatSchedule()) {
+    clearTiroAim();
+    return;
+  }
+  if (
+    pendingCombat?.kind === "skill" &&
+    pendingCombat.id === "tiro_destruidor" &&
+    combatHoverEnemyId != null
+  ) {
+    clearTiroAim();
+    return;
+  }
   if (pendingCombat?.kind !== "skill" || pendingCombat.id !== "tiro_destruidor") {
     if (combatTiroAimCacheSig !== "") {
       combatTiroBeamPreviewKeys = null;
@@ -7544,6 +7777,7 @@ function showCombatHUD(): void {
             if (!combatAbilityInputDebounce()) return;
             if (model.trySkill("pisotear")) {
               resetCombatSelection();
+              resumeMovementPreviewAfterHeroAction();
               refreshOverlays();
               update();
             }
@@ -7600,6 +7834,7 @@ function showCombatHUD(): void {
               if (!combatAbilityInputDebounce()) return;
               if (model.trySkill("sentenca")) {
                 resetCombatSelection();
+                resumeMovementPreviewAfterHeroAction();
                 refreshOverlays();
                 update();
               }
@@ -7664,6 +7899,7 @@ function showCombatHUD(): void {
           if (!combatAbilityInputDebounce()) return;
           if (model.tryWeaponUltimate()) {
             resetCombatSelection();
+            resumeMovementPreviewAfterHeroAction();
             refreshOverlays();
             update();
           }
@@ -7736,6 +7972,7 @@ function showCombatHUD(): void {
     }
 
     refreshOverlays();
+    maybeCombatNoActionsAutoEndOrModal(update);
   };
 
   const COMBAT_ABILITY_INPUT_MS = 220;
@@ -8023,6 +8260,7 @@ function showCombatHUD(): void {
         if (model.tryBasicAttack(tid)) {
           view.applyHeroAttackFacingFromPointer(active.id, x, y);
           resetCombatSelection();
+          resumeMovementPreviewAfterHeroAction();
           update();
         }
         return;
@@ -8058,6 +8296,7 @@ function showCombatHUD(): void {
           if (model.trySkill("atirar_todo_lado")) {
             view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
+            resumeMovementPreviewAfterHeroAction();
             update();
           }
         } else {
@@ -8084,6 +8323,7 @@ function showCombatHUD(): void {
         ) {
           view.applyHeroAttackFacingFromPointer(active.id, x, y);
           resetCombatSelection();
+          resumeMovementPreviewAfterHeroAction();
           update();
         }
         return;
@@ -8094,6 +8334,7 @@ function showCombatHUD(): void {
           if (model.trySkill(sid, tid)) {
             view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
+            resumeMovementPreviewAfterHeroAction();
             update();
           }
           return;
@@ -8112,6 +8353,7 @@ function showCombatHUD(): void {
           if (model.trySkill(sid, tid)) {
             view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
+            resumeMovementPreviewAfterHeroAction();
             update();
           }
           return;
@@ -8131,6 +8373,7 @@ function showCombatHUD(): void {
           if (model.trySkill("bunker_minas")) {
             view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
+            resumeMovementPreviewAfterHeroAction();
             update();
           }
         } else {
@@ -8498,6 +8741,7 @@ function render(): void {
     combatHotkeysAbort = null;
     killWaveIntroTimers();
     document.querySelectorAll(".wave-intro-overlay").forEach((n) => n.remove());
+    disposeCombatNoActionsModal();
     resetCombatSelection();
   } else if (prevPhase !== "combat") {
     resetCombatSelection();
