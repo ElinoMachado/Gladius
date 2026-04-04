@@ -6570,10 +6570,16 @@ function showCombatHUD(): void {
   combatDockStack.appendChild(bottom);
   const combatCornerLayer = el(`<div class="combat-corner-layer" id="combat-corner-layer" hidden>
     <div class="combat-corner-triangle combat-corner-triangle--attacks" role="status" aria-live="polite">
-      <span class="combat-corner-triangle__val" id="combat-corner-atk"></span>
+      <div class="combat-corner-triangle__stack">
+        <span class="combat-corner-triangle__lbl">Ataques</span>
+        <span class="combat-corner-triangle__val" id="combat-corner-atk"></span>
+      </div>
     </div>
     <div class="combat-corner-triangle combat-corner-triangle--moves" role="status" aria-live="polite">
-      <span class="combat-corner-triangle__val" id="combat-corner-mov"></span>
+      <div class="combat-corner-triangle__stack">
+        <span class="combat-corner-triangle__lbl">Movimento</span>
+        <span class="combat-corner-triangle__val" id="combat-corner-mov"></span>
+      </div>
     </div>
   </div>`) as HTMLElement;
   const combatCornerAtk = combatCornerLayer.querySelector(
@@ -7680,15 +7686,17 @@ function showCombatHUD(): void {
         syncCombatCornerStackOffset();
         const capB = model.maxBasicAttacksForHero(h);
         const movMax = model.heroMovementPool(h);
+        const movCur = Math.max(0, Math.round(model.movementLeft));
+        const movTot = Math.max(0, Math.round(movMax));
         combatCornerAtk.textContent = `${model.basicLeft}/${capB}`;
-        combatCornerMov.textContent = `${formatTooltipNumber(model.movementLeft)}/${formatTooltipNumber(movMax)}`;
-        combatCornerAtk.parentElement!.setAttribute(
+        combatCornerMov.textContent = `${movCur}/${movTot}`;
+        combatCornerAtk.parentElement!.parentElement!.setAttribute(
           "aria-label",
           `Ataques básicos: ${model.basicLeft} de ${capB}`,
         );
-        combatCornerMov.parentElement!.setAttribute(
+        combatCornerMov.parentElement!.parentElement!.setAttribute(
           "aria-label",
-          `Movimento: ${formatTooltipNumber(model.movementLeft)} de ${formatTooltipNumber(movMax)}`,
+          `Movimento: ${movCur} de ${movTot}`,
         );
       } else {
         combatCornerLayer.hidden = true;
