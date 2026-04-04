@@ -4982,8 +4982,8 @@ body.enemy-inspect--dragging-body {
     rgba(12, 10, 16, 0.92) 100%
   );
   /* Mais ar do que a loja genérica — evita sobrepor o cabeçalho / contador */
-  padding-top: 1.35rem;
-  padding-bottom: 1.75rem;
+  padding-top: 1.55rem;
+  padding-bottom: 2rem;
 }
 
 .shop-screen__panel--gold .shop-title.hero-setup-main-title {
@@ -5137,9 +5137,9 @@ body.enemy-inspect--dragging-body {
 }
 
 /* Loja ouro: prato 3D — dois painéis opostos em Z; rotação ~180° troca frente/fundo */
-/* Mesmo afastamento acima e abaixo do cartão 3D; a grelha de compras não soma margin-top extra */
+/* Mesmo afastamento acima e abaixo do cartão 3D (herói e bunker partilham a mesma altura no turntable) */
 .shop-viz-flip-wrap {
-  margin: 1.05rem 0;
+  margin: 1.15rem 0 1.25rem;
 }
 
 .shop-viz-flip-row {
@@ -5157,19 +5157,22 @@ body.enemy-inspect--dragging-body {
   transform-style: preserve-3d;
   transform: perspective(1040px) rotateY(-11deg) rotateX(3deg);
   transform-origin: 50% 50%;
+  overflow: visible;
 }
 
 .shop-viz-turntable {
   width: 100%;
-  /* Conteúdo compacto (herói + bunker em grelha); scroll no painel se precisar */
-  height: clamp(248px, 32vh, 380px);
+  /* Altura pautada pelo herói (tabs + stats + skills + artefatos); bunker usa o mesmo quadro */
+  height: clamp(560px, 61vh, 700px);
   transform-style: preserve-3d;
+  overflow: visible;
 }
 
 .shop-viz-turntable-inner {
   position: relative;
   width: 100%;
   height: 100%;
+  overflow: visible;
   transform-style: preserve-3d;
   transform-origin: center center;
   transition: transform 0.82s cubic-bezier(0.42, 0, 0.18, 1);
@@ -5190,8 +5193,8 @@ body.enemy-inspect--dragging-body {
   height: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  /* Sem scroll interno em alturas normais — a caixa do turntable já é alta o suficiente para o herói */
+  overflow-y: visible;
   border-radius: 3px;
   transform-style: preserve-3d;
   backface-visibility: hidden;
@@ -5426,6 +5429,13 @@ body.enemy-inspect--dragging-body {
   }
 }
 
+@media (max-height: 540px) {
+  .shop-viz-turntable-panel {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 @media (max-width: 720px) {
   .shop-viz-flip-row {
     flex-direction: column;
@@ -5436,7 +5446,7 @@ body.enemy-inspect--dragging-body {
   }
 
   .shop-viz-turntable {
-    height: clamp(260px, 36vh, 420px);
+    height: clamp(540px, 66vh, 680px);
   }
 
   .shop-viz-flip-arrow {
@@ -5496,6 +5506,11 @@ body.enemy-inspect--dragging-body {
   .shop-viz-turntable-panel--bunker .shop-bunker-viz-layout__col {
     grid-column: 1;
     grid-row: 3;
+  }
+
+  /* Empilhado: coluna do herói fica mais alta — mesmo turntable para bunker */
+  .shop-viz-turntable {
+    height: clamp(560px, 72vh, 780px);
   }
 }
 
@@ -6130,9 +6145,9 @@ body.enemy-inspect--dragging-body {
   margin: 0.65rem 0 1rem;
 }
 
-/* Só um intervalo até à grelha: o .shop-viz-flip-wrap já tem margin-bottom simétrico */
+/* Espaço extra até à grelha de compras para não encostar ao cartão 3D */
 .shop-screen__panel--gold .shop-mid-row {
-  margin-top: 0;
+  margin-top: 0.35rem;
   margin-bottom: 1rem;
 }
 
