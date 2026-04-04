@@ -111,6 +111,83 @@ body {
   pointer-events: none;
 }
 
+/* Contadores restantes/total sobre o mapa (ataques · canto inf. esq.; movimento · inf. dir.) */
+#ui-root > .combat-corner-layer {
+  pointer-events: none;
+}
+
+.combat-corner-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  --combat-stack-h: 200px;
+}
+
+.combat-corner-triangle {
+  position: absolute;
+  width: min(42vmin, 240px);
+  height: min(30vmin, 168px);
+  bottom: var(--combat-stack-h);
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 0.35rem 0.45rem;
+}
+
+/* Triângulo reto no canto: hipotenusa sobe para o centro do mapa */
+.combat-corner-triangle--attacks {
+  left: 0;
+  clip-path: polygon(0 100%, 0 10%, 88% 100%);
+  background: linear-gradient(
+    0deg,
+    rgba(8, 4, 6, 0.96) 0%,
+    rgba(22, 8, 10, 0.78) 32%,
+    rgba(48, 14, 18, 0.42) 68%,
+    rgba(72, 20, 24, 0.12) 100%
+  );
+  box-shadow: inset 0 -6px 24px rgba(120, 28, 32, 0.22);
+}
+
+.combat-corner-triangle--moves {
+  right: 0;
+  clip-path: polygon(100% 100%, 100% 10%, 12% 100%);
+  background: linear-gradient(
+    0deg,
+    rgba(4, 8, 14, 0.96) 0%,
+    rgba(8, 16, 32, 0.78) 32%,
+    rgba(14, 28, 52, 0.42) 68%,
+    rgba(18, 36, 64, 0.12) 100%
+  );
+  box-shadow: inset 0 -6px 24px rgba(28, 56, 120, 0.22);
+}
+
+.combat-corner-triangle__val {
+  position: relative;
+  z-index: 1;
+  color: #fff;
+  font-weight: 800;
+  font-size: clamp(0.92rem, 3.2vmin, 1.2rem);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-shadow:
+    0 0 3px #000,
+    0 2px 8px rgba(0, 0, 0, 0.95);
+}
+
+.combat-corner-triangle--attacks .combat-corner-triangle__val {
+  margin-right: auto;
+  margin-left: 8%;
+  margin-bottom: 6%;
+}
+
+.combat-corner-triangle--moves .combat-corner-triangle__val {
+  margin-left: auto;
+  margin-right: 8%;
+  margin-bottom: 6%;
+}
+
 #damage-float-layer {
   position: absolute;
   inset: 0;
@@ -4045,7 +4122,7 @@ body.enemy-inspect--dragging-body {
   pointer-events: none;
 }
 
-/* Ataque básico: ataques restantes/máximo (canto superior esquerdo, branco). */
+/* Opcional: contagem no ícone (combate: ataques vão para `.combat-corner-triangle--attacks`). */
 .lol-skill-uses-badge {
   position: absolute;
   top: 3px;

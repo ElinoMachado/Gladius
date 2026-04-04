@@ -786,6 +786,7 @@ let combatTiroBeamPath: { q: number; r: number }[] | null = null;
 let combatTiroAimCacheSig = "";
 /** Evita acumular `keydown` de combate a cada `render()` / `showCombatHUD()`. */
 let combatHotkeysAbort: AbortController | null = null;
+let combatCornerResizeObserver: ResizeObserver | null = null;
 
 const SANDBOX_PANEL_POS_KEY = "gladius-sandbox-panel-pos";
 const SANDBOX_PANEL_VISIBLE_KEY = "gladius-sandbox-panel-visible";
@@ -3757,7 +3758,7 @@ function combatSquareSkillHtml(opts: {
   combatHotkey?: string;
   /** Ondas restantes de recarga (mostrado no canto superior esquerdo, branco). */
   cdTurns?: number;
-  /** Ataque básico: ataques restantes / máximo (canto superior esquerdo, branco). */
+  /** Contagem no botão (ex.: loja); no combate usar cantos do mapa. */
   usesBadge?: { cur: number; max: number };
   /** Sem badge de mana no canto (ex.: ataque básico). */
   omitManaBadge?: boolean;
@@ -6385,6 +6386,8 @@ function spawnCombatFloat(
 
 function showCombatHUD(): void {
   combatHotkeysAbort?.abort();
+  combatCornerResizeObserver?.disconnect();
+  combatCornerResizeObserver = null;
   combatHotkeysAbort = new AbortController();
   const combatInputSignal = combatHotkeysAbort.signal;
   combatArtifactStripPage = 0;
@@ -6565,11 +6568,38 @@ function showCombatHUD(): void {
   const combatDockStack = el(`<div class="combat-bottom-stack"></div>`);
   combatDockStack.appendChild(combatAboveBar);
   combatDockStack.appendChild(bottom);
+  const combatCornerLayer = el(`<div class="combat-corner-layer" id="combat-corner-layer" hidden>
+    <div class="combat-corner-triangle combat-corner-triangle--attacks" role="status" aria-live="polite">
+      <span class="combat-corner-triangle__val" id="combat-corner-atk"></span>
+    </div>
+    <div class="combat-corner-triangle combat-corner-triangle--moves" role="status" aria-live="polite">
+      <span class="combat-corner-triangle__val" id="combat-corner-mov"></span>
+    </div>
+  </div>`) as HTMLElement;
+  const combatCornerAtk = combatCornerLayer.querySelector(
+    "#combat-corner-atk",
+  ) as HTMLElement;
+  const combatCornerMov = combatCornerLayer.querySelector(
+    "#combat-corner-mov",
+  ) as HTMLElement;
+  const syncCombatCornerStackOffset = (): void => {
+    combatCornerLayer.style.setProperty(
+      "--combat-stack-h",
+      `${Math.ceil(combatDockStack.getBoundingClientRect().height)}px`,
+    );
+  };
+  combatCornerResizeObserver = new ResizeObserver(syncCombatCornerStackOffset);
+  combatCornerResizeObserver.observe(combatDockStack);
+  window.addEventListener("resize", syncCombatCornerStackOffset, {
+    signal: combatInputSignal,
+  });
   uiRoot.appendChild(hud);
   uiRoot.appendChild(stipendOverlay);
   uiRoot.appendChild(enemyInspectPanel);
   uiRoot.appendChild(turnOrderWrap);
+  uiRoot.appendChild(combatCornerLayer);
   uiRoot.appendChild(combatDockStack);
+  requestAnimationFrame(() => syncCombatCornerStackOffset());
   mountCombatSandboxDevtools(combatInputSignal);
   const lolPortrait = bottom.querySelector("#lol-portrait") as HTMLElement;
   const lolBravuraBadge = bottom.querySelector(
@@ -7155,6 +7185,7 @@ function showCombatHUD(): void {
         lolBravuraBadge.textContent = "";
         clearGameTooltipHandlers(lolBravuraBadge);
       }
+      combatCornerLayer.hidden = true;
     };
 
     if (!h || !h.heroClass) {
@@ -7330,7 +7361,6 @@ function showCombatHUD(): void {
         omitManaBadge: true,
         ariaLabel: `Ataque básico — Ataques ${curBasic} de ${capBasic}`,
         selectKind: "basic",
-        usesBadge: { cur: curBasic, max: capBasic },
       }),
     );
     bindGameTooltip(bb, () => tooltipBasicAttack(h, model));
@@ -7635,6 +7665,33 @@ function showCombatHUD(): void {
           });
         });
         actionRow.appendChild(bu);
+      }
+    }
+
+    {
+      const showCorners =
+        model.phase === "combat" &&
+        !model.inEnemyPhase &&
+        isViewingActive &&
+        activeHero &&
+        activeHero.hp > 0;
+      if (showCorners) {
+        combatCornerLayer.hidden = false;
+        syncCombatCornerStackOffset();
+        const capB = model.maxBasicAttacksForHero(h);
+        const movMax = model.heroMovementPool(h);
+        combatCornerAtk.textContent = `${model.basicLeft}/${capB}`;
+        combatCornerMov.textContent = `${formatTooltipNumber(model.movementLeft)}/${formatTooltipNumber(movMax)}`;
+        combatCornerAtk.parentElement!.setAttribute(
+          "aria-label",
+          `Ataques básicos: ${model.basicLeft} de ${capB}`,
+        );
+        combatCornerMov.parentElement!.setAttribute(
+          "aria-label",
+          `Movimento: ${formatTooltipNumber(model.movementLeft)} de ${formatTooltipNumber(movMax)}`,
+        );
+      } else {
+        combatCornerLayer.hidden = true;
       }
     }
 
@@ -8395,6 +8452,8 @@ function render(): void {
     removeEquipmentModal();
   }
   if (model.phase !== "combat") {
+    combatCornerResizeObserver?.disconnect();
+    combatCornerResizeObserver = null;
     combatHotkeysAbort?.abort();
     combatHotkeysAbort = null;
     killWaveIntroTimers();
