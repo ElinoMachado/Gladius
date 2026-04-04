@@ -3648,7 +3648,7 @@ function showGoldShop(isInitial: boolean): void {
     if (h.heroClass) {
       if (skillsWrap) skillsWrap.hidden = false;
       goldShopHeroPreview3d = bunkerShop
-        ? new HeroPreview3D(hero3dHost, 168, 138, {
+        ? new HeroPreview3D(hero3dHost, 400, 300, {
             cameraZ: 3.02,
             lookAtY: 0.66,
           })

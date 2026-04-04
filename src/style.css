@@ -5204,16 +5204,24 @@ body.enemy-inspect--dragging-body {
   pointer-events: none;
 }
 
-/* Preview 3D no turntable: coluna esquerda (grid no .shop-hero-viz) */
+/* Preview 3D no turntable: coluna esquerda larga; estica com a fila (altura da coluna de stats) */
 .shop-viz-turntable-panel--hero .gold-shop-hero-3d-host--carousel {
   grid-column: 1;
   grid-row: 2;
   width: 100%;
-  max-width: 158px;
-  height: 138px;
-  min-height: 138px;
-  max-height: 144px;
-  justify-self: center;
+  max-width: none;
+  justify-self: stretch;
+  align-self: stretch;
+  min-height: clamp(200px, 26vh, 280px);
+  height: 100%;
+  max-height: min(52vh, 380px);
+  box-sizing: border-box;
+}
+
+.shop-viz-turntable-panel--hero .gold-shop-hero-3d-host--carousel canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* Bunker no turntable: `display: contents` junta preview+col à grelha do cartão (lado a lado) */
@@ -5225,21 +5233,30 @@ body.enemy-inspect--dragging-body {
   grid-column: 1;
   grid-row: 2;
   width: 100%;
-  max-width: 158px;
+  max-width: none;
   padding: 0;
-  justify-self: center;
+  justify-self: stretch;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .shop-viz-turntable-panel--bunker .shop-bunker-viz-layout__3d-host {
-  min-height: 132px;
-  height: 138px;
-  max-height: 144px;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: clamp(200px, 26vh, 280px);
+  height: 100%;
+  max-height: min(52vh, 380px);
+  box-sizing: border-box;
 }
 
 .shop-viz-turntable-panel--bunker .shop-bunker-viz-layout__col {
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
+  align-self: start;
   padding: 0.02rem 0 0.08rem 0.12rem;
 }
 
@@ -5470,9 +5487,9 @@ body.enemy-inspect--dragging-body {
     grid-column: 1;
     grid-row: 2;
     max-width: 100%;
-    height: 128px;
-    min-height: 128px;
-    max-height: 136px;
+    min-height: 168px;
+    height: auto;
+    max-height: min(38vh, 260px);
   }
 
   .shop-viz-turntable-panel--hero .shop-hero-stats-col {
@@ -5492,9 +5509,8 @@ body.enemy-inspect--dragging-body {
   }
 
   .shop-viz-turntable-panel--bunker .shop-bunker-viz-layout__3d-host {
-    min-height: 120px;
-    height: 128px;
-    max-height: 132px;
+    min-height: 168px;
+    max-height: min(38vh, 260px);
   }
 
   .shop-viz-turntable-panel--bunker .shop-bunker-viz-layout__col {
@@ -5543,12 +5559,12 @@ body.enemy-inspect--dragging-body {
   padding: 0.36rem 0.48rem 0.4rem;
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(118px, 31%) 1fr;
+  grid-template-columns: minmax(200px, 48%) 1fr;
   /* `1fr` na 2.ª linha esticava a linha à altura do painel — vazio enorme entre título e atributos */
   grid-template-rows: auto auto;
   column-gap: 0.42rem;
   row-gap: 0.04rem;
-  align-items: start;
+  align-items: stretch;
   min-height: min-content;
   height: auto;
   max-height: none;
@@ -5564,6 +5580,7 @@ body.enemy-inspect--dragging-body {
   grid-column: 2;
   grid-row: 2;
   min-width: 0;
+  align-self: start;
 }
 
 /* Bunker: título em cima; 3D à esquerda, atributos+skills+dica à direita (`display: contents` no layout) */
@@ -5575,11 +5592,11 @@ body.enemy-inspect--dragging-body {
   padding: 0.38rem 0.48rem 0.42rem;
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(108px, 30%) 1fr;
+  grid-template-columns: minmax(200px, 48%) 1fr;
   grid-template-rows: auto auto;
   column-gap: 0.42rem;
   row-gap: 0.04rem;
-  align-items: start;
+  align-items: stretch;
   min-height: min-content;
   height: auto;
   max-height: none;
