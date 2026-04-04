@@ -2036,9 +2036,9 @@ function showArenaLayoutEditHud(): void {
   uiRoot.innerHTML = "";
   const wrap = el(`
     <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar cena</strong> — <strong>Perspetiva livre em tempo real</strong>: o que vês (ângulo, zoom) grava no JSON ao sair. <strong>Botão direito</strong> arrasta o plano; <strong>roda</strong> aproxima/afasta. Vês <strong>coliseu, trono, bunkers (todos os biomas), heróis e inimigos de referência</strong>. Seleção com o mesmo <strong>realce violeta</strong> do ajuste de equipamento. Arrasto esquerdo no objeto: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> escala. <strong>Bunker</strong>: <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> trocam o modelo (nv1–3); a altura grava-se <em>por nível</em>.
+      <strong>Ajustar cena</strong> — <strong>A posição/rotação da câmara não entra no JSON</strong> (só coliseu, bunkers, trono e figuras de referência). <strong>Espaço</strong> liga o <strong>voo livre</strong>: arrasto esquerdo olhar, <kbd>WASD</kbd> no plano, <kbd>Q</kbd>/<kbd>E</kbd> cima/baixo, roda ao longo do olhar; <strong>Espaço</strong> de novo volta ao modo de edição de objetos. Fora do voo: <strong>botão direito</strong> arrasta o plano; <strong>roda</strong> aproxima/afasta em torno do alvo. <strong>Realce violeta</strong> como na forja. Arrasto no objeto: plano; Shift+arrasto: altura; <kbd>X</kbd>/<kbd>Z</kbd> altura; <kbd>[</kbd> <kbd>]</kbd> escala. <strong>Bunker</strong>: <kbd>1</kbd>–<kbd>3</kbd> modelos; altura <em>por nível</em>.
       <br /><span id="arena-layout-dynamic-hint" class="arena-layout-edit-hud__dynamic">${escapeHtml(view.getArenaLayoutEditSelectionHint())}</span>
-      <br /><kbd>Esc</kbd> grava tudo (câmara incluída) e volta ao menu.
+      <br /><kbd>Esc</kbd> grava e volta ao menu.
       <div class="arena-layout-edit-hud__copy-row">
         <button type="button" class="btn" id="arena-layout-copy-json">Copiar JSON (repo)</button>
         <span id="arena-layout-copy-json-feedback" class="arena-layout-edit-hud__copy-feedback" aria-live="polite"></span>
@@ -2269,7 +2269,7 @@ function showMainMenu(): void {
   const devMenuExtras = import.meta.env.DEV
     ? `<button type="button" class="main-menu-link main-menu-link--sandbox" data-action="dev-sandbox">Modo sandbox (testes)</button>
           <button type="button" class="main-menu-link main-menu-link--dev" data-action="dev-reset-fresh">[Dev] Estado inicial (apagar save)</button>
-          <button type="button" class="main-menu-link main-menu-link--dev" data-action="arena-layout" title="Coliseu 3D e câmara; gravado em localStorage. Esc grava e volta ao menu.">[Dev] Ajustar cena</button>
+          <button type="button" class="main-menu-link main-menu-link--dev" data-action="arena-layout" title="Coliseu, bunkers, atores; câmara não grava. Espaço = voo livre. Esc grava.">[Dev] Ajustar cena</button>
           <button type="button" class="main-menu-link main-menu-link--dev" data-action="equipment-layout" title="Elmo, capa e manoplas por herói; gravado em localStorage.">[Dev] Ajustar equipamento</button>`
     : "";
   const s = el(`

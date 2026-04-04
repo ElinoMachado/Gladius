@@ -335,6 +335,10 @@ export class GameRenderer {
   private arenaLayoutEditEligible = false;
   /** Sessão de ajuste (clique no coliseu no menu); Esc grava e fecha. */
   private arenaLayoutEditActive = false;
+  /** Câmara persistida: cópia ao entrar no editor — não é atualizada pelos movimentos de câmara na sessão. */
+  private layoutEditFrozenFreeCamera: SceneLayoutPrefs["freeCamera"] = null;
+  /** Espaço: voo livre (olhar + WASD + Q/E); fora disto, WASD/X/Z movem o objeto selecionado. */
+  private layoutEditFlyMode = false;
   private readonly orbitTarget = new THREE.Vector3(0, 0, 0);
   /** Em combate/menu: usar `freeCamera` em vez da ortográfica (exceto durante cometa). */
   private usePersistentFreeCamera = false;
@@ -345,8 +349,14 @@ export class GameRenderer {
   private editorDragMode:
     | "none"
     | "pan"
+    | "fly_look"
     | "coliseum_xz"
     | "coliseum_y" = "none";
+  private readonly layoutFlyEulerScratch = new THREE.Euler(0, 0, 0, "YXZ");
+  private readonly layoutFlyQuatScratch = new THREE.Quaternion();
+  private readonly layoutFlyForward = new THREE.Vector3();
+  private readonly layoutFlyRight = new THREE.Vector3();
+  private readonly layoutFlyWorldUp = new THREE.Vector3(0, 1, 0);
   private editorLastClientX = 0;
   private editorLastClientY = 0;
   private readonly editorLastGround = new THREE.Vector3();
@@ -4352,12 +4362,24 @@ export class GameRenderer {
       const layoutActors = this.mergeLayoutActorsFromScene({
         ...(snap.layoutActors ?? {}),
       });
+      const fc = this.layoutEditFrozenFreeCamera;
       return {
         coliseum,
         coliseumScale,
         bunkerLayout,
         layoutActors,
-        freeCamera: this.cloneFreeCameraPrefsPayload(),
+        freeCamera: fc
+          ? {
+              position: [...fc.position] as [number, number, number],
+              quaternion: [...fc.quaternion] as [
+                number,
+                number,
+                number,
+                number,
+              ],
+              fov: fc.fov,
+            }
+          : null,
       };
     }
     if (!this.arenaLayoutCameraPersonalized) {
@@ -4494,6 +4516,49 @@ export class GameRenderer {
     toCam.multiplyScalar(newD / d);
     this.freeCamera.position.copy(this.orbitTarget).add(toCam);
     this.freeCamera.updateMatrixWorld(true);
+  }
+
+  /** No modo voo: roda aproxima/afasta ao longo do olhar. */
+  private dollyLayoutEditFlyAlongView(factor: number): void {
+    const dir = this.layoutFlyForward;
+    this.freeCamera.getWorldDirection(dir);
+    const step = 44 * (1 - factor);
+    this.freeCamera.position.addScaledVector(dir, step);
+    this.freeCamera.updateMatrixWorld(true);
+  }
+
+  private applyLayoutEditFlyLookDelta(dx: number, dy: number): void {
+    const cam = this.freeCamera;
+    const euler = this.layoutFlyEulerScratch;
+    euler.setFromQuaternion(cam.quaternion, "YXZ");
+    euler.y -= dx * 0.0055;
+    euler.x -= dy * 0.0055;
+    euler.x = THREE.MathUtils.clamp(euler.x, -1.48, 1.48);
+    this.layoutFlyQuatScratch.setFromEuler(euler);
+    cam.quaternion.copy(this.layoutFlyQuatScratch);
+    cam.updateMatrixWorld(true);
+  }
+
+  private applyLayoutEditFlyCameraMove(dt: number): void {
+    const cam = this.freeCamera;
+    const sp = 58 * dt;
+    cam.getWorldDirection(this.layoutFlyForward);
+    this.layoutFlyRight.crossVectors(this.layoutFlyForward, this.layoutFlyWorldUp);
+    if (this.layoutFlyRight.lengthSq() < 1e-8) {
+      this.layoutFlyRight.set(1, 0, 0);
+    } else {
+      this.layoutFlyRight.normalize();
+    }
+    const flat = this.editorScratchVec3.copy(this.layoutFlyForward);
+    flat.y = 0;
+    if (flat.lengthSq() > 1e-6) flat.normalize();
+    if (this.keysDown.has("KeyW")) cam.position.addScaledVector(flat, sp);
+    if (this.keysDown.has("KeyS")) cam.position.addScaledVector(flat, -sp);
+    if (this.keysDown.has("KeyA")) cam.position.addScaledVector(this.layoutFlyRight, -sp);
+    if (this.keysDown.has("KeyD")) cam.position.addScaledVector(this.layoutFlyRight, sp);
+    if (this.keysDown.has("KeyQ")) cam.position.y += sp;
+    if (this.keysDown.has("KeyE")) cam.position.y -= sp;
+    cam.updateMatrixWorld(true);
   }
 
   private intersectGroundNdcWithCamera(
@@ -4716,8 +4781,17 @@ export class GameRenderer {
   }
 
   getArenaLayoutEditSelectionHint(): string {
+    if (this.layoutEditFlyMode) {
+      const s = this.layoutSelectedRoot;
+      const tail = s
+        ? "Objeto ainda selecionado (sai do voo com Espaço para o mover com WASD)."
+        : "Câmara não entra no JSON — só coliseu, bunkers, atores.";
+      return `Voo livre — arrasto esquerdo: olhar · WASD: plano · Q/E: cima/baixo · roda: ao longo do olhar · Espaço: sair. ${tail}`;
+    }
     const s = this.layoutSelectedRoot;
-    if (!s) return "Nada selecionado.";
+    if (!s) {
+      return "Nada selecionado — pressiona Espaço para modo voo livre (mover/rodar a câmara).";
+    }
     if (s === this.arenaColiseumMount) {
       return "Coliseu — arrasto no plano, Shift+arrasto altura, [ ] escala.";
     }
@@ -4772,10 +4846,23 @@ export class GameRenderer {
     this.arenaLayoutEditActive = true;
     this.setLayoutSelectedRoot(null);
     this.layoutEligibleForDragAfterDown = false;
+    this.layoutEditFlyMode = false;
     this.arenaLayoutCameraPersonalized = this.usePersistentFreeCamera;
     this.editorDragMode = "none";
     this.applyCameraPose();
     const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
+    this.layoutEditFrozenFreeCamera = snap.freeCamera
+      ? {
+          position: [...snap.freeCamera.position] as [number, number, number],
+          quaternion: [...snap.freeCamera.quaternion] as [
+            number,
+            number,
+            number,
+            number,
+          ],
+          fov: snap.freeCamera.fov,
+        }
+      : null;
     if (snap.freeCamera) {
       const fc = snap.freeCamera;
       this.freeCamera.position.set(
@@ -4813,6 +4900,8 @@ export class GameRenderer {
       "KeyD",
       "KeyX",
       "KeyZ",
+      "KeyQ",
+      "KeyE",
       "BracketLeft",
       "BracketRight",
       "NumpadAdd",
@@ -4827,6 +4916,8 @@ export class GameRenderer {
     const p = this.collectSceneLayoutPrefs();
     saveSceneLayoutPrefs(p);
     this.arenaLayoutEditActive = false;
+    this.layoutEditFlyMode = false;
+    this.layoutEditFrozenFreeCamera = null;
     this.applySceneLayoutPrefs(p);
     this.onArenaLayoutSessionEnd?.();
   }
@@ -4846,6 +4937,10 @@ export class GameRenderer {
 
   private updateArenaLayoutEditSession(dt: number): void {
     if (!this.arenaLayoutEditActive) return;
+    if (this.layoutEditFlyMode) {
+      this.applyLayoutEditFlyCameraMove(dt);
+      return;
+    }
     if (!this.layoutSelectedRoot) return;
     const sel = this.layoutSelectedRoot;
     const sp = 17 * dt;
@@ -4913,6 +5008,21 @@ export class GameRenderer {
         return;
       }
       if (!this.arenaLayoutEditActive) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (!e.repeat) {
+          this.layoutEditFlyMode = !this.layoutEditFlyMode;
+          this.editorDragMode = "none";
+          this.layoutEligibleForDragAfterDown = false;
+          this.onArenaLayoutEditUiRefresh?.();
+        }
+        return;
+      }
+      if (this.layoutEditFlyMode && (e.code === "KeyQ" || e.code === "KeyE")) {
+        e.preventDefault();
+        this.keysDown.add(e.code);
+        return;
+      }
       if (!e.repeat) {
         if (e.code === "Digit1") {
           e.preventDefault();
@@ -4938,6 +5048,7 @@ export class GameRenderer {
     window.addEventListener("keyup", (e: KeyboardEvent) => {
       if (!this.arenaLayoutEditActive) return;
       if (layoutKeys.has(e.code)) this.keysDown.delete(e.code);
+      if (e.code === "KeyQ" || e.code === "KeyE") this.keysDown.delete(e.code);
     });
 
     const onDown = (e: PointerEvent) => {
@@ -4972,9 +5083,18 @@ export class GameRenderer {
       this.layoutPointerDownY = e.clientY;
       const pickRoot = this.pickLayoutSelectableRoot(pickCam, ndc.x, ndc.y);
       if (!pickRoot) {
-        this.setLayoutSelectedRoot(null);
         this.layoutEligibleForDragAfterDown = false;
-        this.editorDragMode = "none";
+        if (this.layoutEditFlyMode) {
+          this.editorDragMode = "fly_look";
+          try {
+            canvas.setPointerCapture(e.pointerId);
+          } catch {
+            /* ignore */
+          }
+        } else {
+          this.setLayoutSelectedRoot(null);
+          this.editorDragMode = "none";
+        }
         return;
       }
       this.setLayoutSelectedRoot(pickRoot);
@@ -5042,6 +5162,13 @@ export class GameRenderer {
       this.editorLastClientX = e.clientX;
       this.editorLastClientY = e.clientY;
       switch (this.editorDragMode) {
+        case "fly_look": {
+          this.applyLayoutEditFlyLookDelta(
+            e.clientX - prevX,
+            e.clientY - prevY,
+          );
+          break;
+        }
         case "pan": {
           this.applyLayoutEditCameraPanDeltaFromClientPixels(
             canvas,
@@ -5102,7 +5229,11 @@ export class GameRenderer {
       e.preventDefault();
       e.stopPropagation();
       const factor = Math.exp(-e.deltaY * 0.0018);
-      this.dollyLayoutEditFreeCamera(factor);
+      if (this.layoutEditFlyMode) {
+        this.dollyLayoutEditFlyAlongView(factor);
+      } else {
+        this.dollyLayoutEditFreeCamera(factor);
+      }
     };
 
     canvas.addEventListener("pointerdown", onDown, true);
