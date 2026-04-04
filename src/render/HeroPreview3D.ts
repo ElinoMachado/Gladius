@@ -22,6 +22,8 @@ export type HeroPreview3DOptions = {
   cameraZ?: number;
   /** Ponto de interesse vertical da câmara. */
   lookAtY?: number;
+  /** Graus; menor = mais “zoom” no modelo. */
+  fov?: number;
 };
 
 /** Preview rotativo para ecrãs de setup (não partilha o renderer principal do jogo). */
@@ -35,6 +37,9 @@ export class HeroPreview3D {
   private running = false;
   private previewBody: THREE.Object3D | null = null;
   private lastFrameMs = 0;
+  private readonly fallbackW: number;
+  private readonly fallbackH: number;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(
     host: HTMLElement,
@@ -43,18 +48,24 @@ export class HeroPreview3D {
     opts?: HeroPreview3DOptions,
   ) {
     this.host = host;
+    this.fallbackW = Math.max(1, width);
+    this.fallbackH = Math.max(1, height);
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(width, height);
     this.renderer.setClearColor(0x000000, 0);
     host.appendChild(this.renderer.domElement);
 
     const camZ = opts?.cameraZ ?? 2.35;
     const lookY = opts?.lookAtY ?? 0.72;
-    this.camera = new THREE.PerspectiveCamera(40, width / Math.max(height, 1), 0.1, 50);
+    const fov = opts?.fov ?? 40;
+    this.camera = new THREE.PerspectiveCamera(
+      fov,
+      this.fallbackW / this.fallbackH,
+      0.1,
+      50,
+    );
     this.camera.position.set(0, 1.05, camZ);
     this.camera.lookAt(0, lookY, 0);
 
@@ -63,6 +74,30 @@ export class HeroPreview3D {
     dir.position.set(2.2, 5, 3.5);
     this.scene.add(amb, dir);
     this.scene.add(this.pivot);
+
+    this.fitViewport();
+    this.resizeObserver = new ResizeObserver(() => this.fitViewport());
+    this.resizeObserver.observe(host);
+    window.addEventListener("resize", this.onWindowResize);
+    requestAnimationFrame(() => this.fitViewport());
+  }
+
+  private onWindowResize = (): void => {
+    this.fitViewport();
+  };
+
+  /** Alinha buffer WebGL ao tamanho CSS do host (evita canvas minúsculo com `setSize` fixo). */
+  private fitViewport(): void {
+    const cw = this.host.clientWidth;
+    const ch = this.host.clientHeight;
+    const w = Math.max(cw > 0 ? cw : this.fallbackW, 1);
+    const h = Math.max(ch > 0 ? ch : this.fallbackH, 1);
+    const pr = Math.min(window.devicePixelRatio, 2);
+    this.renderer.setPixelRatio(pr);
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / Math.max(h, 1);
+    this.camera.updateProjectionMatrix();
+    if (this.running) this.renderer.render(this.scene, this.camera);
   }
 
   setHero(
@@ -110,6 +145,9 @@ export class HeroPreview3D {
 
   dispose(): void {
     this.stop();
+    window.removeEventListener("resize", this.onWindowResize);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     disposeObject3D(this.pivot);
     this.pivot.clear();
     this.renderer.dispose();
