@@ -5120,28 +5120,31 @@ body.enemy-inspect--dragging-body {
     0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
-/* Loja ouro: prato 3D — dois painéis opostos em Z; rotação ~180° troca frente/fundo */
+/* Loja ouro: cartão reto, largura da grelha; só o inner roda 180° herói ↔ bunker */
 /* Padding-top: margens com as bolsas não colapsam (só max entre dois margins); assim há distância real até ao cartão de ouro */
 .shop-viz-flip-wrap {
   padding-top: 3rem;
   margin: 0 0 0.28rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .shop-viz-flip-row {
   display: flex;
   flex-direction: row;
-  align-items: flex-start;
-  gap: 0.75rem 1rem;
-  transform-style: preserve-3d;
+  align-items: stretch;
+  gap: 0.65rem 0.9rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-/* Esquerda mais próxima (referência wireframe) */
+/* Sem inclinação: ocupa a linha até ao botão lateral (mesma largura útil que a grelha) */
 .shop-viz-stage {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  transform: none;
   transform-style: preserve-3d;
-  transform: perspective(1040px) rotateY(-11deg) rotateX(3deg);
-  transform-origin: 50% 50%;
   overflow: visible;
 }
 
@@ -5162,12 +5165,12 @@ body.enemy-inspect--dragging-body {
   transform-origin: center center;
   transition: transform 0.82s cubic-bezier(0.42, 0, 0.18, 1);
   will-change: transform;
-  /* Virar o prato: bunker fica “atrás” do herói em profundidade; vê-se a lateral do segundo painel */
-  transform: rotateY(22deg);
+  /* Frente plana: só rotação ao alternar herói / bunker */
+  transform: rotateY(0deg);
 }
 
 .shop-viz-turntable-inner--bunker {
-  transform: rotateY(202deg);
+  transform: rotateY(180deg);
 }
 
 .shop-viz-turntable-panel {
@@ -5188,11 +5191,11 @@ body.enemy-inspect--dragging-body {
 }
 
 .shop-viz-turntable-panel--hero {
-  transform: rotateY(0deg) translateZ(76px);
+  transform: rotateY(0deg) translateZ(0);
 }
 
 .shop-viz-turntable-panel--bunker {
-  transform: rotateY(180deg) translateZ(76px);
+  transform: rotateY(180deg) translateZ(0);
 }
 
 .shop-viz-turntable-inner:not(.shop-viz-turntable-inner--bunker)
@@ -5400,7 +5403,6 @@ body.enemy-inspect--dragging-body {
   line-height: 1.15;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  transform: skewX(-6deg);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 3px 12px rgba(0, 0, 0, 0.35);
@@ -5429,11 +5431,9 @@ body.enemy-inspect--dragging-body {
   font-size: 1.4rem;
   line-height: 1;
   font-weight: 700;
-  transform: skewX(6deg);
 }
 
 .shop-viz-flip-arrow__text {
-  transform: skewX(6deg);
   text-align: center;
 }
 
@@ -5453,7 +5453,8 @@ body.enemy-inspect--dragging-body {
   }
 
   .shop-viz-stage {
-    transform: perspective(920px) rotateY(-7deg) rotateX(2deg);
+    width: 100%;
+    flex: 1 1 auto;
   }
 
   .shop-viz-turntable {
