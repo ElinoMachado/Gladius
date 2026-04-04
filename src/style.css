@@ -4986,7 +4986,7 @@ body.enemy-inspect--dragging-body {
 .shop-screen__panel--gold .shop-title.hero-setup-main-title {
   width: 100%;
   text-align: center;
-  margin-bottom: 0.85rem;
+  margin-bottom: 0.65rem;
 }
 
 .shop-hero-gold-bags {
@@ -4995,7 +4995,7 @@ body.enemy-inspect--dragging-body {
   align-items: stretch;
   justify-content: center;
   gap: 0.5rem 0.65rem;
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.45rem;
 }
 
 .shop-hero-gold-bag {
@@ -5103,7 +5103,7 @@ body.enemy-inspect--dragging-body {
 }
 
 .shop-hero-gold-multi-hint {
-  margin: 0 0 0.85rem;
+  margin: 0 0 0.45rem;
   padding: 0.5rem 0.6rem 0.5rem 0.65rem;
   max-width: 44rem;
   font-size: 0.78rem;
@@ -5134,9 +5134,9 @@ body.enemy-inspect--dragging-body {
 }
 
 /* Loja ouro: prato 3D — dois painéis opostos em Z; rotação ~180° troca frente/fundo */
+/* Mesmo afastamento acima e abaixo do cartão 3D; a grelha de compras não soma margin-top extra */
 .shop-viz-flip-wrap {
-  margin-top: 1.1rem;
-  margin-bottom: 0.75rem;
+  margin: 0.65rem 0;
 }
 
 .shop-viz-flip-row {
@@ -5158,8 +5158,8 @@ body.enemy-inspect--dragging-body {
 
 .shop-viz-turntable {
   width: 100%;
-  /* Altura mínima para caber título + 3D + stats + artefatos; painel com scroll se faltar espaço */
-  height: clamp(440px, 52vh, 720px);
+  /* Altura mais baixa + conteúdo compacto; scroll no painel se precisar */
+  height: clamp(300px, 38vh, 460px);
   transform-style: preserve-3d;
 }
 
@@ -5217,10 +5217,10 @@ body.enemy-inspect--dragging-body {
   grid-column: 1;
   grid-row: 2;
   width: 100%;
-  max-width: 220px;
-  height: 200px;
-  min-height: 200px;
-  max-height: 220px;
+  max-width: 188px;
+  height: 168px;
+  min-height: 168px;
+  max-height: 176px;
   justify-self: center;
 }
 
@@ -5253,7 +5253,7 @@ body.enemy-inspect--dragging-body {
 }
 
 .shop-viz-turntable-panel .shop-hero-stats-col {
-  gap: 0.35rem;
+  gap: 0.22rem;
   flex: 0 1 auto;
   width: 100%;
   max-width: none;
@@ -5265,22 +5265,23 @@ body.enemy-inspect--dragging-body {
 }
 
 .shop-viz-turntable-panel .shop-hero-artifacts-section {
-  margin-top: 0.25rem;
+  margin-top: 0.15rem;
+  padding-top: 0.3rem;
 }
 
 .shop-viz-turntable-panel .shop-hero-stats-head {
-  margin-bottom: 0.28rem;
-  font-size: 0.7rem;
+  margin-bottom: 0.2rem;
+  font-size: 0.68rem;
 }
 
 .shop-viz-turntable-panel .shop-viz-flip-entity-title {
-  margin-bottom: 0.38rem;
-  padding: 0.28rem 0.4rem 0.32rem;
-  font-size: 0.72rem;
+  margin-bottom: 0.28rem;
+  padding: 0.22rem 0.35rem 0.26rem;
+  font-size: 0.7rem;
 }
 
 .shop-viz-turntable-panel--hero .shop-viz-flip-entity-title {
-  margin-bottom: 0.32rem;
+  margin-bottom: 0.22rem;
 }
 
 .shop-viz-turntable-panel .gold-shop-hero-stats-grid.lol-stats-list {
@@ -5297,7 +5298,12 @@ body.enemy-inspect--dragging-body {
 }
 
 .shop-viz-turntable-panel .gold-shop-hero-skills-row {
-  gap: 0.4rem;
+  gap: 0.32rem;
+}
+
+.shop-viz-turntable-panel .gold-shop-hero-skills-wrap {
+  margin-top: 0.35rem;
+  padding-top: 0.32rem;
 }
 
 .shop-viz-flip-entity-title {
@@ -5401,7 +5407,7 @@ body.enemy-inspect--dragging-body {
   }
 
   .shop-viz-turntable {
-    height: clamp(480px, 62vh, 680px);
+    height: clamp(340px, 44vh, 520px);
   }
 
   .shop-viz-flip-arrow {
@@ -5431,9 +5437,9 @@ body.enemy-inspect--dragging-body {
     grid-column: 1;
     grid-row: 2;
     max-width: 100%;
-    height: 168px;
-    min-height: 168px;
-    max-height: 180px;
+    height: 148px;
+    min-height: 148px;
+    max-height: 156px;
   }
 
   .shop-viz-turntable-panel--hero .shop-hero-stats-col {
@@ -5474,13 +5480,13 @@ body.enemy-inspect--dragging-body {
   margin-bottom: 0;
   margin-left: 0;
   margin-right: 0;
-  padding: 0.7rem 0.75rem 0.85rem;
+  padding: 0.45rem 0.55rem 0.5rem;
   box-sizing: border-box;
   display: grid;
-  grid-template-columns: minmax(148px, 36%) 1fr;
+  grid-template-columns: minmax(132px, 34%) 1fr;
   grid-template-rows: auto minmax(0, 1fr);
-  column-gap: 0.65rem;
-  row-gap: 0.4rem;
+  column-gap: 0.5rem;
+  row-gap: 0.28rem;
   align-items: start;
   min-height: min-content;
   height: auto;
@@ -5505,7 +5511,7 @@ body.enemy-inspect--dragging-body {
   margin-bottom: 0;
   margin-left: 0;
   margin-right: 0;
-  padding: 0.7rem 0.75rem 0.85rem;
+  padding: 0.45rem 0.55rem 0.5rem;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -6060,7 +6066,7 @@ body.enemy-inspect--dragging-body {
 /* Loja ouro: bunker · grelha de melhorias (ouro) em linha */
 .shop-screen__panel--gold .shop-panel-inner {
   max-width: min(1200px, 98vw);
-  padding-top: 0.25rem;
+  padding-top: 0.55rem;
   box-sizing: border-box;
 }
 
@@ -6071,6 +6077,12 @@ body.enemy-inspect--dragging-body {
   align-items: stretch;
   gap: 1rem 1.15rem;
   margin: 0.65rem 0 1rem;
+}
+
+/* Só um intervalo até à grelha: o .shop-viz-flip-wrap já tem margin-bottom simétrico */
+.shop-screen__panel--gold .shop-mid-row {
+  margin-top: 0;
+  margin-bottom: 1rem;
 }
 
 .shop-mid-cell {
