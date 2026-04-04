@@ -29,7 +29,10 @@ jobs:
       - run: npm ci
       # Patch SemVer no deploy: o bundle usa a versão já incrementada; commit [skip ci] mantém o repo alinhado.
       - run: npm version patch --no-git-tag-version
+      # `GITHUB_REPOSITORY` (ex.: Owner/Gladius) alimenta `vite.config` → base `/${repo}/` para o coliseu GLB não 404.
       - run: npm run build
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
       - name: Commit version bump
         run: |
           git config user.name "github-actions[bot]"

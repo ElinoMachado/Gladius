@@ -121,7 +121,12 @@ export function preloadArenaColiseumGlb(): Promise<boolean> {
         resolve(true);
       },
       undefined,
-      () => {
+      (err) => {
+        console.warn(
+          "[Arena GLB] Falha ao carregar o coliseu (ver base URL em GitHub Pages):",
+          arenaUrl,
+          err,
+        );
         templateRoot = null;
         resolve(false);
       },
