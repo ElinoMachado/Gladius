@@ -91,6 +91,16 @@ const LAYOUT_EDIT_ZOOM_OUT_FRUSTUM_FACTOR = 5;
 /** Manter mesh de inimigo morto (invisível) até os números de dano usarem a posição (float ~950ms). */
 const ENEMY_DEATH_MESH_HOLD_MS = 1050;
 
+/** Rótulos da lista lateral do editor de cena (ids estáveis = `Unit.id` / prefs). */
+const LAYOUT_EDIT_CATALOG_UNITS: { id: string; label: string }[] = [
+  { id: "layout-hero-gladiador", label: "Herói — Gladiador" },
+  { id: "layout-hero-sacerdotisa", label: "Herói — Sacerdotisa" },
+  { id: "layout-hero-pistoleiro", label: "Herói — Pistoleiro" },
+  { id: "layout-enemy-gladinio", label: "Inimigo — Gladiador" },
+  { id: "layout-enemy-escravo", label: "Inimigo — Escravo" },
+  { id: "layout-enemy-leao", label: "Inimigo — Leão" },
+];
+
 function createHexShape(size: number): THREE.Shape {
   const sh = new THREE.Shape();
   for (let i = 0; i < 6; i++) {
@@ -357,6 +367,9 @@ export class GameRenderer {
   private readonly layoutFlyForward = new THREE.Vector3();
   private readonly layoutFlyRight = new THREE.Vector3();
   private readonly layoutFlyWorldUp = new THREE.Vector3(0, 1, 0);
+  private readonly layoutOrbitSphericalScratch = new THREE.Spherical();
+  /** Meshes com material clonado para x-ray; restaurar ao limpar. */
+  private layoutEditXrayMeshes: THREE.Mesh[] = [];
   private editorLastClientX = 0;
   private editorLastClientY = 0;
   private readonly editorLastGround = new THREE.Vector3();
@@ -4561,6 +4574,126 @@ export class GameRenderer {
     cam.updateMatrixWorld(true);
   }
 
+  /** Fora do voo: inclina a câmara em torno de `orbitTarget` (melhor leitura de alturas). */
+  private orbitLayoutEditCameraPitchFromWheel(deltaY: number): void {
+    const cam = this.freeCamera;
+    const target = this.orbitTarget;
+    const off = this.editorScratchVec3.copy(cam.position).sub(target);
+    if (off.lengthSq() < 1e-6) return;
+    const sp = this.layoutOrbitSphericalScratch;
+    sp.setFromVector3(off);
+    sp.phi = THREE.MathUtils.clamp(
+      sp.phi + deltaY * 0.0024,
+      0.07,
+      Math.PI - 0.07,
+    );
+    off.setFromSpherical(sp);
+    cam.position.copy(target).add(off);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(target);
+    cam.updateMatrixWorld(true);
+  }
+
+  private static isLayoutObjectDescendantOf(
+    ancestor: THREE.Object3D,
+    obj: THREE.Object3D,
+  ): boolean {
+    let p: THREE.Object3D | null = obj;
+    while (p) {
+      if (p === ancestor) return true;
+      p = p.parent;
+    }
+    return false;
+  }
+
+  private static canCloneMaterialForLayoutXray(m: THREE.Material): boolean {
+    return (
+      m instanceof THREE.MeshStandardMaterial ||
+      m instanceof THREE.MeshPhysicalMaterial ||
+      m instanceof THREE.MeshBasicMaterial ||
+      m instanceof THREE.MeshLambertMaterial ||
+      m instanceof THREE.MeshPhongMaterial
+    );
+  }
+
+  private clearLayoutEditXray(): void {
+    for (const mesh of this.layoutEditXrayMeshes) {
+      const orig = mesh.userData.layoutEditXrayOrigMaterial as
+        | THREE.Material
+        | THREE.Material[]
+        | undefined;
+      if (!orig) continue;
+      const cur = mesh.material;
+      mesh.material = orig;
+      delete mesh.userData.layoutEditXrayOrigMaterial;
+      const disp = (x: THREE.Material): void => {
+        x.dispose();
+      };
+      if (Array.isArray(cur)) cur.forEach(disp);
+      else disp(cur);
+    }
+    this.layoutEditXrayMeshes = [];
+  }
+
+  private tryDimMeshForLayoutXray(
+    mesh: THREE.Mesh,
+    selected: THREE.Object3D,
+  ): void {
+    if (GameRenderer.isLayoutObjectDescendantOf(selected, mesh)) return;
+    const role = mesh.userData?.role as string | undefined;
+    if (
+      role === "bars" ||
+      role === "shieldBubble" ||
+      role === "bunkerPickProxy"
+    ) {
+      return;
+    }
+    const orig = mesh.material;
+    if (!orig) return;
+    const ok = Array.isArray(orig)
+      ? orig.every((x) => GameRenderer.canCloneMaterialForLayoutXray(x))
+      : GameRenderer.canCloneMaterialForLayoutXray(orig);
+    if (!ok) return;
+
+    const cloneOne = (m: THREE.Material): THREE.Material => {
+      const c = m.clone() as THREE.MeshStandardMaterial;
+      c.transparent = true;
+      c.opacity = Math.min(0.13, c.opacity ?? 1);
+      c.depthWrite = false;
+      c.needsUpdate = true;
+      return c;
+    };
+
+    mesh.userData.layoutEditXrayOrigMaterial = orig;
+    mesh.material = Array.isArray(orig)
+      ? orig.map(cloneOne)
+      : cloneOne(orig);
+    this.layoutEditXrayMeshes.push(mesh);
+  }
+
+  private applyLayoutEditXrayState(): void {
+    this.clearLayoutEditXray();
+    const sel = this.layoutSelectedRoot;
+    if (!this.arenaLayoutEditActive || !sel) return;
+
+    const dimRoot = (root: THREE.Object3D): void => {
+      root.traverse((o) => {
+        if (o instanceof THREE.InstancedMesh) return;
+        if (o instanceof THREE.Mesh || o instanceof THREE.SkinnedMesh) {
+          this.tryDimMeshForLayoutXray(o as THREE.Mesh, sel);
+        }
+      });
+    };
+
+    for (const hm of this.hexMeshes.values()) dimRoot(hm);
+    if (this.arenaColiseumMount) dimRoot(this.arenaColiseumMount);
+    dimRoot(this.throneGroup);
+    for (const r of this.bunkerRoots.values()) dimRoot(r);
+    for (const [id, g] of this.unitMeshes) {
+      if (id.startsWith("layout-")) dimRoot(g);
+    }
+  }
+
   private intersectGroundNdcWithCamera(
     cam: THREE.Camera,
     ndcX: number,
@@ -4777,7 +4910,75 @@ export class GameRenderer {
     this.clearLayoutSelectionEmissive(this.layoutSelectedRoot);
     this.layoutSelectedRoot = root;
     if (root) this.applyLayoutSelectionEmissive(root);
+    this.applyLayoutEditXrayState();
     this.onArenaLayoutEditUiRefresh?.();
+  }
+
+  getArenaLayoutEditCatalog(): { id: string; label: string }[] {
+    const out: { id: string; label: string }[] = [];
+    if (this.arenaColiseumMount) {
+      out.push({ id: "coliseum", label: "Coliseu" });
+    }
+    out.push({ id: "throne", label: "Trono" });
+    for (const bi of COMBAT_BIOMES) {
+      for (const r of this.bunkerRoots.values()) {
+        if (r.userData.layoutBunkerBiome === bi) {
+          out.push({
+            id: `bunker:${bi}`,
+            label: `Bunker (${BIOME_LABELS[bi]})`,
+          });
+          break;
+        }
+      }
+    }
+    for (const row of LAYOUT_EDIT_CATALOG_UNITS) {
+      if (this.unitMeshes.has(row.id)) out.push(row);
+    }
+    return out;
+  }
+
+  getArenaLayoutEditSelectedId(): string | null {
+    const s = this.layoutSelectedRoot;
+    if (!s) return null;
+    if (s === this.arenaColiseumMount) return "coliseum";
+    if (s === this.throneGroup) return "throne";
+    for (const [id, g] of this.unitMeshes) {
+      if (g === s && id.startsWith("layout-")) return id;
+    }
+    for (const r of this.bunkerRoots.values()) {
+      if (r === s) {
+        const bi = r.userData.layoutBunkerBiome as BiomeId | undefined;
+        return bi ? `bunker:${bi}` : null;
+      }
+    }
+    return null;
+  }
+
+  /** Seleciona por id da lista lateral (`getArenaLayoutEditCatalog`). */
+  selectArenaLayoutObjectById(id: string): boolean {
+    if (!this.arenaLayoutEditActive) return false;
+    let root: THREE.Object3D | null = null;
+    if (id === "coliseum") root = this.arenaColiseumMount;
+    else if (id === "throne") root = this.throneGroup;
+    else if (id.startsWith("bunker:")) {
+      const bio = id.slice(7) as BiomeId;
+      for (const r of this.bunkerRoots.values()) {
+        if (r.userData.layoutBunkerBiome === bio) {
+          root = r;
+          break;
+        }
+      }
+    } else if (id.startsWith("layout-")) {
+      root = this.unitMeshes.get(id) ?? null;
+    }
+    if (!root) return false;
+    if (this.layoutSelectedRoot === root) {
+      this.applyLayoutEditXrayState();
+      this.onArenaLayoutEditUiRefresh?.();
+      return true;
+    }
+    this.setLayoutSelectedRoot(root);
+    return true;
   }
 
   getArenaLayoutEditSelectionHint(): string {
@@ -4792,15 +4993,16 @@ export class GameRenderer {
     if (!s) {
       return "Nada selecionado — pressiona Espaço para modo voo livre (mover/rodar a câmara).";
     }
+    const xr = " · X-ray: resto da cena fica transparente.";
     if (s === this.arenaColiseumMount) {
-      return "Coliseu — arrasto no plano, Shift+arrasto altura, [ ] escala.";
+      return "Coliseu — arrasto no plano, Shift+arrasto altura, [ ] escala." + xr;
     }
     if (s === this.throneGroup) {
-      return "Trono — mesmos controlos que o coliseu.";
+      return "Trono — mesmos controlos que o coliseu." + xr;
     }
     const uid = s.userData.unitId as string | undefined;
     if (uid?.startsWith("layout-")) {
-      return `Figura ${uid} — posição/escala (herói ou inimigo de referência).`;
+      return `Figura ${uid} — posição/escala (herói ou inimigo de referência).` + xr;
     }
     for (const root of this.bunkerRoots.values()) {
       if (root !== s) continue;
@@ -4808,9 +5010,9 @@ export class GameRenderer {
       const preview = root.userData.layoutPreviewTier as BunkerRenderTier | null | undefined;
       const pv =
         preview != null ? `pré-visualização nv. ${preview + 1}` : "nv. jogo";
-      return `Bunker (${bio ?? "?"}) — teclas 1 / 2 / 3 trocam o modelo; altura (X/Z) grava neste nível (${pv}).`;
+      return `Bunker (${bio ?? "?"}) — teclas 1 / 2 / 3 trocam o modelo; altura (X/Z) grava neste nível (${pv}).` + xr;
     }
-    return "Objeto selecionado.";
+    return "Objeto selecionado." + xr;
   }
 
   private setLayoutBunkerPreviewTier(t: BunkerRenderTier): void {
@@ -4824,6 +5026,7 @@ export class GameRenderer {
       }
     }
     if (!hit) return;
+    this.clearLayoutEditXray();
     hit.userData.layoutPreviewTier = t;
     const oldV = hit.userData.bunkerVisual as THREE.Group | undefined;
     if (oldV) {
@@ -4838,6 +5041,7 @@ export class GameRenderer {
     this.scheduleArenaLayoutPersist();
     this.clearLayoutSelectionEmissive(hit);
     this.applyLayoutSelectionEmissive(hit);
+    this.applyLayoutEditXrayState();
     this.onArenaLayoutEditUiRefresh?.();
   }
 
@@ -4892,6 +5096,7 @@ export class GameRenderer {
     if (!this.arenaLayoutEditActive) return;
     this.editorDragMode = "none";
     this.layoutEligibleForDragAfterDown = false;
+    this.clearLayoutEditXray();
     this.setLayoutSelectedRoot(null);
     for (const c of [
       "KeyW",
@@ -5228,6 +5433,14 @@ export class GameRenderer {
       if (!this.arenaLayoutEditActive) return;
       e.preventDefault();
       e.stopPropagation();
+      if (e.shiftKey) {
+        if (this.layoutEditFlyMode) {
+          this.applyLayoutEditFlyLookDelta(0, e.deltaY * 0.42);
+        } else {
+          this.orbitLayoutEditCameraPitchFromWheel(e.deltaY);
+        }
+        return;
+      }
       const factor = Math.exp(-e.deltaY * 0.0018);
       if (this.layoutEditFlyMode) {
         this.dollyLayoutEditFlyAlongView(factor);

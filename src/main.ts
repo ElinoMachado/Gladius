@@ -283,12 +283,38 @@ view.setOnArenaLayoutSessionEnd(() => {
   });
 });
 
+function mountArenaLayoutPickList(container: HTMLElement): void {
+  const cat = view.getArenaLayoutEditCatalog();
+  const sel = view.getArenaLayoutEditSelectedId();
+  const parts: string[] = [
+    `<div class="arena-layout-pick-list__head">Elementos 3D</div>`,
+  ];
+  for (const c of cat) {
+    const active = c.id === sel ? " arena-layout-pick-list__item--active" : "";
+    parts.push(
+      `<button type="button" class="arena-layout-pick-list__item${active}" data-pick-id="${escapeHtml(c.id)}">${escapeHtml(c.label)}</button>`,
+    );
+  }
+  container.innerHTML = parts.join("");
+  container.querySelectorAll<HTMLButtonElement>(".arena-layout-pick-list__item").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const pid = btn.dataset.pickId;
+      if (pid) view.selectArenaLayoutObjectById(pid);
+    });
+  });
+}
+
+function refreshArenaLayoutEditSidebar(): void {
+  if (!view.isArenaLayoutEditActive()) return;
+  const hint = document.getElementById("arena-layout-dynamic-hint");
+  const list = document.getElementById("arena-layout-pick-list");
+  if (hint) hint.textContent = view.getArenaLayoutEditSelectionHint();
+  if (list) mountArenaLayoutPickList(list);
+}
+
 view.setOnArenaLayoutEditUiRefresh(() => {
   queueMicrotask(() => {
-    const el = document.getElementById("arena-layout-dynamic-hint");
-    if (el && view.isArenaLayoutEditActive()) {
-      el.textContent = view.getArenaLayoutEditSelectionHint();
-    }
+    refreshArenaLayoutEditSidebar();
   });
 });
 
@@ -2035,17 +2061,22 @@ function showArenaLayoutEditHud(): void {
   mainMenuSword3d = null;
   uiRoot.innerHTML = "";
   const wrap = el(`
-    <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar cena</strong> — <strong>A posição/rotação da câmara não entra no JSON</strong> (só coliseu, bunkers, trono e figuras de referência). <strong>Espaço</strong> liga o <strong>voo livre</strong>: arrasto esquerdo olhar, <kbd>WASD</kbd> no plano, <kbd>Q</kbd>/<kbd>E</kbd> cima/baixo, roda ao longo do olhar; <strong>Espaço</strong> de novo volta ao modo de edição de objetos. Fora do voo: <strong>botão direito</strong> arrasta o plano; <strong>roda</strong> aproxima/afasta em torno do alvo. <strong>Realce violeta</strong> como na forja. Arrasto no objeto: plano; Shift+arrasto: altura; <kbd>X</kbd>/<kbd>Z</kbd> altura; <kbd>[</kbd> <kbd>]</kbd> escala. <strong>Bunker</strong>: <kbd>1</kbd>–<kbd>3</kbd> modelos; altura <em>por nível</em>.
+    <div class="arena-layout-edit-shell">
+      <aside class="arena-layout-pick-list" id="arena-layout-pick-list" aria-label="Modelos 3D na cena"></aside>
+      <div class="arena-layout-edit-hud" role="status" aria-live="polite">
+      <strong>Ajustar cena</strong> — <strong>Lista à esquerda</strong>: escolhe o modelo (x-ray no resto). <strong>A câmara não entra no JSON</strong>. <strong>Espaço</strong> = voo livre (arrasto esq. olhar, <kbd>WASD</kbd>, <kbd>Q</kbd>/<kbd>E</kbd>, roda). Fora do voo: <strong>botão direito</strong> arrasta o plano; <strong>roda</strong> zoom; <strong>Shift+roda</strong> inclina a vista em torno do alvo (melhor para alturas); no voo, <strong>Shift+roda</strong> ajusta o pitch. <strong>Realce violeta</strong> na forja. Objeto: arrasto plano; Shift+arrasto altura; <kbd>X</kbd>/<kbd>Z</kbd>; <kbd>[</kbd> <kbd>]</kbd>. <strong>Bunker</strong> <kbd>1</kbd>–<kbd>3</kbd>.
       <br /><span id="arena-layout-dynamic-hint" class="arena-layout-edit-hud__dynamic">${escapeHtml(view.getArenaLayoutEditSelectionHint())}</span>
       <br /><kbd>Esc</kbd> grava e volta ao menu.
       <div class="arena-layout-edit-hud__copy-row">
         <button type="button" class="btn" id="arena-layout-copy-json">Copiar JSON (repo)</button>
         <span id="arena-layout-copy-json-feedback" class="arena-layout-edit-hud__copy-feedback" aria-live="polite"></span>
       </div>
+      </div>
     </div>
   `);
   uiRoot.appendChild(wrap);
+  const pickList = wrap.querySelector("#arena-layout-pick-list") as HTMLElement;
+  mountArenaLayoutPickList(pickList);
   wrap.querySelector("#arena-layout-copy-json")!.addEventListener("click", async () => {
     const fb = wrap.querySelector("#arena-layout-copy-json-feedback") as HTMLElement;
     const raw = JSON.stringify(view.collectSceneLayoutPrefs(), null, 2);
