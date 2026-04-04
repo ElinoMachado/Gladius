@@ -97,6 +97,10 @@ import { COMBAT_BIOMES, BIOME_LABELS } from "./data/biomes";
 import { goldDrainPerTurn } from "./data/shops";
 import { loadMeta, permPercent, saveMeta } from "./metaStore";
 import {
+  clearRunSessionCheckpoint,
+  runPhaseAllowsRunSessionPersistence,
+} from "./runSessionRecovery";
+import {
   canIncrementArtifactStack,
   randomArtifactChoicesForHero,
 } from "./artifactUi";
@@ -689,6 +693,7 @@ export class GameModel {
    * Abandona a run sem gravar cristais da run; reverte essências ao estado de antes da run.
    */
   forfeitRunToMainMenu(): void {
+    clearRunSessionCheckpoint();
     if (this.metaEssencesAtRunStart) {
       this.meta.essences = { ...this.metaEssencesAtRunStart };
       this.metaEssencesAtRunStart = null;
@@ -742,6 +747,251 @@ export class GameModel {
 
     this.saveMeta();
     this.emit();
+  }
+
+  /**
+   * Serializa a run para `sessionStorage` (loja, combate, resumo, escolhas).
+   * Ao restaurar, a fila de combate em tempo real é limpa — o estado fica jogável, sem animações pendentes.
+   */
+  serializeRunSessionRecovery(): string | null {
+    if (!runPhaseAllowsRunSessionPersistence(this.phase)) return null;
+    try {
+      const payload = {
+        v: 1 as const,
+        phase: this.phase,
+        meta: JSON.parse(JSON.stringify(this.meta)) as MetaProgress,
+        units: JSON.parse(JSON.stringify(this.units)) as Unit[],
+        bunkers: JSON.parse(JSON.stringify(this.bunkers)) as Partial<
+          Record<BiomeId, BunkerState>
+        >,
+        wave: this.wave,
+        partyOrder: [...this.partyOrder],
+        currentHeroIndex: this.currentHeroIndex,
+        movementLeft: this.movementLeft,
+        basicLeft: this.basicLeft,
+        basicAttacksSpentThisTurn: this.basicAttacksSpentThisTurn,
+        crystalsRun: this.crystalsRun,
+        logLines: [...this.logLines],
+        pendingArtifacts: this.pendingArtifacts
+          ? JSON.parse(JSON.stringify(this.pendingArtifacts))
+          : null,
+        pendingUltimate: this.pendingUltimate
+          ? { ...this.pendingUltimate }
+          : null,
+        duel: this.duel ? { ...this.duel } : null,
+        selectedUnitId: this.selectedUnitId,
+        victoryWave20: this.victoryWave20,
+        devSandboxMode: this.devSandboxMode,
+        runColors: [...this.runColors],
+        partyXpBonusPct: this.partyXpBonusPct,
+        runHeroBiomes: [...this.runHeroBiomes],
+        inEnemyPhase: this.inEnemyPhase,
+        lastEnemyActedId: this.lastEnemyActedId,
+        pendingBunkerHint: this.pendingBunkerHint
+          ? { ...this.pendingBunkerHint }
+          : null,
+        pendingMoveBlockedHint: this.pendingMoveBlockedHint
+          ? { ...this.pendingMoveBlockedHint }
+          : null,
+        pendingMoveAnim: this.pendingMoveAnim
+          ? JSON.parse(JSON.stringify(this.pendingMoveAnim))
+          : null,
+        pendingWaveSummaryNext: this.pendingWaveSummaryNext,
+        blockEnemyPhaseForWaveIntro: this.blockEnemyPhaseForWaveIntro,
+        pendingCometaArcanoWithoutIntro: this.pendingCometaArcanoWithoutIntro,
+        skipDeslumbroDecayAfterCometaOnce: this.skipDeslumbroDecayAfterCometaOnce,
+        playerTurnJustStarted: this.playerTurnJustStarted,
+        enemyPhaseTimingMult: this.enemyPhaseTimingMult,
+        rochosoTauntHeroId: this.rochosoTauntHeroId,
+        enemyTurnQueueIds: this.enemyTurnQueue.map((u) => u.id),
+        pendingSentencaPartyHeal: this.pendingSentencaPartyHeal
+          ? { ...this.pendingSentencaPartyHeal }
+          : null,
+        duelNextIsGladiatorStrike: this.duelNextIsGladiatorStrike,
+        killLevelUpFlushSuppressed: this.killLevelUpFlushSuppressed,
+        pendingKillLevelUpFlushHeroIds: [...this.pendingKillLevelUpFlushHeroIds],
+        pendingCombatLevelUpHeroIds: [...this.pendingCombatLevelUpHeroIds],
+        waveCrystalsGained: this.waveCrystalsGained,
+        waveXpGained: this.waveXpGained,
+        waveEssencesGained: { ...this.waveEssencesGained },
+        waveLootSummaryPending: this.waveLootSummaryPending
+          ? JSON.parse(JSON.stringify(this.waveLootSummaryPending))
+          : null,
+        runPlaySessionPerfMsStart: this.runPlaySessionPerfMsStart,
+        metaEssencesAtRunStart: this.metaEssencesAtRunStart
+          ? { ...this.metaEssencesAtRunStart }
+          : null,
+        shopRestoreSnapshot: this.shopRestoreSnapshot
+          ? JSON.parse(JSON.stringify(this.shopRestoreSnapshot))
+          : null,
+        runShopRefundUses: this.runShopRefundUses,
+        artifactBannedThisRun: [...this.artifactBannedThisRun],
+        combatFloats: JSON.parse(JSON.stringify(this.combatFloats)) as CombatFloatEvent[],
+        pendingCombatVfxQueue: JSON.parse(
+          JSON.stringify(this.pendingCombatVfxQueue),
+        ) as CombatVfxHint[],
+      };
+      return JSON.stringify(payload);
+    } catch {
+      return null;
+    }
+  }
+
+  applyRunSessionRecovery(json: string): boolean {
+    try {
+      const o = JSON.parse(json) as {
+        v?: number;
+        phase?: GamePhase;
+        meta?: MetaProgress;
+        units?: Unit[];
+        bunkers?: Partial<Record<BiomeId, BunkerState>>;
+        wave?: number;
+        partyOrder?: string[];
+        currentHeroIndex?: number;
+        movementLeft?: number;
+        basicLeft?: number;
+        basicAttacksSpentThisTurn?: number;
+        crystalsRun?: number;
+        logLines?: string[];
+        pendingArtifacts?: {
+          unitId: string;
+          choices: string[];
+          choiceCount: number;
+          rerollsFreeLeft: number;
+          rerollsPaidUsed: number;
+          bansFreeLeft: number;
+          bansPaidUsed: number;
+          banMode: boolean;
+        } | null;
+        pendingUltimate?: { unitId: string } | null;
+        duel?: { gladiatorId: string; enemyId: string } | null;
+        selectedUnitId?: string | null;
+        victoryWave20?: boolean;
+        devSandboxMode?: boolean;
+        runColors?: TeamColor[];
+        partyXpBonusPct?: number;
+        runHeroBiomes?: BiomeId[];
+        inEnemyPhase?: boolean;
+        lastEnemyActedId?: string | null;
+        pendingBunkerHint?: { text: string; q: number; r: number } | null;
+        pendingMoveBlockedHint?: { text: string; unitId: string } | null;
+        pendingMoveAnim?: {
+          unitId: string;
+          cells: { q: number; r: number }[];
+          segmentMs?: number;
+          playHeroRunAnim?: boolean;
+        } | null;
+        pendingWaveSummaryNext?: "shop" | "victory" | null;
+        blockEnemyPhaseForWaveIntro?: boolean;
+        pendingCometaArcanoWithoutIntro?: boolean;
+        skipDeslumbroDecayAfterCometaOnce?: boolean;
+        playerTurnJustStarted?: boolean;
+        enemyPhaseTimingMult?: number;
+        rochosoTauntHeroId?: string | null;
+        enemyTurnQueueIds?: string[];
+        pendingSentencaPartyHeal?: {
+          priestId: string;
+          heal: number;
+          priestBio: BiomeId;
+        } | null;
+        duelNextIsGladiatorStrike?: boolean;
+        killLevelUpFlushSuppressed?: boolean;
+        pendingKillLevelUpFlushHeroIds?: string[];
+        pendingCombatLevelUpHeroIds?: string[];
+        waveCrystalsGained?: number;
+        waveXpGained?: number;
+        waveEssencesGained?: Partial<Record<ForgeEssenceId, number>>;
+        waveLootSummaryPending?: WaveEndLootSummary | null;
+        runPlaySessionPerfMsStart?: number | null;
+        metaEssencesAtRunStart?: Partial<
+          Record<ForgeEssenceId, number>
+        > | null;
+        shopRestoreSnapshot?: ShopRestoreSnapshot | null;
+        runShopRefundUses?: number;
+        artifactBannedThisRun?: string[];
+      };
+      if (o.v !== 1 || !o.phase || !Array.isArray(o.units) || !o.meta)
+        return false;
+      if (!runPhaseAllowsRunSessionPersistence(o.phase)) return false;
+
+      this.meta = o.meta;
+      this.units = o.units;
+      this.bunkers = o.bunkers ?? {};
+      this.wave = o.wave ?? 0;
+      this.partyOrder = o.partyOrder ?? [];
+      this.currentHeroIndex = o.currentHeroIndex ?? 0;
+      this.movementLeft = o.movementLeft ?? 0;
+      this.basicLeft = o.basicLeft ?? 0;
+      this.basicAttacksSpentThisTurn = o.basicAttacksSpentThisTurn ?? 0;
+      this.crystalsRun = o.crystalsRun ?? 0;
+      this.logLines = o.logLines ?? [];
+      this.pendingArtifacts = o.pendingArtifacts ?? null;
+      this.pendingUltimate = o.pendingUltimate ?? null;
+      this.duel = o.duel ?? null;
+      this.selectedUnitId = o.selectedUnitId ?? null;
+      this.victoryWave20 = o.victoryWave20 ?? false;
+      this.devSandboxMode = o.devSandboxMode ?? false;
+      this.runColors = o.runColors ?? [];
+      this.partyXpBonusPct = o.partyXpBonusPct ?? 0;
+      this.runHeroBiomes = o.runHeroBiomes ?? [];
+      this.phase = o.phase;
+      this.inEnemyPhase = o.inEnemyPhase ?? false;
+      this.lastEnemyActedId = o.lastEnemyActedId ?? null;
+      this.pendingBunkerHint = o.pendingBunkerHint ?? null;
+      this.pendingMoveBlockedHint = o.pendingMoveBlockedHint ?? null;
+      this.pendingMoveAnim = o.pendingMoveAnim ?? null;
+      this.pendingWaveSummaryNext = o.pendingWaveSummaryNext ?? null;
+      this.blockEnemyPhaseForWaveIntro = o.blockEnemyPhaseForWaveIntro ?? false;
+      this.pendingCometaArcanoWithoutIntro =
+        o.pendingCometaArcanoWithoutIntro ?? false;
+      this.skipDeslumbroDecayAfterCometaOnce =
+        o.skipDeslumbroDecayAfterCometaOnce ?? false;
+      this.playerTurnJustStarted = o.playerTurnJustStarted ?? false;
+      this.enemyPhaseTimingMult = o.enemyPhaseTimingMult ?? 1;
+      this.rochosoTauntHeroId = o.rochosoTauntHeroId ?? null;
+      this.pendingSentencaPartyHeal = o.pendingSentencaPartyHeal ?? null;
+      this.duelNextIsGladiatorStrike = o.duelNextIsGladiatorStrike ?? true;
+      this.killLevelUpFlushSuppressed = o.killLevelUpFlushSuppressed ?? false;
+      this.waveCrystalsGained = o.waveCrystalsGained ?? 0;
+      this.waveXpGained = o.waveXpGained ?? 0;
+      this.waveEssencesGained = o.waveEssencesGained ?? {};
+      this.waveLootSummaryPending = o.waveLootSummaryPending ?? null;
+      this.runPlaySessionPerfMsStart = o.runPlaySessionPerfMsStart ?? null;
+      this.metaEssencesAtRunStart = o.metaEssencesAtRunStart ?? null;
+      this.shopRestoreSnapshot = o.shopRestoreSnapshot ?? null;
+      this.runShopRefundUses = o.runShopRefundUses ?? 0;
+
+      this.artifactBannedThisRun = new Set(o.artifactBannedThisRun ?? []);
+      this.pendingKillLevelUpFlushHeroIds = new Set(
+        o.pendingKillLevelUpFlushHeroIds ?? [],
+      );
+      this.pendingCombatLevelUpHeroIds = new Set(
+        o.pendingCombatLevelUpHeroIds ?? [],
+      );
+
+      const ids = o.enemyTurnQueueIds ?? [];
+      this.enemyTurnQueue = ids
+        .map((id) => this.units.find((u) => u.id === id))
+        .filter((u): u is Unit => !!u);
+
+      /* Sem callbacks serializáveis: termina qualquer animação/agenda em curso. */
+      this.clearCombatSchedule();
+      this.cancelLevelUpFloatHoldTimer();
+      clearCombatOutcomeQueue();
+      this.pendingCombatVfxQueue = [];
+      this.combatFloats = [];
+      this.pendingMoveAnim = null;
+      this.inEnemyPhase = false;
+      this.blockEnemyPhaseForWaveIntro = false;
+      this.playerTurnJustStarted = false;
+      this.enemyTurnQueue = [];
+
+      this.saveMeta();
+      this.emit();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   getParty(): Unit[] {
@@ -1070,6 +1320,7 @@ export class GameModel {
   }
 
   startNewRun(setup: RunSetup): void {
+    clearRunSessionCheckpoint();
     this.playerTurnJustStarted = false;
     this.inEnemyPhase = false;
     this.lastEnemyActedId = null;

@@ -74,6 +74,12 @@ import {
   clearAllLocalProgressForFreshStart,
 } from "./game/metaStore";
 import {
+  clearRunSessionCheckpoint,
+  readRunSessionCheckpointJson,
+  runPhaseAllowsRunSessionPersistence,
+  writeRunSessionCheckpointJson,
+} from "./game/runSessionRecovery";
+import {
   damageReductionPercentFromDefense,
   effectiveDefenseForBiome,
   effectiveAlcanceForBiome,
@@ -685,6 +691,21 @@ function bindSetupStatCells(
   });
 }
 let prevPhase = model.phase;
+
+let runSessionPersistRafId = 0;
+function schedulePersistRunSessionCheckpoint(): void {
+  if (!runPhaseAllowsRunSessionPersistence(model.phase)) {
+    clearRunSessionCheckpoint();
+    return;
+  }
+  if (runSessionPersistRafId !== 0) return;
+  runSessionPersistRafId = requestAnimationFrame(() => {
+    runSessionPersistRafId = 0;
+    const json = model.serializeRunSessionRecovery();
+    if (json) writeRunSessionCheckpointJson(json);
+    else clearRunSessionCheckpoint();
+  });
+}
 
 type PendingCombat =
   | null
@@ -2234,6 +2255,15 @@ function showMainMenu(): void {
           <h1 class="main-menu-title">Gladius</h1>
           <p class="main-menu-subtitle">Sobreviventes do Coliseu</p>
         </header>
+        <div class="main-menu-run-recovery" id="main-menu-run-recovery" hidden>
+          <p class="main-menu-run-recovery__text">
+            Encontrámos uma run guardada nesta sessão (por exemplo após recarregar a página por engano).
+          </p>
+          <div class="main-menu-run-recovery__actions">
+            <button type="button" class="btn btn-primary" id="run-recovery-restore">Continuar run</button>
+            <button type="button" class="btn" id="run-recovery-discard">Descartar gravação</button>
+          </div>
+        </div>
         <nav class="main-menu-nav" aria-label="Menu principal">
           <button type="button" class="main-menu-link main-menu-link--primary" data-action="new">Novo jogo</button>
           ${devMenuExtras}
@@ -2247,6 +2277,20 @@ function showMainMenu(): void {
     </div>
   `);
   uiRoot.appendChild(s);
+  const recovery = s.querySelector("#main-menu-run-recovery") as HTMLElement;
+  const rawCheckpoint = readRunSessionCheckpointJson();
+  if (rawCheckpoint && recovery) {
+    recovery.hidden = false;
+    recovery.querySelector("#run-recovery-restore")!.addEventListener("click", () => {
+      playUiClick();
+      model.applyRunSessionRecovery(rawCheckpoint);
+    });
+    recovery.querySelector("#run-recovery-discard")!.addEventListener("click", () => {
+      playUiClick();
+      clearRunSessionCheckpoint();
+      recovery.hidden = true;
+    });
+  }
   const bg = s.querySelector("#main-menu-bg") as HTMLElement;
   mainMenuSword3d = new MainMenuSword3D(bg);
   mainMenuSword3d.start();
@@ -2306,6 +2350,7 @@ function showMainMenu(): void {
           ) {
             break;
           }
+          clearRunSessionCheckpoint();
           clearAllLocalProgressForFreshStart();
           window.location.reload();
           break;
@@ -3192,6 +3237,7 @@ function showGoldShop(isInitial: boolean): void {
   if (party.length === 0) {
     shell.innerHTML = `<div class="screen shop-screen__panel shop-screen__panel--gold"><h1 class="hero-setup-main-title">Erro</h1><p>Nenhum herói no grupo. Volte ao menu e inicie de novo.</p><button class="btn" id="fix-menu">Menu</button></div>`;
     shell.querySelector("#fix-menu")!.addEventListener("click", () => {
+      clearRunSessionCheckpoint();
       model.phase = "main_menu";
       render();
     });
@@ -3280,6 +3326,13 @@ function showGoldShop(isInitial: boolean): void {
     goldShopBunker3d = null;
     goldShopHeroPreview3d?.dispose();
     goldShopHeroPreview3d = null;
+    const party = model.getParty();
+    idx = Math.min(Math.max(0, goldShopHeroIndex), Math.max(0, party.length - 1));
+    goldShopHeroIndex = idx;
+    if (party.length === 0) {
+      panel.innerHTML = `<p class="shop-footer-msg" role="alert">Nenhum herói no grupo. Usa o menu de pausa ou recarrega; se guardaste a sessão, no menu principal podes tentar «Continuar run».</p>`;
+      return;
+    }
     const h = party[idx]!;
     const list = GOLD_SHOP.map((it, si) => {
       const xpFull =
@@ -8010,6 +8063,7 @@ function showVictory(): void {
     </div>`);
   uiRoot.appendChild(s);
   s.querySelector("#ok")!.addEventListener("click", () => {
+    clearRunSessionCheckpoint();
     model.phase = "main_menu";
     render();
   });
@@ -8026,6 +8080,7 @@ function showDefeat(): void {
     </div>`);
   uiRoot.appendChild(s);
   s.querySelector("#ok")!.addEventListener("click", () => {
+    clearRunSessionCheckpoint();
     model.phase = "main_menu";
     render();
   });
@@ -8277,6 +8332,14 @@ model.subscribe(() => {
     }
   }
   if (combatHudNeedsRefresh) render();
+  schedulePersistRunSessionCheckpoint();
+});
+
+window.addEventListener("beforeunload", (e) => {
+  if (isRunPhaseForPauseMenu(model.phase)) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
 });
 
 function loop(): void {
