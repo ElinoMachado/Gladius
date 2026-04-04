@@ -83,10 +83,10 @@ const BIOME_HEX_COLOR: Record<BiomeId, number> = {
  */
 const HEX_SIZE = 2.18;
 /**
- * Raio horizontal do cilindro de raycast do bunker (malha visível não recebe raycast).
- * Apotema do hex = √3/2·HEX_SIZE; ficar ligeiramente por dentro evita tratar o hex vizinho como bunker.
+ * Raio horizontal do cilindro auxiliar de raycast do bunker (~45% do apotema; metade do raio “cheio”).
+ * Modelos GLB assimétricos ficam mais contidos no hex central; malha visível também raycast com filtro axial.
  */
-const BUNKER_PICK_RADIUS_XZ = HEX_SIZE * (Math.sqrt(3) / 2) * 0.9;
+const BUNKER_PICK_RADIUS_XZ = HEX_SIZE * (Math.sqrt(3) / 2) * 0.45;
 const BUNKER_PICK_CYLINDER_SEGMENTS = 20;
 /** Com o coliseu GLB, hexes/unidades sobem ligeiramente acima da areia (após afundar o modelo). */
 const ARENA_PLAY_SURFACE_Y_WITH_COLISEUM = 0.11;
