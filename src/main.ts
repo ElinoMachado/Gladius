@@ -189,7 +189,10 @@ import {
   getSandboxNoCdUltReady,
   setSandboxNoCdUltReady,
 } from "./game/sandboxPrefs";
-import { loadSceneLayoutPrefs } from "./game/sceneLayoutPrefs";
+import {
+  initSceneLayoutPrefsFromDeploy,
+  loadSceneLayoutPrefs,
+} from "./game/sceneLayoutPrefs";
 import { UNIT_MOVE_SEGMENT_MS } from "./game/combatTiming";
 import { heroAttackClipName } from "./game/heroCombatAnimMs";
 import {
@@ -288,7 +291,8 @@ Promise.all([
   preloadAllHeroGlbs(),
   preloadForgePieceGlbs(),
   preloadArenaColiseumGlb(),
-]).then(() => {
+]).then(async () => {
+  await initSceneLayoutPrefsFromDeploy();
   view.attachArenaColiseumDecoration();
   view.applySceneLayoutPrefs(loadSceneLayoutPrefs());
   render();

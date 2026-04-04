@@ -1,3 +1,5 @@
+import bundledDefaults from "./sceneLayoutDefaults.json";
+
 const LS_KEY = "gladius-scene-layout-v1";
 
 export type SceneLayoutPrefs = {
@@ -13,22 +15,41 @@ export type SceneLayoutPrefs = {
   };
 };
 
-const DEFAULT_PREFS: SceneLayoutPrefs = {
+const SAFE_FALLBACK: SceneLayoutPrefs = {
   coliseum: { x: 0, y: 0, z: 0 },
   coliseumScale: 1,
   freeCamera: null,
 };
 
-function parsePrefs(raw: string | null): SceneLayoutPrefs {
-  if (!raw)
-    return {
-      ...DEFAULT_PREFS,
-      coliseum: { ...DEFAULT_PREFS.coliseum },
-      coliseumScale: DEFAULT_PREFS.coliseumScale,
-    };
+/** Preenchido em `initSceneLayoutPrefsFromDeploy()` (fetch + bundle); localStorage continua a mandar por origem. */
+let prefsCache: SceneLayoutPrefs | null = null;
+
+function clonePrefs(p: SceneLayoutPrefs): SceneLayoutPrefs {
+  return {
+    coliseum: { ...p.coliseum },
+    coliseumScale: p.coliseumScale,
+    freeCamera: p.freeCamera
+      ? {
+          position: [...p.freeCamera.position] as [number, number, number],
+          quaternion: [...p.freeCamera.quaternion] as [
+            number,
+            number,
+            number,
+            number,
+          ],
+          fov: p.freeCamera.fov,
+        }
+      : null,
+  };
+}
+
+function normalizeSceneLayoutPrefs(o: unknown): SceneLayoutPrefs {
+  if (!o || typeof o !== "object") {
+    return clonePrefs(SAFE_FALLBACK);
+  }
   try {
-    const o = JSON.parse(raw) as Partial<SceneLayoutPrefs>;
-    const col = o.coliseum;
+    const raw = o as Partial<SceneLayoutPrefs>;
+    const col = raw.coliseum;
     const cx =
       col && typeof col.x === "number" && Number.isFinite(col.x) ? col.x : 0;
     const cy =
@@ -36,13 +57,13 @@ function parsePrefs(raw: string | null): SceneLayoutPrefs {
     const cz =
       col && typeof col.z === "number" && Number.isFinite(col.z) ? col.z : 0;
     const cScale =
-      typeof o.coliseumScale === "number" &&
-      Number.isFinite(o.coliseumScale) &&
-      o.coliseumScale > 0
-        ? Math.min(48, Math.max(0.02, o.coliseumScale))
+      typeof raw.coliseumScale === "number" &&
+      Number.isFinite(raw.coliseumScale) &&
+      raw.coliseumScale > 0
+        ? Math.min(48, Math.max(0.02, raw.coliseumScale))
         : 1;
     let freeCamera: SceneLayoutPrefs["freeCamera"] = null;
-    const fc = o.freeCamera;
+    const fc = raw.freeCamera;
     if (
       fc &&
       Array.isArray(fc.position) &&
@@ -50,7 +71,8 @@ function parsePrefs(raw: string | null): SceneLayoutPrefs {
       Array.isArray(fc.quaternion) &&
       fc.quaternion.length === 4
     ) {
-      const fov = typeof fc.fov === "number" && Number.isFinite(fc.fov) ? fc.fov : 48;
+      const fov =
+        typeof fc.fov === "number" && Number.isFinite(fc.fov) ? fc.fov : 48;
       freeCamera = {
         position: [fc.position[0]!, fc.position[1]!, fc.position[2]!],
         quaternion: [
@@ -68,26 +90,75 @@ function parsePrefs(raw: string | null): SceneLayoutPrefs {
       freeCamera,
     };
   } catch {
-    return {
-      ...DEFAULT_PREFS,
-      coliseum: { ...DEFAULT_PREFS.coliseum },
-      coliseumScale: DEFAULT_PREFS.coliseumScale,
-    };
+    return clonePrefs(SAFE_FALLBACK);
   }
+}
+
+function prefsFromBundledFile(): SceneLayoutPrefs {
+  return normalizeSceneLayoutPrefs(bundledDefaults);
+}
+
+function parsePrefsJsonString(raw: string): SceneLayoutPrefs {
+  try {
+    return normalizeSceneLayoutPrefs(JSON.parse(raw));
+  } catch {
+    return prefsFromBundledFile();
+  }
+}
+
+/** URL do `public/scene-layout-default.json` (respeita `import.meta.env.BASE_URL` no GitHub Pages). */
+function sceneLayoutDefaultJsonUrl(): string {
+  const base = import.meta.env.BASE_URL;
+  if (base.startsWith("/")) {
+    const path = base.endsWith("/") ? base : `${base}/`;
+    return `${window.location.origin}${path}scene-layout-default.json`;
+  }
+  return new URL("scene-layout-default.json", window.location.href).href;
+}
+
+/**
+ * Chamar uma vez antes de montar a cena 3D.
+ * Ordem: localStorage desta origem → `scene-layout-default.json` (público) → `sceneLayoutDefaults.json` (bundle).
+ *
+ * Nota: [Dev] Ajustar cena grava só em `localStorage` do `localhost`. O GitHub Pages é outra origem;
+ * para ver os mesmos valores em produção, copia o valor de `gladius-scene-layout-v1` para
+ * `public/scene-layout-default.json` (e/ou `src/game/sceneLayoutDefaults.json`) e faz deploy.
+ */
+export async function initSceneLayoutPrefsFromDeploy(): Promise<void> {
+  if (typeof localStorage !== "undefined") {
+    const ls = localStorage.getItem(LS_KEY);
+    if (ls != null && ls.trim() !== "") {
+      prefsCache = parsePrefsJsonString(ls);
+      return;
+    }
+  }
+  if (typeof fetch !== "undefined" && typeof window !== "undefined") {
+    try {
+      const r = await fetch(sceneLayoutDefaultJsonUrl(), { cache: "no-store" });
+      if (r.ok) {
+        prefsCache = parsePrefsJsonString(await r.text());
+        return;
+      }
+    } catch {
+      /* rede / CORS */
+    }
+  }
+  prefsCache = prefsFromBundledFile();
 }
 
 export function loadSceneLayoutPrefs(): SceneLayoutPrefs {
-  if (typeof localStorage === "undefined") {
-    return {
-      ...DEFAULT_PREFS,
-      coliseum: { ...DEFAULT_PREFS.coliseum },
-      coliseumScale: DEFAULT_PREFS.coliseumScale,
-    };
+  if (prefsCache) return clonePrefs(prefsCache);
+  if (typeof localStorage !== "undefined") {
+    const ls = localStorage.getItem(LS_KEY);
+    if (ls != null && ls.trim() !== "") {
+      return parsePrefsJsonString(ls);
+    }
   }
-  return parsePrefs(localStorage.getItem(LS_KEY));
+  return prefsFromBundledFile();
 }
 
 export function saveSceneLayoutPrefs(p: SceneLayoutPrefs): void {
+  prefsCache = clonePrefs(p);
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(p));
   } catch {

@@ -42,6 +42,7 @@ import {
 } from "./arenaColiseumGlb";
 import {
   type SceneLayoutPrefs,
+  loadSceneLayoutPrefs,
   saveSceneLayoutPrefs,
 } from "../game/sceneLayoutPrefs";
 import {
@@ -2352,6 +2353,7 @@ export class GameRenderer {
       this.arenaRoot.add(crowd);
     }
     this.refreshArenaPlaySurfaceVisuals();
+    this.applySceneLayoutPrefs(loadSceneLayoutPrefs());
   }
 
   /** Plano de jogo em Y (hexes, bunkers, base das unidades). Raycasts no chão lógico mantêm-se em Y=0. */
