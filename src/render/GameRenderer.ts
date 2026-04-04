@@ -366,6 +366,8 @@ export class GameRenderer {
     new THREE.Vector2(1, 1),
     new THREE.Vector2(-1, 1),
   ];
+  private readonly attackFacingNdcScratch = new THREE.Vector2();
+  private readonly attackFacingGroundScratch = new THREE.Vector3();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -3891,20 +3893,27 @@ export class GameRenderer {
   ): void {
     const g = this.unitMeshes.get(heroId);
     if (!g) return;
+    this.attackFacingNdcScratch.set(ndcX, ndcY);
     this.rayGround.setFromCamera(
-      new THREE.Vector2(ndcX, ndcY),
+      this.attackFacingNdcScratch,
       this.getRenderCamera(),
     );
-    if (!this.rayGround.ray.intersectPlane(this.groundPlane, this.hitGround))
-      return;
-    const tx = this.hitGround.x;
-    const tz = this.hitGround.z;
+    const hit = this.attackFacingGroundScratch;
+    if (!this.rayGround.ray.intersectPlane(this.groundPlane, hit)) return;
+    const tx = hit.x;
+    const tz = hit.z;
     const hx = g.position.x;
     const hz = g.position.z;
     const dx = tx - hx;
     const dz = tz - hz;
     if (Math.hypot(dx, dz) < 1e-5) return;
-    this.heroAttackFacingY.set(heroId, -Math.atan2(dz, dx));
+    const yaw = -Math.atan2(dz, dx);
+    if (!Number.isFinite(yaw)) return;
+    this.heroAttackFacingY.set(heroId, yaw);
+  }
+
+  private setGroupYawIfFinite(g: THREE.Object3D, yaw: number): void {
+    if (Number.isFinite(yaw)) g.rotation.y = yaw;
   }
 
   /**
@@ -3964,19 +3973,19 @@ export class GameRenderer {
             const p1 = axialToWorld(u1.q, u1.r, HEX_SIZE);
             const dx = p1.x - p0.x;
             const dz = p1.z - p0.z;
-            g.rotation.y = -Math.atan2(dz, dx);
+            this.setGroupYawIfFinite(g, -Math.atan2(dz, dx));
           }
         }
         if (isPlayer) {
           const useAtk = turnId === uid && this.heroAttackFacingY.has(uid);
           if (useAtk) {
-            g.rotation.y = this.heroAttackFacingY.get(uid)!;
+            this.setGroupYawIfFinite(g, this.heroAttackFacingY.get(uid)!);
           } else {
             const Dx = towardUpperLeft.x;
             const Dz = towardUpperLeft.z;
             const lx = Dx * c - Dz * s;
             const lz = Dx * s + Dz * c;
-            g.rotation.y = Math.atan2(lx, lz);
+            this.setGroupYawIfFinite(g, Math.atan2(lx, lz));
           }
         }
         continue;
@@ -3986,13 +3995,13 @@ export class GameRenderer {
       if (isPlayer) {
         const useAtk = turnId === uid && this.heroAttackFacingY.has(uid);
         if (useAtk) {
-          g.rotation.y = this.heroAttackFacingY.get(uid)!;
+          this.setGroupYawIfFinite(g, this.heroAttackFacingY.get(uid)!);
         } else {
           const Dx = towardUpperLeft.x;
           const Dz = towardUpperLeft.z;
           const lx = Dx * c - Dz * s;
           const lz = Dx * s + Dz * c;
-          g.rotation.y = Math.atan2(lx, lz);
+          this.setGroupYawIfFinite(g, Math.atan2(lx, lz));
         }
         continue;
       }
@@ -4001,7 +4010,7 @@ export class GameRenderer {
       const Dz = -towardUpperLeft.z;
       const lx = Dx * c - Dz * s;
       const lz = Dx * s + Dz * c;
-      g.rotation.y = Math.atan2(lx, lz);
+      this.setGroupYawIfFinite(g, Math.atan2(lx, lz));
     }
   }
 

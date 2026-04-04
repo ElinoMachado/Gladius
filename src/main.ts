@@ -8395,84 +8395,89 @@ window.addEventListener("beforeunload", (e) => {
 });
 
 function loop(): void {
-  if (model.phase === "combat") {
-    if (!runPauseOpen) {
-      model.tickCombatSchedule();
-      for (const vfxHint of model.takeCombatVfxHints()) {
-        applyCombatVfxHint(vfxHint);
-      }
-    }
-    const vh = lolViewedHero(model);
-    view.setCombatSelectionUnitId(
-      vh && vh.isPlayer && vh.hp > 0 ? vh.id : null,
-    );
-    const turnHero = model.currentHero();
-    view.setCombatTurnHeroIdForFacing(
-      model.inEnemyPhase || !turnHero || turnHero.hp <= 0 || !turnHero.isPlayer
-        ? null
-        : turnHero.id,
-    );
-  } else {
-    view.setCombatSelectionUnitId(null);
-    view.setCombatTurnHeroIdForFacing(null);
-  }
-  const pops =
-    model.phase === "combat" && !runPauseOpen
-      ? model.takeCombatFloats()
-      : [];
-  for (const p of pops) {
-    if (p.kind === "damage" || p.kind === "shield_absorb") {
-      if (p.unitId === BUNKER_COMBAT_FLOAT_ID && p.bunkerHex) {
-        view.triggerBunkerHitFlashAt(p.bunkerHex.q, p.bunkerHex.r);
-      } else if (p.kind === "damage" && p.poisonDot) {
-        /* DoT de veneno: só float roxo, sem flash/som de golpe */
-      } else if (p.kind === "damage" && p.burnDot) {
-        /* DoT de queimadura: só float laranja */
-      } else if (p.kind === "damage" && p.duelCut) {
-        view.triggerUnitHitFlash(p.unitId, p.targetIsPlayer ?? false, "blood");
-        playKnifeCut();
-      } else if (p.kind === "damage") {
-        view.triggerUnitHitFlash(p.unitId, p.targetIsPlayer ?? false);
-        if (!model.duel && p.sourceClass && !p.suppressSourceHitSfx) {
-          if (p.sourceClass === "gladiador") playSwordHit();
-          else if (p.sourceClass === "pistoleiro") playGunshot();
-          else if (p.sourceClass === "sacerdotisa") playMagicWhoosh();
+  try {
+    if (model.phase === "combat") {
+      if (!runPauseOpen) {
+        model.tickCombatSchedule();
+        for (const vfxHint of model.takeCombatVfxHints()) {
+          applyCombatVfxHint(vfxHint);
         }
-      } else {
-        view.triggerUnitHitFlash(p.unitId, p.targetIsPlayer ?? false);
+      }
+      const vh = lolViewedHero(model);
+      view.setCombatSelectionUnitId(
+        vh && vh.isPlayer && vh.hp > 0 ? vh.id : null,
+      );
+      const turnHero = model.currentHero();
+      view.setCombatTurnHeroIdForFacing(
+        model.inEnemyPhase || !turnHero || turnHero.hp <= 0 || !turnHero.isPlayer
+          ? null
+          : turnHero.id,
+      );
+    } else {
+      view.setCombatSelectionUnitId(null);
+      view.setCombatTurnHeroIdForFacing(null);
+    }
+    const pops =
+      model.phase === "combat" && !runPauseOpen
+        ? model.takeCombatFloats()
+        : [];
+    for (const p of pops) {
+      if (p.kind === "damage" || p.kind === "shield_absorb") {
+        if (p.unitId === BUNKER_COMBAT_FLOAT_ID && p.bunkerHex) {
+          view.triggerBunkerHitFlashAt(p.bunkerHex.q, p.bunkerHex.r);
+        } else if (p.kind === "damage" && p.poisonDot) {
+          /* DoT de veneno: só float roxo, sem flash/som de golpe */
+        } else if (p.kind === "damage" && p.burnDot) {
+          /* DoT de queimadura: só float laranja */
+        } else if (p.kind === "damage" && p.duelCut) {
+          view.triggerUnitHitFlash(p.unitId, p.targetIsPlayer ?? false, "blood");
+          playKnifeCut();
+        } else if (p.kind === "damage") {
+          view.triggerUnitHitFlash(p.unitId, p.targetIsPlayer ?? false);
+          if (!model.duel && p.sourceClass && !p.suppressSourceHitSfx) {
+            if (p.sourceClass === "gladiador") playSwordHit();
+            else if (p.sourceClass === "pistoleiro") playGunshot();
+            else if (p.sourceClass === "sacerdotisa") playMagicWhoosh();
+          }
+        } else {
+          view.triggerUnitHitFlash(p.unitId, p.targetIsPlayer ?? false);
+        }
       }
     }
-  }
-  view.tick();
-  for (const p of pops) {
-    let pos =
-      p.unitId === BUNKER_COMBAT_FLOAT_ID && p.bunkerHex
-        ? view.worldBunkerTopToScreen(canvas, p.bunkerHex.q, p.bunkerHex.r)
-        : p.unitId === BUNKER_COMBAT_FLOAT_ID
-          ? view.worldBunkerTopToScreen(canvas)
-          : view.worldUnitHeadToScreen(canvas, p.unitId);
-    if (!pos && p.floatHex) {
-      pos = view.worldAxialHeadToScreen(canvas, p.floatHex.q, p.floatHex.r);
+    view.tick();
+    for (const p of pops) {
+      let pos =
+        p.unitId === BUNKER_COMBAT_FLOAT_ID && p.bunkerHex
+          ? view.worldBunkerTopToScreen(canvas, p.bunkerHex.q, p.bunkerHex.r)
+          : p.unitId === BUNKER_COMBAT_FLOAT_ID
+            ? view.worldBunkerTopToScreen(canvas)
+            : view.worldUnitHeadToScreen(canvas, p.unitId);
+      if (!pos && p.floatHex) {
+        pos = view.worldAxialHeadToScreen(canvas, p.floatHex.q, p.floatHex.r);
+      }
+      if (!pos) continue;
+      let ox = 0;
+      let oy = 0;
+      if (p.kind === "shield_absorb") {
+        ox = 24;
+        oy = 14;
+      } else if (p.kind === "mana") {
+        ox = 10;
+        oy = 20;
+      } else if (p.kind === "heal") {
+        ox = -8;
+        oy = 6;
+      } else if (p.kind === "shield_gain") {
+        ox = 16;
+        oy = -10;
+      }
+      spawnCombatFloat(pos.x + ox, pos.y + oy, p.amount, p);
     }
-    if (!pos) continue;
-    let ox = 0;
-    let oy = 0;
-    if (p.kind === "shield_absorb") {
-      ox = 24;
-      oy = 14;
-    } else if (p.kind === "mana") {
-      ox = 10;
-      oy = 20;
-    } else if (p.kind === "heal") {
-      ox = -8;
-      oy = 6;
-    } else if (p.kind === "shield_gain") {
-      ox = 16;
-      oy = -10;
-    }
-    spawnCombatFloat(pos.x + ox, pos.y + oy, p.amount, p);
+  } catch (e) {
+    console.error("loop/tick:", e);
+  } finally {
+    requestAnimationFrame(loop);
   }
-  requestAnimationFrame(loop);
 }
 function isTextInputTarget(t: EventTarget | null): boolean {
   return (
