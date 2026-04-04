@@ -2049,7 +2049,7 @@ function showArenaLayoutEditHud(): void {
     : "";
   const wrap = el(`
     <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar cena</strong> — Clique no coliseu para selecionar (contorno vermelho). Arrasto no modelo: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> ou numérico +/− escala.${camHint}
+      <strong>Ajustar cena</strong> — Clique no <strong>coliseu</strong> ou num <strong>bunker</strong> para selecionar (contorno vermelho). Arrasto no modelo: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> ou numérico +/− escala.${camHint}
       <br /><kbd>Espaço</kbd> alterna para o modo câmara (quando no coliseu) ou de volta.
       <br /><kbd>Esc</kbd> grava e volta ao menu (ferramenta de desenvolvimento).
       ${camRow}
@@ -8320,11 +8320,27 @@ function render(): void {
       }, totalMs + 20);
     }
   }
-  const showBunkers = shouldShowBunkerMeshes(model.phase);
-  view.setBunkers(
-    showBunkers ? model.bunkersForRender() : null,
-    showBunkers,
-  );
+  const layoutSceneEdit =
+    import.meta.env.DEV &&
+    model.phase === "main_menu" &&
+    view.isArenaLayoutEditActive();
+  const showBunkers =
+    shouldShowBunkerMeshes(model.phase) || layoutSceneEdit;
+  const bunkersFromModel = model.bunkersForRender();
+  const bunkerList =
+    showBunkers
+      ? layoutSceneEdit && bunkersFromModel.length === 0
+        ? model.layoutEditorSyntheticBunkerPlacements().map((p) => ({
+            q: p.q,
+            r: p.r,
+            hp: 1,
+            maxHp: 1,
+            tier: 0 as const,
+            biome: p.biome,
+          }))
+        : bunkersFromModel
+      : null;
+  view.setBunkers(bunkerList, showBunkers);
   applyCombatOverlays();
   view.setArenaLayoutEditEligible(
     import.meta.env.DEV && model.phase === "main_menu",

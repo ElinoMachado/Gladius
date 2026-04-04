@@ -20,7 +20,7 @@ import {
 import { deslumbroInstancesCount } from "../game/effectInstances";
 
 export type HitFlashTone = "normal" | "blood" | "heal_swirl" | "electric_chain";
-import { BIOME_LABELS } from "../game/data/biomes";
+import { BIOME_LABELS, COMBAT_BIOMES } from "../game/data/biomes";
 import { enemyTierFromId, waveConfigFromIndex } from "../game/data/enemies";
 import type { BiomeId } from "../game/types";
 import { buildUnitBodyGroup, modelKeyForUnit } from "./unitModels";
@@ -40,7 +40,9 @@ import {
   isArenaColiseumLoaded,
 } from "./arenaColiseumGlb";
 import {
+  type BunkerLayoutEntry,
   type SceneLayoutPrefs,
+  cloneSceneLayoutPrefs,
   loadSceneLayoutPrefs,
   saveSceneLayoutPrefs,
 } from "../game/sceneLayoutPrefs";
@@ -356,6 +358,8 @@ export class GameRenderer {
   private arenaLayoutPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private onArenaLayoutSessionEnd: (() => void) | null = null;
   private onArenaLayoutEditUiRefresh: (() => void) | null = null;
+  /** Snapshot para posição/escala dos bunkers e serialização no editor. */
+  private sceneLayoutPrefsSnapshot: SceneLayoutPrefs | null = null;
   /** Objeto 3D ativo no editor de cena (null até ao primeiro clique num selecionável). */
   private layoutSelectedRoot: THREE.Object3D | null = null;
   private layoutPointerDownX = 0;
@@ -3506,6 +3510,7 @@ export class GameRenderer {
       hp: number;
       maxHp: number;
       tier: BunkerRenderTier;
+      biome?: BiomeId;
     }[] | null,
     show: boolean,
   ): void {
@@ -3530,26 +3535,63 @@ export class GameRenderer {
         this.bunkerHitFlashUntil.delete(k);
       }
     }
+    const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
     for (const b of bunkers) {
       if (b.hp <= 0) continue;
       const k = axialKey(b.q, b.r);
+      const wasExisting = this.bunkerRoots.has(k);
       let root = this.bunkerRoots.get(k);
       const tier = b.tier;
+      const biome = b.biome;
       if (!root) {
-        root = createBunkerVisualGroup(tier);
+        root = new THREE.Group();
+        root.name = `bunker_mount_${k}`;
+        root.userData.layoutBunkerBiome = biome;
+        root.userData.bunkerAxialQ = b.q;
+        root.userData.bunkerAxialR = b.r;
+        const vis = createBunkerVisualGroup(tier);
+        root.add(vis);
+        root.userData.bunkerVisual = vis;
+        root.userData.bunkerTier = tier;
         this.bunkerRoots.set(k, root);
         this.arenaRoot.add(root);
-      } else if ((root.userData.bunkerTier as BunkerRenderTier | undefined) !== tier) {
-        const pos = root.position.clone();
-        this.arenaRoot.remove(root);
-        this.disposeObject3D(root);
-        root = createBunkerVisualGroup(tier);
-        this.bunkerRoots.set(k, root);
-        root.position.copy(pos);
-        this.arenaRoot.add(root);
+      } else {
+        root.userData.layoutBunkerBiome = biome;
+        root.userData.bunkerAxialQ = b.q;
+        root.userData.bunkerAxialR = b.r;
+        const curTier = root.userData.bunkerTier as BunkerRenderTier | undefined;
+        if (curTier !== tier) {
+          const oldV = root.userData.bunkerVisual as THREE.Group | undefined;
+          if (oldV) {
+            root.remove(oldV);
+            this.disposeObject3D(oldV);
+          }
+          const vis = createBunkerVisualGroup(tier);
+          root.add(vis);
+          root.userData.bunkerVisual = vis;
+          root.userData.bunkerTier = tier;
+        }
       }
-      const { x, z } = axialToWorld(b.q, b.r, HEX_SIZE);
-      root.position.set(x, this.playSurfaceYOffset(), z);
+      if (!this.arenaLayoutEditActive || !wasExisting) {
+        const def: BunkerLayoutEntry = { x: 0, y: 0, z: 0, scale: 1 };
+        const raw =
+          biome && snap.bunkerLayout?.[biome]
+            ? snap.bunkerLayout[biome]!
+            : def;
+        const off: BunkerLayoutEntry = {
+          x: Number.isFinite(raw.x) ? raw.x : 0,
+          y: Number.isFinite(raw.y) ? raw.y : 0,
+          z: Number.isFinite(raw.z) ? raw.z : 0,
+          scale:
+            typeof raw.scale === "number" && Number.isFinite(raw.scale)
+              ? THREE.MathUtils.clamp(raw.scale, 0.02, 48)
+              : 1,
+        };
+        const base = axialToWorld(b.q, b.r, HEX_SIZE);
+        const py = this.playSurfaceYOffset();
+        root.position.set(base.x + off.x, py + off.y, base.z + off.z);
+        root.scale.setScalar(off.scale);
+      }
     }
   }
 
@@ -4091,6 +4133,7 @@ export class GameRenderer {
   }
 
   applySceneLayoutPrefs(prefs: SceneLayoutPrefs): void {
+    this.sceneLayoutPrefsSnapshot = cloneSceneLayoutPrefs(prefs);
     if (this.arenaColiseumMount) {
       this.arenaColiseumMount.position.set(
         prefs.coliseum.x,
@@ -4125,6 +4168,50 @@ export class GameRenderer {
         this.usePersistentFreeCamera = false;
       }
     }
+    this.applyBunkerMountsPoseFromPrefs();
+  }
+
+  private applyBunkerMountsPoseFromPrefs(): void {
+    const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
+    for (const root of this.bunkerRoots.values()) {
+      const biome = root.userData.layoutBunkerBiome as BiomeId | undefined;
+      const q = root.userData.bunkerAxialQ as number | undefined;
+      const r = root.userData.bunkerAxialR as number | undefined;
+      if (!biome || q === undefined || r === undefined) continue;
+      const off: BunkerLayoutEntry = snap.bunkerLayout?.[biome] ?? {
+        x: 0,
+        y: 0,
+        z: 0,
+        scale: 1,
+      };
+      const base = axialToWorld(q, r, HEX_SIZE);
+      const py = this.playSurfaceYOffset();
+      const sc = THREE.MathUtils.clamp(off.scale, 0.02, 48);
+      root.position.set(base.x + off.x, py + off.y, base.z + off.z);
+      root.scale.setScalar(sc);
+    }
+  }
+
+  private mergeBunkerLayoutFromMounts(
+    base: Partial<Record<BiomeId, BunkerLayoutEntry>>,
+  ): Partial<Record<BiomeId, BunkerLayoutEntry>> {
+    const out: Partial<Record<BiomeId, BunkerLayoutEntry>> = { ...base };
+    for (const root of this.bunkerRoots.values()) {
+      const biome = root.userData.layoutBunkerBiome as BiomeId | undefined;
+      if (!biome || !COMBAT_BIOMES.includes(biome)) continue;
+      const q = root.userData.bunkerAxialQ as number | undefined;
+      const r = root.userData.bunkerAxialR as number | undefined;
+      if (q === undefined || r === undefined) continue;
+      const baseW = axialToWorld(q, r, HEX_SIZE);
+      const py = this.playSurfaceYOffset();
+      out[biome] = {
+        x: root.position.x - baseW.x,
+        y: root.position.y - py,
+        z: root.position.z - baseW.z,
+        scale: THREE.MathUtils.clamp(root.scale.x, 0.02, 48),
+      };
+    }
+    return out;
   }
 
   getColiseumOffsetForPrefs(): { x: number; y: number; z: number } {
@@ -4174,8 +4261,12 @@ export class GameRenderer {
     const coliseumScale = m
       ? THREE.MathUtils.clamp(m.scale.x, 0.02, 48)
       : 1;
+    const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
+    const bunkerLayout = this.mergeBunkerLayoutFromMounts({
+      ...(snap.bunkerLayout ?? {}),
+    });
     if (!this.arenaLayoutCameraPersonalized) {
-      return { coliseum, coliseumScale, freeCamera: null };
+      return { coliseum, coliseumScale, bunkerLayout, freeCamera: null };
     }
     const inFreeLayoutCam =
       this.arenaLayoutEditActive &&
@@ -4185,13 +4276,14 @@ export class GameRenderer {
       return {
         coliseum,
         coliseumScale,
+        bunkerLayout,
         freeCamera: this.layoutEditIsoFreeCameraPrefs,
       };
     }
     this.syncFreeCameraSnapshotFromOrthoForPrefs();
     const freeCamera = this.cloneFreeCameraPrefsPayload();
     this.layoutEditIsoFreeCameraPrefs = freeCamera;
-    return { coliseum, coliseumScale, freeCamera };
+    return { coliseum, coliseumScale, bunkerLayout, freeCamera };
   }
 
   /** Menu principal (só `import.meta.env.DEV`): permite iniciar a sessão de ajuste. */
@@ -4378,7 +4470,10 @@ export class GameRenderer {
 
   /** Raízes que podem receber clique no editor (extensível para mais props). */
   private getLayoutSelectableRoots(): THREE.Object3D[] {
-    return this.arenaColiseumMount ? [this.arenaColiseumMount] : [];
+    const roots: THREE.Object3D[] = [];
+    if (this.arenaColiseumMount) roots.push(this.arenaColiseumMount);
+    for (const br of this.bunkerRoots.values()) roots.push(br);
+    return roots;
   }
 
   private pickLayoutSelectableRoot(

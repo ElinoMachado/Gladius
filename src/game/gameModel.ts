@@ -654,16 +654,48 @@ export class GameModel {
     hp: number;
     maxHp: number;
     tier: 0 | 1 | 2;
+    biome: BiomeId;
   }[] {
-    return this.allBunkerStates()
-      .filter((b) => b.hp > 0)
-      .map((b) => ({
+    const out: {
+      q: number;
+      r: number;
+      hp: number;
+      maxHp: number;
+      tier: 0 | 1 | 2;
+      biome: BiomeId;
+    }[] = [];
+    for (const id of COMBAT_BIOMES) {
+      const b = this.bunkers[id];
+      if (!b || b.hp <= 0) continue;
+      out.push({
         q: b.q,
         r: b.r,
         hp: b.hp,
         maxHp: b.maxHp,
         tier: b.tier,
-      }));
+        biome: id,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Editor de cena (menu): hexes determinísticos para os 6 bunkers, sem alterar `this.bunkers`.
+   */
+  layoutEditorSyntheticBunkerPlacements(): {
+    biome: BiomeId;
+    q: number;
+    r: number;
+  }[] {
+    const used = new Set<string>();
+    const out: { biome: BiomeId; q: number; r: number }[] = [];
+    for (const bi of COMBAT_BIOMES) {
+      const pos = this.pickBunkerHexForBiome(bi, used);
+      if (!pos) continue;
+      used.add(axialKey(pos.q, pos.r));
+      out.push({ biome: bi, q: pos.q, r: pos.r });
+    }
+    return out;
   }
 
   /** Resumo da wave (UI do overlay antes da loja / vitória). */
