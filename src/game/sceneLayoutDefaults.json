@@ -1,28 +1,15 @@
 {
   "coliseum": {
-    "x": 5.738977229219835,
-    "y": -36.87300000006332,
-    "z": 7.065135056855066
+    "x": 0,
+    "y": 0,
+    "z": 0
   },
-  "coliseumScale": 2.606331295967002,
+  "coliseumScale": 1,
   "bunkerLayout": {},
   "layoutActors": {},
   "layoutEnemyEditor": {
     "previewArchetypeId": "gladinio",
     "yByArchetype": {}
   },
-  "freeCamera": {
-    "position": [
-      85.35167713282732,
-      92.38063877906016,
-      85.35167713282732
-    ],
-    "quaternion": [
-      -0.29642345642354634,
-      0.36245142936709335,
-      0.12278261585614303,
-      0.8750351564795507
-    ],
-    "fov": 48
-  }
+  "freeCamera": null
 }

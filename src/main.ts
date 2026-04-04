@@ -8331,6 +8331,7 @@ function render(): void {
     model.phase === "main_menu" &&
     view.isArenaLayoutEditActive();
 
+  view.setBunkerAnchorGrid(model.grid);
   const mv = model.takePendingMoveAnimation();
   view.syncUnits(
     layoutSceneEdit ? model.layoutEditorSyntheticUnits() : model.units,

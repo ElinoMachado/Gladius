@@ -4,7 +4,10 @@ import {
   UNIT_MOVE_SEGMENT_MS,
 } from "../game/combatTiming";
 import { axialToWorld, axialKey, hexDistance, type Axial } from "../game/hex";
-import type { HexCell } from "../game/grid";
+import {
+  nearestHexInBiomeForWorldXz,
+  type HexCell,
+} from "../game/grid";
 import type { Unit } from "../game/types";
 import {
   bleedInstanceCount,
@@ -237,6 +240,8 @@ export class GameRenderer {
     { startMs: number; durationMs: number; peakY: number; baseX: number; baseZ: number }
   >();
   private readonly bunkerRoots = new Map<string, THREE.Group>();
+  /** Grelha do mapa: âncoras `hexQ`/`hexR` ao gravar layout dos bunkers. */
+  private bunkerAnchorGrid: Map<string, HexCell> | null = null;
   private readonly bunkerHitFlashUntil = new Map<string, number>();
   /** Quando (ms perf.now) o herói deve ficar oculto ao entrar no bunker. */
   private readonly bunkerHideAtByHeroId = new Map<string, number>();
@@ -495,6 +500,11 @@ export class GameRenderer {
   /** Chamado a partir do `render()` do jogo: em combate força vista ortográfica e controlos de câmara. */
   setCombatUsesOrthographicView(active: boolean): void {
     this.combatUsesOrthographicView = active;
+  }
+
+  /** Define a grelha usada para calcular o hex mais próximo ao mover bunkers no editor (e persistir `hexQ`/`hexR`). */
+  setBunkerAnchorGrid(grid: Map<string, HexCell> | null): void {
+    this.bunkerAnchorGrid = grid;
   }
 
   /** Se o último gesto foi arrastar a câmera, o combate deve ignorar o `click` seguinte. */
@@ -4428,15 +4438,26 @@ export class GameRenderer {
     const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
     for (const root of this.bunkerRoots.values()) {
       const biome = root.userData.layoutBunkerBiome as BiomeId | undefined;
-      const q = root.userData.bunkerAxialQ as number | undefined;
-      const r = root.userData.bunkerAxialR as number | undefined;
-      if (!biome || q === undefined || r === undefined) continue;
-      const off: BunkerLayoutEntry = snap.bunkerLayout?.[biome] ?? {
+      const q0 = root.userData.bunkerAxialQ as number | undefined;
+      const r0 = root.userData.bunkerAxialR as number | undefined;
+      if (!biome || q0 === undefined || r0 === undefined) continue;
+      const lay = snap.bunkerLayout?.[biome];
+      const useLayHex =
+        !!(
+          lay &&
+          typeof lay.hexQ === "number" &&
+          typeof lay.hexR === "number" &&
+          Number.isFinite(lay.hexQ) &&
+          Number.isFinite(lay.hexR)
+        );
+      const anchorQ = useLayHex ? Math.round(lay!.hexQ!) : q0;
+      const anchorR = useLayHex ? Math.round(lay!.hexR!) : r0;
+      const off: BunkerLayoutEntry = lay ?? {
         x: 0,
         z: 0,
         scale: 1,
       };
-      const base = axialToWorld(q, r, HEX_SIZE);
+      const base = axialToWorld(anchorQ, anchorR, HEX_SIZE);
       const py = this.playSurfaceYOffset();
       const sc = THREE.MathUtils.clamp(off.scale, 0.02, 48);
       const dataTier = (root.userData.bunkerDataTier ?? 0) as BunkerRenderTier;
@@ -4463,9 +4484,24 @@ export class GameRenderer {
       const q = root.userData.bunkerAxialQ as number | undefined;
       const r = root.userData.bunkerAxialR as number | undefined;
       if (q === undefined || r === undefined) continue;
-      const baseW = axialToWorld(q, r, HEX_SIZE);
-      const py = this.playSurfaceYOffset();
       const prev = out[biome] ?? { x: 0, z: 0, scale: 1 };
+      let anchorQ = q;
+      let anchorR = r;
+      if (this.bunkerAnchorGrid) {
+        const hit = nearestHexInBiomeForWorldXz(
+          this.bunkerAnchorGrid,
+          biome,
+          root.position.x,
+          root.position.z,
+          HEX_SIZE,
+        );
+        if (hit) {
+          anchorQ = hit.q;
+          anchorR = hit.r;
+        }
+      }
+      const baseW = axialToWorld(anchorQ, anchorR, HEX_SIZE);
+      const py = this.playSurfaceYOffset();
       const yByTier: Partial<Record<"0" | "1" | "2", number>> = {
         ...(prev.yByTier ?? {}),
       };
@@ -4484,6 +4520,8 @@ export class GameRenderer {
         z: root.position.z - baseW.z,
         scale: THREE.MathUtils.clamp(root.scale.x, 0.02, 48),
         yByTier,
+        hexQ: anchorQ,
+        hexR: anchorR,
       };
     }
     return out;

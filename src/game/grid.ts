@@ -1,4 +1,4 @@
-import { axialKey, hexDistance, type Axial } from "./hex";
+import { axialKey, axialToWorld, hexDistance, type Axial } from "./hex";
 import type { BiomeId } from "./types";
 import { COMBAT_BIOMES } from "./data/biomes";
 
@@ -41,6 +41,28 @@ export function buildHexArena(radius: number): Map<string, HexCell> {
 
 export function getCell(map: Map<string, HexCell>, q: number, r: number): HexCell | undefined {
   return map.get(axialKey(q, r));
+}
+
+/** Hex do bioma cujo centro está mais próximo de (wx, wz) no plano XZ (âncora lógica do bunker após arrasto). */
+export function nearestHexInBiomeForWorldXz(
+  map: Map<string, HexCell>,
+  biome: BiomeId,
+  wx: number,
+  wz: number,
+  hexSize: number,
+): { q: number; r: number } | null {
+  let best: { q: number; r: number } | null = null;
+  let bestD = Infinity;
+  for (const c of map.values()) {
+    if (c.biome !== biome) continue;
+    const p = axialToWorld(c.q, c.r, hexSize);
+    const d = (p.x - wx) ** 2 + (p.z - wz) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = { q: c.q, r: c.r };
+    }
+  }
+  return best;
 }
 
 export function canCrossBiome(

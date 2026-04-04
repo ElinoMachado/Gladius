@@ -13,6 +13,12 @@ export type BunkerLayoutEntry = {
   z: number;
   scale: number;
   /**
+   * Hex lógico do bunker (combate / `bunkerAtHex`). Gravado ao mover o bunker no ajuste de cena;
+   * mantém skills e ocupante alinhados à malha quando o modelo está deslocado de `x,z`.
+   */
+  hexQ?: number;
+  hexR?: number;
+  /**
    * Altura do mount por variante de modelo (nv1–3). Se ausente, usa `y` legado para todos.
    */
   yByTier?: Partial<Record<BunkerTierKey, number>>;
@@ -82,6 +88,14 @@ function clonePrefs(p: SceneLayoutPrefs): SceneLayoutPrefs {
       x: e.x,
       z: e.z,
       scale: e.scale,
+      hexQ:
+        typeof e.hexQ === "number" && Number.isFinite(e.hexQ)
+          ? e.hexQ
+          : undefined,
+      hexR:
+        typeof e.hexR === "number" && Number.isFinite(e.hexR)
+          ? e.hexR
+          : undefined,
       y: typeof e.y === "number" && Number.isFinite(e.y) ? e.y : undefined,
       yByTier:
         ybt && typeof ybt === "object"
@@ -173,7 +187,15 @@ function normalizeBunkerLayoutEntry(
   if (!yByTier && legacyY !== undefined) {
     yByTier = { "0": legacyY, "1": legacyY, "2": legacyY };
   }
-  const entry: BunkerLayoutEntry = { x, z, scale, yByTier };
+  const hexQ =
+    typeof o.hexQ === "number" && Number.isFinite(o.hexQ)
+      ? Math.round(o.hexQ)
+      : undefined;
+  const hexR =
+    typeof o.hexR === "number" && Number.isFinite(o.hexR)
+      ? Math.round(o.hexR)
+      : undefined;
+  const entry: BunkerLayoutEntry = { x, z, scale, yByTier, hexQ, hexR };
   if (legacyY !== undefined && !o.yByTier) entry.y = legacyY;
   return entry;
 }
@@ -281,13 +303,17 @@ function normalizeSceneLayoutPrefs(o: unknown): SceneLayoutPrefs {
         : 1;
     let freeCamera: SceneLayoutPrefs["freeCamera"] = null;
     const fc = raw.freeCamera;
-    if (
+    const posOk =
       fc &&
       Array.isArray(fc.position) &&
       fc.position.length === 3 &&
+      fc.position.every((n) => typeof n === "number" && Number.isFinite(n));
+    const quatOk =
+      fc &&
       Array.isArray(fc.quaternion) &&
-      fc.quaternion.length === 4
-    ) {
+      fc.quaternion.length === 4 &&
+      fc.quaternion.every((n) => typeof n === "number" && Number.isFinite(n));
+    if (posOk && quatOk) {
       const fov =
         typeof fc.fov === "number" && Number.isFinite(fc.fov) ? fc.fov : 48;
       freeCamera = {
