@@ -13,7 +13,7 @@ function disposeObject3D(o: THREE.Object3D): void {
 }
 
 /** Offset Y do pivot no preview: nv.1 (GLB + fumo alto) desce mais; nv.2/3 inalterados. */
-const BUNKER_PREVIEW_ROOT_Y_TIER0 = -0.38;
+const BUNKER_PREVIEW_ROOT_Y_TIER0 = -0.52;
 const BUNKER_PREVIEW_ROOT_Y_TIER12 = -0.24;
 
 /** Preview do bunker na loja (mesmo modelo da arena, escala por tier). */
