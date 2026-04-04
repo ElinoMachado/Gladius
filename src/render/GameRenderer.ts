@@ -3,13 +3,7 @@ import {
   FURACAO_ULT_JUMP_MS,
   UNIT_MOVE_SEGMENT_MS,
 } from "../game/combatTiming";
-import {
-  axialToWorld,
-  axialKey,
-  hexDistance,
-  worldXzToAxial,
-  type Axial,
-} from "../game/hex";
+import { axialToWorld, axialKey, hexDistance, type Axial } from "../game/hex";
 import type { HexCell } from "../game/grid";
 import type { Unit } from "../game/types";
 import {
@@ -83,10 +77,9 @@ const BIOME_HEX_COLOR: Record<BiomeId, number> = {
  */
 const HEX_SIZE = 2.18;
 /**
- * Raio horizontal do cilindro auxiliar de raycast do bunker (~45% do apotema; metade do raio “cheio”).
- * Modelos GLB assimétricos ficam mais contidos no hex central; malha visível também raycast com filtro axial.
+ * Cilindro auxiliar (buracos no GLB): ~apotema com folga; pick principal = distância ao longo do raio (hex vs malha).
  */
-const BUNKER_PICK_RADIUS_XZ = HEX_SIZE * (Math.sqrt(3) / 2) * 0.45;
+const BUNKER_PICK_RADIUS_XZ = HEX_SIZE * (Math.sqrt(3) / 2) * 0.88;
 const BUNKER_PICK_CYLINDER_SEGMENTS = 20;
 /** Com o coliseu GLB, hexes/unidades sobem ligeiramente acima da areia (após afundar o modelo). */
 const ARENA_PLAY_SURFACE_Y_WITH_COLISEUM = 0.11;
@@ -564,18 +557,6 @@ export class GameRenderer {
     const c = Math.cos(this.arenaYaw);
     const s = Math.sin(this.arenaYaw);
     out.set(x * c + z * s, -x * s + z * c);
-  }
-
-  /**
-   * Inverso de `worldPanInto` no plano XZ: coordenadas de mundo da cena → hex axial lógico
-   * (rotação Y da arena aplicada antes de `worldXzToAxial`).
-   */
-  private worldXZToArenaAxial(wx: number, wz: number): Axial {
-    const c = Math.cos(this.arenaYaw);
-    const s = Math.sin(this.arenaYaw);
-    const lx = wx * c - wz * s;
-    const lz = wx * s + wz * c;
-    return worldXzToAxial(lx, lz, HEX_SIZE);
   }
 
   /**
@@ -1943,13 +1924,9 @@ export class GameRenderer {
         );
         let bunkerDist = Infinity;
         for (const root of this.bunkerRoots.values()) {
-          const q0 = root.userData.bunkerAxialQ as number | undefined;
-          const r0 = root.userData.bunkerAxialR as number | undefined;
-          if (q0 === undefined || r0 === undefined) continue;
-          for (const h of rayPick.intersectObject(root, true)) {
-            const a = this.worldXZToArenaAxial(h.point.x, h.point.z);
-            if (a.q !== q0 || a.r !== r0) continue;
-            bunkerDist = Math.min(bunkerDist, h.distance);
+          const bh = rayPick.intersectObject(root, true);
+          if (bh.length > 0) {
+            bunkerDist = Math.min(bunkerDist, bh[0]!.distance);
           }
         }
         const hexHits = rayPick.intersectObjects(
@@ -3180,8 +3157,8 @@ export class GameRenderer {
   }
 
   /**
-   * Hex sob o ponteiro: chão mais próximo, ou hit no bunker só se o ponto do hit projetar no hex
-   * lógico desse bunker (evita overhang / volume no hex vizinho).
+   * Hex sob o ponteiro: ganha o hit mais próximo ao longo do raio — tile de chão válido ou malha/cilindro do bunker.
+   * Comportamento simples: hover no hex do bunker ou no modelo 3D (o que estiver à frente).
    */
   pickCombatHex(
     ndcX: number,
@@ -3190,10 +3167,10 @@ export class GameRenderer {
   ): { q: number; r: number } | null {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.getRenderCamera());
-
-    const hexHits = ray.intersectObjects([...this.hexMeshes.values()], false);
     let bestDist = Infinity;
     let best: { q: number; r: number } | null = null;
+
+    const hexHits = ray.intersectObjects([...this.hexMeshes.values()], false);
     if (hexHits.length > 0) {
       const k = hexHits[0]!.object.userData.hexKey as string | undefined;
       if (k && grid.has(k)) {
@@ -3208,13 +3185,9 @@ export class GameRenderer {
       const r0 = root.userData.bunkerAxialR as number | undefined;
       if (q0 === undefined || r0 === undefined) continue;
       const bh = ray.intersectObject(root, true);
-      for (const h of bh) {
-        const a = this.worldXZToArenaAxial(h.point.x, h.point.z);
-        if (a.q !== q0 || a.r !== r0) continue;
-        if (h.distance < bestDist) {
-          bestDist = h.distance;
-          best = { q: q0, r: r0 };
-        }
+      if (bh.length > 0 && bh[0]!.distance < bestDist) {
+        bestDist = bh[0]!.distance;
+        best = { q: q0, r: r0 };
       }
     }
 
