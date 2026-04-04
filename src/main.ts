@@ -327,6 +327,16 @@ view.setOnArenaLayoutEditUiRefresh(() => {
   });
 });
 
+view.setOnLayoutEnemyMeshSyncNeeded(() => {
+  if (
+    import.meta.env.DEV &&
+    model.phase === "main_menu" &&
+    view.isArenaLayoutEditActive()
+  ) {
+    view.syncUnits(model.layoutEditorSyntheticUnits(), null);
+  }
+});
+
 view.buildHexGrid(model.grid);
 
 Promise.all([

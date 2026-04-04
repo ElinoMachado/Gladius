@@ -371,6 +371,8 @@ export class GameRenderer {
   private arenaLayoutPersistTimer: ReturnType<typeof setTimeout> | null = null;
   private onArenaLayoutSessionEnd: (() => void) | null = null;
   private onArenaLayoutEditUiRefresh: (() => void) | null = null;
+  /** `render()` não corre no menu a cada frame; ao mudar o inimigo de referência força `syncUnits`. */
+  private onLayoutEnemyMeshSyncNeeded: (() => void) | null = null;
   /** Snapshot para posição/escala dos bunkers e serialização no editor. */
   private sceneLayoutPrefsSnapshot: SceneLayoutPrefs | null = null;
   /** Objeto 3D ativo no editor de cena (null até ao primeiro clique num selecionável). */
@@ -467,6 +469,10 @@ export class GameRenderer {
 
   setOnArenaLayoutEditUiRefresh(cb: (() => void) | null): void {
     this.onArenaLayoutEditUiRefresh = cb;
+  }
+
+  setOnLayoutEnemyMeshSyncNeeded(cb: (() => void) | null): void {
+    this.onLayoutEnemyMeshSyncNeeded = cb;
   }
 
   /** Compat: o editor já não tem submodo “câmara vs coliseu”. */
@@ -5106,6 +5112,7 @@ export class GameRenderer {
     this.clearLayoutSelectionEmissive(g);
     this.applyLayoutSelectionEmissive(g);
     this.onArenaLayoutEditUiRefresh?.();
+    this.onLayoutEnemyMeshSyncNeeded?.();
   }
 
   private endArenaLayoutEditSession(): void {
