@@ -5651,6 +5651,11 @@ body.enemy-inspect--dragging-body {
   height: 100%;
 }
 
+/* Nv.1: desce o quadro WebGL no layout (reforço visual; o offset 3D está em BunkerPreview3D). */
+#bunker-preview-host[data-bunker-preview-tier="0"] {
+  transform: translateY(16px);
+}
+
 .shop-bunker-viz-layout__col {
   flex: 1 1 200px;
   min-width: 0;

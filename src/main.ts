@@ -4704,7 +4704,7 @@ function goldShopBunkerSectionHtml(bunk: BunkerState): string {
   const nvStr = `${disp}/3`;
   return `<div class="shop-bunker-viz-layout">
     <div class="shop-bunker-viz-layout__preview">
-      <div id="bunker-preview-host" class="gold-shop-hero-3d-host shop-bunker-viz-layout__3d-host" aria-hidden="true"></div>
+      <div id="bunker-preview-host" class="gold-shop-hero-3d-host shop-bunker-viz-layout__3d-host" data-bunker-preview-tier="${t}" aria-hidden="true"></div>
     </div>
     <div class="shop-hero-stats-col shop-bunker-viz-layout__col">
       <p class="shop-hero-stats-head">Atributos do bunker</p>

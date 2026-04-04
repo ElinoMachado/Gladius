@@ -12,9 +12,10 @@ function disposeObject3D(o: THREE.Object3D): void {
   });
 }
 
-/** Offset Y do pivot no preview: nv.1 (GLB + fumo alto) desce mais; nv.2/3 inalterados. */
-const BUNKER_PREVIEW_ROOT_Y_TIER0 = -0.52;
-const BUNKER_PREVIEW_ROOT_Y_TIER12 = -0.24;
+/** Pivot da rotação Y; o deslocamento vertical do nv.1 vai no `bunkerModel` + câmara. */
+const BUNKER_PREVIEW_ROOT_Y = -0.24;
+/** Extra só no mesh nv.1 (GLB): empurra o modelo para baixo no mundo. */
+const BUNKER_PREVIEW_MODEL_Y_NV1 = -0.78;
 
 /** Preview do bunker na loja (mesmo modelo da arena, escala por tier). */
 export class BunkerPreview3D {
@@ -40,11 +41,7 @@ export class BunkerPreview3D {
     this.renderer.setClearColor(0x000000, 0);
     host.appendChild(this.renderer.domElement);
 
-    /* GLB: fumo da chaminé sobe acima do bbox — câmara mais afastada + FOV maior + modelo
-     * mais baixo no quadro para não cortar partículas no topo. */
     this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 40);
-    this.camera.position.set(3.2, 0.88, 3.2);
-    this.camera.lookAt(-0.1, 0.22, 0);
 
     const amb = new THREE.AmbientLight(0xfff0e0, 0.55);
     const key = new THREE.DirectionalLight(0xffffff, 0.95);
@@ -55,8 +52,9 @@ export class BunkerPreview3D {
 
     this.bunkerModel = createBunkerVisualGroup(0);
     this.root.add(this.bunkerModel);
-    this.root.position.y = BUNKER_PREVIEW_ROOT_Y_TIER0;
+    this.root.position.y = BUNKER_PREVIEW_ROOT_Y;
     this.scene.add(this.root);
+    this.applyPreviewFraming(0);
 
     window.addEventListener("resize", this.onResize);
     this.resizeObserver = new ResizeObserver(() => this.fit());
@@ -76,8 +74,25 @@ export class BunkerPreview3D {
     const glb = !!this.bunkerModel.userData.bunkerGlb;
     const s = glb ? 1 : tier === 0 ? 1 : tier === 1 ? 1.06 : 1.12;
     this.root.scale.setScalar(s);
-    this.root.position.y =
-      tier === 0 ? BUNKER_PREVIEW_ROOT_Y_TIER0 : BUNKER_PREVIEW_ROOT_Y_TIER12;
+    this.applyPreviewFraming(tier);
+    this.host.dataset.bunkerPreviewTier = String(tier);
+  }
+
+  /** Câmara + Y do mesh por tier (nv.1 precisa de mais margem ao fumo). */
+  private applyPreviewFraming(tier: BunkerRenderTier): void {
+    this.root.position.y = BUNKER_PREVIEW_ROOT_Y;
+    this.bunkerModel.position.x = 0;
+    this.bunkerModel.position.z = 0;
+    if (tier === 0) {
+      this.bunkerModel.position.y = BUNKER_PREVIEW_MODEL_Y_NV1;
+      this.camera.position.set(3.28, 0.65, 3.28);
+      this.camera.lookAt(-0.1, 0.02, 0);
+    } else {
+      this.bunkerModel.position.y = 0;
+      this.camera.position.set(3.2, 0.88, 3.2);
+      this.camera.lookAt(-0.1, 0.22, 0);
+    }
+    this.camera.updateProjectionMatrix();
   }
 
   private fit(): void {
