@@ -5162,8 +5162,8 @@ body.enemy-inspect--dragging-body {
 
 .shop-viz-turntable {
   width: 100%;
-  /* Altura pautada pelo herói (tabs + stats + skills + artefatos); bunker usa o mesmo quadro */
-  height: clamp(560px, 61vh, 700px);
+  /* Altura do herói (sem `1fr` no cartão já não precisa de folga fictícia) */
+  height: clamp(430px, 52vh, 620px);
   transform-style: preserve-3d;
   overflow: visible;
 }
@@ -5280,7 +5280,8 @@ body.enemy-inspect--dragging-body {
 }
 
 .shop-viz-turntable-panel--bunker .shop-bunker-viz-layout__col > .shop-hero-stats-head {
-  margin-bottom: 0.12rem;
+  margin-top: 0;
+  margin-bottom: 0.05rem;
   font-size: 0.62rem;
 }
 
@@ -5307,18 +5308,32 @@ body.enemy-inspect--dragging-body {
 }
 
 .shop-viz-turntable-panel .shop-hero-stats-head {
-  margin-bottom: 0.14rem;
+  margin-top: 0;
+  margin-bottom: 0.06rem;
   font-size: 0.64rem;
 }
 
+.shop-viz-turntable-panel--hero .hero-stats-tabbed {
+  gap: 0.07rem;
+}
+
+.shop-viz-turntable-panel--hero .hero-stats-tabbed__tabs {
+  gap: 0.12rem 0.22rem;
+}
+
+.shop-viz-turntable-panel--hero .hero-stats-tab {
+  padding: 0.12rem 0.38rem;
+  font-size: 0.58rem;
+}
+
 .shop-viz-turntable-panel .shop-viz-flip-entity-title {
-  margin-bottom: 0.22rem;
-  padding: 0.18rem 0.3rem 0.22rem;
+  margin-bottom: 0.045rem;
+  padding: 0.04rem 0.28rem 0.05rem;
   font-size: 0.66rem;
 }
 
 .shop-viz-turntable-panel--hero .shop-viz-flip-entity-title {
-  margin-bottom: 0.16rem;
+  margin-bottom: 0.04rem;
 }
 
 .shop-viz-turntable-panel .gold-shop-hero-stats-grid.lol-stats-list {
@@ -5446,7 +5461,7 @@ body.enemy-inspect--dragging-body {
   }
 
   .shop-viz-turntable {
-    height: clamp(540px, 66vh, 680px);
+    height: clamp(460px, 56vh, 600px);
   }
 
   .shop-viz-flip-arrow {
@@ -5510,7 +5525,7 @@ body.enemy-inspect--dragging-body {
 
   /* Empilhado: coluna do herói fica mais alta — mesmo turntable para bunker */
   .shop-viz-turntable {
-    height: clamp(560px, 72vh, 780px);
+    height: clamp(500px, 68vh, 720px);
   }
 }
 
@@ -5550,9 +5565,10 @@ body.enemy-inspect--dragging-body {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(118px, 31%) 1fr;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* `1fr` na 2.ª linha esticava a linha à altura do painel — vazio enorme entre título e atributos */
+  grid-template-rows: auto auto;
   column-gap: 0.42rem;
-  row-gap: 0.2rem;
+  row-gap: 0.04rem;
   align-items: start;
   min-height: min-content;
   height: auto;
@@ -5581,9 +5597,9 @@ body.enemy-inspect--dragging-body {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(108px, 30%) 1fr;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   column-gap: 0.42rem;
-  row-gap: 0.18rem;
+  row-gap: 0.04rem;
   align-items: start;
   min-height: min-content;
   height: auto;
