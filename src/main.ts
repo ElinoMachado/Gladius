@@ -2033,26 +2033,10 @@ function showArenaLayoutEditHud(): void {
   mainMenuSword3d?.dispose();
   mainMenuSword3d = null;
   uiRoot.innerHTML = "";
-  const isoChecked = view.getLayoutCameraIsometric() ? "checked" : "";
-  const camSub = view.isArenaLayoutCameraSubMode();
-  const camRow = camSub
-    ? `<div class="arena-layout-edit-hud__cam-row">
-      <label class="arena-layout-edit-hud__iso-toggle" title="Marcado: vista isométrica ortográfica (gravada em localStorage). Desmarcado: câmara livre em perspetiva — alterações não são gravadas.">
-        <span class="arena-layout-edit-hud__iso-icon" aria-hidden="true">◇</span>
-        <input type="checkbox" id="arena-layout-iso-cb" ${isoChecked} />
-        <span>Modo isométrico</span>
-      </label>
-    </div>`
-    : "";
-  const camHint = camSub
-    ? ` <strong>Modo câmara</strong> — <kbd>Espaço</kbd> volta ao coliseu. Com <strong>Modo isométrico</strong>: WASD pan, roda zoom, botão direito pan (gravado). Câmara livre: órbita WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura do alvo, roda distância (não gravado).`
-    : "";
   const wrap = el(`
     <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar cena</strong> — Clique no <strong>coliseu</strong> ou num <strong>bunker</strong> para selecionar (contorno vermelho). Arrasto no modelo: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> ou numérico +/− escala.${camHint}
-      <br /><kbd>Espaço</kbd> alterna para o modo câmara (quando no coliseu) ou de volta.
-      <br /><kbd>Esc</kbd> grava e volta ao menu (ferramenta de desenvolvimento).
-      ${camRow}
+      <strong>Ajustar cena</strong> — Vista em <strong>perspetiva livre</strong> (como na run com câmara guardada, ou a vista do menu). <strong>Botão direito</strong> arrasta o plano; <strong>roda</strong> aproxima/afasta. Clique no <strong>coliseu</strong> ou num <strong>bunker</strong> para selecionar (contorno vermelho). Arrasto esquerdo no objeto: plano; Shift+arrasto: altura. Teclas no objeto: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> escala.
+      <br /><kbd>Esc</kbd> grava coliseu/bunkers e volta ao menu (a câmara no JSON mantém-se a que tinhas ao entrar).
       <div class="arena-layout-edit-hud__copy-row">
         <button type="button" class="btn" id="arena-layout-copy-json">Copiar JSON (repo)</button>
         <span id="arena-layout-copy-json-feedback" class="arena-layout-edit-hud__copy-feedback" aria-live="polite"></span>
@@ -2071,14 +2055,6 @@ function showArenaLayoutEditHud(): void {
         "Clipboard bloqueado. DevTools → consola: copy(localStorage.getItem('gladius-scene-layout-v1'))";
     }
   });
-  const isoCb = wrap.querySelector(
-    "#arena-layout-iso-cb",
-  ) as HTMLInputElement | null;
-  if (isoCb) {
-    isoCb.addEventListener("change", () => {
-      view.setLayoutCameraIsometric(isoCb.checked);
-    });
-  }
 }
 
 function disposeEquipmentLayoutEditor(): void {
