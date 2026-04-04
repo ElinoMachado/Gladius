@@ -1912,31 +1912,6 @@ export class GameRenderer {
       if (!this.cameraInputEnabled || isTypingTarget(e.target)) return;
       if (e.button !== 0) return;
       const ndc = this.clientToNdc(canvas, e.clientX, e.clientY);
-      /**
-       * Se o raio atinge primeiro a malha do bunker (vista oblíqua / GLB alto), não iniciar pan:
-       * evita `suppressCanvasClick` e deixa o `click` tratar o bunker (skills, movimento, ocupante).
-       */
-      if (this.bunkerRoots.size > 0 && this.hexMeshes.size > 0) {
-        const rayPick = new THREE.Raycaster();
-        rayPick.setFromCamera(
-          new THREE.Vector2(ndc.x, ndc.y),
-          this.getRenderCamera(),
-        );
-        let bunkerDist = Infinity;
-        for (const root of this.bunkerRoots.values()) {
-          const bh = rayPick.intersectObject(root, true);
-          if (bh.length > 0) {
-            bunkerDist = Math.min(bunkerDist, bh[0]!.distance);
-          }
-        }
-        const hexHits = rayPick.intersectObjects(
-          [...this.hexMeshes.values()],
-          false,
-        );
-        const hexDist =
-          hexHits.length > 0 ? hexHits[0]!.distance : Infinity;
-        if (bunkerDist < hexDist) return;
-      }
       const hit = this.intersectGroundNdc(ndc.x, ndc.y);
       if (!hit) return;
       this.panPointerDown = true;
@@ -3156,42 +3131,13 @@ export class GameRenderer {
     return { q: q!, r: r! };
   }
 
-  /**
-   * Hex sob o ponteiro: ganha o hit mais próximo ao longo do raio — tile de chão válido ou malha/cilindro do bunker.
-   * Comportamento simples: hover no hex do bunker ou no modelo 3D (o que estiver à frente).
-   */
+  /** Combate: hex sob o ponteiro só pelo tile (malha do bunker não entra no raycast lógico). */
   pickCombatHex(
     ndcX: number,
     ndcY: number,
     grid: Map<string, HexCell>,
   ): { q: number; r: number } | null {
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.getRenderCamera());
-    let bestDist = Infinity;
-    let best: { q: number; r: number } | null = null;
-
-    const hexHits = ray.intersectObjects([...this.hexMeshes.values()], false);
-    if (hexHits.length > 0) {
-      const k = hexHits[0]!.object.userData.hexKey as string | undefined;
-      if (k && grid.has(k)) {
-        const [q, r] = k.split(",").map(Number);
-        best = { q: q!, r: r! };
-        bestDist = hexHits[0]!.distance;
-      }
-    }
-
-    for (const root of this.bunkerRoots.values()) {
-      const q0 = root.userData.bunkerAxialQ as number | undefined;
-      const r0 = root.userData.bunkerAxialR as number | undefined;
-      if (q0 === undefined || r0 === undefined) continue;
-      const bh = ray.intersectObject(root, true);
-      if (bh.length > 0 && bh[0]!.distance < bestDist) {
-        bestDist = bh[0]!.distance;
-        best = { q: q0, r: r0 };
-      }
-    }
-
-    return best;
+    return this.pickHex(ndcX, ndcY, grid);
   }
 
   pickUnit(
