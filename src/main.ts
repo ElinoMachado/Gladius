@@ -787,6 +787,8 @@ let combatTiroAimCacheSig = "";
 /** Evita acumular `keydown` de combate a cada `render()` / `showCombatHUD()`. */
 let combatHotkeysAbort: AbortController | null = null;
 let combatCornerResizeObserver: ResizeObserver | null = null;
+/** Atualização incremental do HUD de combate (evita `innerHTML` + WebGL do inspect a cada `render()`). */
+let refreshCombatHud: (() => void) | null = null;
 
 const SANDBOX_PANEL_POS_KEY = "gladius-sandbox-panel-pos";
 const SANDBOX_PANEL_VISIBLE_KEY = "gladius-sandbox-panel-visible";
@@ -8103,6 +8105,7 @@ function showCombatHUD(): void {
     { signal: combatInputSignal },
   );
 
+  refreshCombatHud = update;
   update();
 
   canvas.onmousemove = (ev) => {
@@ -8718,6 +8721,7 @@ function render(): void {
     removeEquipmentModal();
   }
   if (model.phase !== "combat") {
+    refreshCombatHud = null;
     combatCornerResizeObserver?.disconnect();
     combatCornerResizeObserver = null;
     combatHotkeysAbort?.abort();
@@ -8769,7 +8773,11 @@ function render(): void {
         view.snapCameraToAxial(ch.q, ch.r);
       }
     }
-    showCombatHUD();
+    if (prevPhase !== "combat" || !refreshCombatHud) {
+      showCombatHUD();
+    } else {
+      refreshCombatHud();
+    }
     if (prevPhase === "shop_initial" || prevPhase === "shop_wave") {
       requestAnimationFrame(() =>
         showWaveIntroOverlay(model.wave, releaseEnemyPhaseAfterWaveIntroOrCometa),

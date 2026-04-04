@@ -301,6 +301,9 @@ export class GameRenderer {
   private zoom = 1.55;
   private readonly keysDown = new Set<string>();
   private domCanvas: HTMLCanvasElement | null = null;
+  /** Evita `setSize(0,0)` quando o layout ainda não mediu o canvas (ecrã preto). */
+  private lastCanvasCssWidth = 1;
+  private lastCanvasCssHeight = 1;
   /** Foco suave no plano XZ (world x, world z em .y). */
   private focusTarget: THREE.Vector2 | null = null;
   private fitCheckAcc = 0;
@@ -2262,8 +2265,15 @@ export class GameRenderer {
   }
 
   resize(canvas: HTMLCanvasElement): void {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
+    let w = canvas.clientWidth;
+    let h = canvas.clientHeight;
+    if (w < 1 || h < 1) {
+      w = this.lastCanvasCssWidth;
+      h = this.lastCanvasCssHeight;
+    } else {
+      this.lastCanvasCssWidth = w;
+      this.lastCanvasCssHeight = h;
+    }
     this.renderer.setSize(w, h, false);
     const aspect = w / Math.max(h, 1);
     this.freeCamera.aspect = aspect;
