@@ -33,6 +33,7 @@ jobs:
       - run: npm run build
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          VITE_PAGES_REPO_NAME: ${{ github.event.repository.name }}
       - name: Commit version bump
         run: |
           git config user.name "github-actions[bot]"

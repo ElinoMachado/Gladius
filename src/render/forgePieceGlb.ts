@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { ForgeEssenceId } from "../game/types";
+import { bundledGltfUrlFromViteImport } from "./bundledAssetUrl";
 import capaUrl from "../models/capa.glb?url";
 import elmoUrl from "../models/Elmo.glb?url";
 import manoplasUrl from "../models/manoplas.glb?url";
@@ -173,7 +174,7 @@ export function preloadForgePieceGlbs(): Promise<void> {
   const loader = new GLTFLoader();
   loadPromise = (async () => {
     const load = async (url: string, prep: (scene: THREE.Object3D) => THREE.Group) => {
-      const gltf = await loader.loadAsync(url);
+      const gltf = await loader.loadAsync(bundledGltfUrlFromViteImport(url));
       return prep(gltf.scene);
     };
     try {

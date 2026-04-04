@@ -8,6 +8,7 @@ import {
   prepareHeroGlbRoot,
   tintHeroMeshes,
 } from "./heroGlbShared";
+import { bundledGltfUrlFromViteImport } from "./bundledAssetUrl";
 
 import gladiadorUrl from "../models/Gladiador.glb?url";
 import sacerdotisaUrl from "../models/Sacerdotisa.glb?url";
@@ -44,7 +45,7 @@ function loadOne(heroClass: HeroClassId): Promise<boolean> {
   loadPromises[heroClass] = new Promise((resolve) => {
     const loader = new GLTFLoader();
     loader.load(
-      URLS[heroClass],
+      bundledGltfUrlFromViteImport(URLS[heroClass]),
       (gltf) => {
         const clips = gltf.animations ?? [];
         registerHeroAnimationClips(

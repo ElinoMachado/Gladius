@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { axialToWorld, hexDistance } from "../game/hex";
 import arenaUrl from "../models/Arena.glb?url";
+import { bundledGltfUrlFromViteImport } from "./bundledAssetUrl";
 
 /** Manter alinhado com `GameRenderer` (hex + raio da arena). */
 const HEX_SIZE = 2.18;
@@ -113,9 +114,10 @@ export function preloadArenaColiseumGlb(): Promise<boolean> {
   if (loadAttempted && !templateRoot) return Promise.resolve(false);
   loadAttempted = true;
   loadPromise = new Promise((resolve) => {
+    const href = bundledGltfUrlFromViteImport(arenaUrl);
     const loader = new GLTFLoader();
     loader.load(
-      arenaUrl,
+      href,
       (gltf) => {
         templateRoot = prepareTemplate(gltf.scene);
         resolve(true);
@@ -123,8 +125,11 @@ export function preloadArenaColiseumGlb(): Promise<boolean> {
       undefined,
       (err) => {
         console.warn(
-          "[Arena GLB] Falha ao carregar o coliseu (ver base URL em GitHub Pages):",
+          "[Arena GLB] Falha ao carregar o coliseu:",
+          href,
+          "(import Vite:",
           arenaUrl,
+          ")",
           err,
         );
         templateRoot = null;
