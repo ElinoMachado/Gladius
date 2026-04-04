@@ -949,14 +949,25 @@ export class GameRenderer {
     this.bunkerHitFlashUntil.set(k, Math.max(prev, now + 280));
   }
 
+  private isEmissiveCombatMaterial(
+    m: THREE.Material,
+  ): m is THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial {
+    return (
+      m instanceof THREE.MeshStandardMaterial ||
+      m instanceof THREE.MeshPhysicalMaterial
+    );
+  }
+
   private clearBunkerMaterialFlash(root: THREE.Group): void {
     root.traverse((obj) => {
-      if (
-        obj instanceof THREE.Mesh &&
-        obj.material instanceof THREE.MeshStandardMaterial
-      ) {
-        obj.material.emissive.setHex(0);
-        obj.material.emissiveIntensity = 0;
+      if (!(obj instanceof THREE.Mesh)) return;
+      const mats = Array.isArray(obj.material)
+        ? obj.material
+        : [obj.material];
+      for (const m of mats) {
+        if (!this.isEmissiveCombatMaterial(m)) continue;
+        m.emissive.setHex(0);
+        m.emissiveIntensity = 0;
       }
     });
   }
@@ -975,12 +986,14 @@ export class GameRenderer {
       const phase = (until - now) / dur;
       const w = phase * phase;
       root.traverse((obj) => {
-        if (
-          obj instanceof THREE.Mesh &&
-          obj.material instanceof THREE.MeshStandardMaterial
-        ) {
-          obj.material.emissive.copy(this.flashEmissiveScratch);
-          obj.material.emissiveIntensity = w * 1.45;
+        if (!(obj instanceof THREE.Mesh)) return;
+        const mats = Array.isArray(obj.material)
+          ? obj.material
+          : [obj.material];
+        for (const m of mats) {
+          if (!this.isEmissiveCombatMaterial(m)) continue;
+          m.emissive.copy(this.flashEmissiveScratch);
+          m.emissiveIntensity = w * 1.45;
         }
       });
     }
@@ -2989,15 +3002,18 @@ export class GameRenderer {
 
     let proxy = g.userData.bunkerPickProxy as THREE.Mesh | undefined;
     if (inBunker) {
+      /** Cobre ~todo o hex + volume do bunker GLB (deslocado do centro); só para raycast. */
+      const pickXZ = HEX_SIZE * Math.sqrt(3) * 1.06;
+      const pickH = 1.45;
       if (!proxy) {
-        const geo = new THREE.BoxGeometry(1.45, 0.85, 1.25);
+        const geo = new THREE.BoxGeometry(pickXZ, pickH, pickXZ);
         const mat = new THREE.MeshBasicMaterial({
           transparent: true,
           opacity: 0,
           depthWrite: false,
         });
         proxy = new THREE.Mesh(geo, mat);
-        proxy.position.y = 0.42;
+        proxy.position.y = pickH * 0.5 - 0.05;
         proxy.userData.role = "bunkerPickProxy";
         g.add(proxy);
         g.userData.bunkerPickProxy = proxy;
@@ -3109,12 +3125,35 @@ export class GameRenderer {
     return { q: q!, r: r! };
   }
 
-  pickUnit(ndcX: number, ndcY: number): string | null {
+  pickUnit(
+    ndcX: number,
+    ndcY: number,
+    opts?: {
+      grid: Map<string, HexCell>;
+      bunkerOccupantIdAt?: (q: number, r: number) => string | null;
+    },
+  ): string | null {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.getRenderCamera());
+    let bestId: string | null = null;
+    let bestDist = Infinity;
     for (const [id, g] of this.unitMeshes) {
       const hits = ray.intersectObject(g, true);
-      if (hits.length > 0) return id;
+      for (const h of hits) {
+        if (h.distance < bestDist) {
+          bestDist = h.distance;
+          bestId = id;
+        }
+      }
+    }
+    if (bestId !== null) return bestId;
+    const occFn = opts?.bunkerOccupantIdAt;
+    if (opts?.grid && occFn) {
+      const hex = this.pickHex(ndcX, ndcY, opts.grid);
+      if (hex) {
+        const occ = occFn(hex.q, hex.r);
+        if (occ) return occ;
+      }
     }
     return null;
   }

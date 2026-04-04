@@ -7743,7 +7743,15 @@ function showCombatHUD(): void {
       update();
     }
 
-    const uid = view.pickUnit(x, y);
+    const uid = view.pickUnit(x, y, {
+      grid: model.grid,
+      bunkerOccupantIdAt: (q, r) => {
+        const b = model.bunkerAtHex(q, r);
+        if (!b || b.hp <= 0 || !b.occupantId) return null;
+        const u = model.units.find((z) => z.id === b.occupantId);
+        return u && u.isPlayer && u.hp > 0 ? b.occupantId : null;
+      },
+    });
 
     const openMovePreviewIfPossible = (): void => {
       let show = false;
