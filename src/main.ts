@@ -153,6 +153,7 @@ import { biomeAt, effectiveEnemyBaseDefesa } from "./game/unitFactory";
 import { HERO_STAT_TIP } from "./ui/heroStatRichText";
 import {
   combatHeroStatTooltip,
+  formatOuroDisplay,
   formatTooltipNumber,
   setupHeroStatTooltip,
 } from "./ui/heroStatTooltips";
@@ -2434,11 +2435,11 @@ function showWaveSummaryOverlay(): void {
   for (const g of summary.goldLines) {
     if (g.bonus > 0) {
       lines.push(
-        `<p class="wave-summary-overlay__line">${escapeHtml(g.heroName)}: ${g.base} ouro base + <span class="wave-summary-overlay__bonus">+${g.bonus}</span> (meta) → <strong>${g.total}</strong> na bolsa</p>`,
+        `<p class="wave-summary-overlay__line">${escapeHtml(g.heroName)}: ${formatOuroDisplay(g.base)} ouro base + <span class="wave-summary-overlay__bonus">+${formatOuroDisplay(g.bonus)}</span> (meta) → <strong>${formatOuroDisplay(g.total)}</strong> na bolsa</p>`,
       );
     } else {
       lines.push(
-        `<p class="wave-summary-overlay__line">${escapeHtml(g.heroName)}: <strong>${g.total}</strong> ouro na bolsa</p>`,
+        `<p class="wave-summary-overlay__line">${escapeHtml(g.heroName)}: <strong>${formatOuroDisplay(g.total)}</strong> ouro na bolsa</p>`,
       );
     }
   }
@@ -3421,7 +3422,7 @@ function showGoldShop(isInitial: boolean): void {
         const tc = ph.teamColor
           ? teamColorCss(ph.teamColor)
           : "rgba(160, 150, 130, 0.85)";
-        const bagLabel = `${ph.name}: ${ph.ouro} ouro. ${
+        const bagLabel = `${ph.name}: ${formatOuroDisplay(ph.ouro)} ouro. ${
           active ? "A ver na loja." : "Clica para ver a loja deste herói."
         }`;
         return `<button type="button" class="shop-hero-gold-bag${
@@ -3430,7 +3431,7 @@ function showGoldShop(isInitial: boolean): void {
           <span class="shop-hero-gold-bag__stripe" aria-hidden="true"></span>
           <span class="shop-hero-gold-bag__coin" aria-hidden="true">${combatGoldCoinSvgHtml("shop-hero-gold-bag__coin-svg")}</span>
           <span class="shop-hero-gold-bag__meta">
-            <span class="shop-hero-gold-bag__value">${ph.ouro}</span>
+            <span class="shop-hero-gold-bag__value">${formatOuroDisplay(ph.ouro)}</span>
             <span class="shop-hero-gold-bag__name">${escapeHtml(ph.name)}</span>
           </span>
         </button>`;
@@ -3529,7 +3530,7 @@ function showGoldShop(isInitial: boolean): void {
         if (!ph)
           return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Bolsa de ouro</div></div>`;
         const title = escapeHtml(ph.name);
-        const body = `<p class="game-ui-tooltip-passive">Bolsa <strong>individual</strong>: só este herói pode gastar estes <strong>${ph.ouro}</strong> ouro na loja.</p>`;
+        const body = `<p class="game-ui-tooltip-passive">Bolsa <strong>individual</strong>: só este herói pode gastar estes <strong>${formatOuroDisplay(ph.ouro)}</strong> ouro na loja.</p>`;
         return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">${title}</div>${body}</div>`;
       });
     });
@@ -4514,7 +4515,8 @@ function mountGoldShopBunkerSkillsRow(
 
 function goldShopBunkerSectionHtml(bunk: BunkerState, h: Unit): string {
   const missing = bunk.maxHp - bunk.hp;
-  const canRepair = missing > 0 && h.ouro >= missing;
+  const repairCost = Math.ceil(missing);
+  const canRepair = missing > 0 && h.ouro >= repairCost;
   const t = bunk.tier;
   const rawEv = t >= 2 ? 0 : BUNKER_EVOLVE_COSTS[t as 0 | 1] ?? 0;
   let evCost = rawEv;
@@ -4524,15 +4526,15 @@ function goldShopBunkerSectionHtml(bunk: BunkerState, h: Unit): string {
   const canEv = t < 2 && h.ouro >= evCost;
   const disp = bunkerDisplayLevel(t);
   const nvStr = `${disp}/3`;
-  const repairLabel = `Reparar ${formatTooltipNumber(missing)} ouro`;
-  const repairInner = `<span class="shop-bunker-action-btn__inner"><span class="shop-bunker-action-btn__label">Reparar</span><span class="shop-bunker-action-btn__cost">${formatTooltipNumber(missing)}</span>${combatGoldCoinSvgHtml("shop-bunker-action-btn__coin")}</span>`;
+  const repairLabel = `Reparar ${formatOuroDisplay(repairCost)} ouro`;
+  const repairInner = `<span class="shop-bunker-action-btn__inner"><span class="shop-bunker-action-btn__label">Reparar</span><span class="shop-bunker-action-btn__cost">${formatOuroDisplay(repairCost)}</span>${combatGoldCoinSvgHtml("shop-bunker-action-btn__coin")}</span>`;
   const evolveDisabled = t >= 2 || !canEv;
   const evolveInner =
     t >= 2
       ? `<span class="shop-bunker-action-btn__inner shop-bunker-action-btn__inner--solo">Nível máximo</span>`
-      : `<span class="shop-bunker-action-btn__inner"><span class="shop-bunker-action-btn__label">Evoluir</span><span class="shop-bunker-action-btn__cost">${formatTooltipNumber(evCost)}</span>${combatGoldCoinSvgHtml("shop-bunker-action-btn__coin")}</span>`;
+      : `<span class="shop-bunker-action-btn__inner"><span class="shop-bunker-action-btn__label">Evoluir</span><span class="shop-bunker-action-btn__cost">${formatOuroDisplay(evCost)}</span>${combatGoldCoinSvgHtml("shop-bunker-action-btn__coin")}</span>`;
   const evolveLabel =
-    t >= 2 ? "Nível máximo do bunker" : `Evoluir por ${formatTooltipNumber(evCost)} ouro`;
+    t >= 2 ? "Nível máximo do bunker" : `Evoluir por ${formatOuroDisplay(evCost)} ouro`;
   return `<div class="shop-bunker-viz-layout">
     <div class="shop-bunker-viz-layout__preview">
       <div id="bunker-preview-host" class="gold-shop-hero-3d-host shop-bunker-viz-layout__3d-host" aria-hidden="true"></div>
@@ -4548,7 +4550,7 @@ function goldShopBunkerSectionHtml(bunk: BunkerState, h: Unit): string {
         <p class="shop-hero-stats-head shop-bunker-skills-block__head">Habilidades</p>
         <div id="gold-shop-bunker-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do bunker"></div>
       </div>
-      <p class="shop-bunker-viz-layout__hint">Reparar: 1 ouro por PV em falta. Evoluções: 300 ouro (1.ª), 500 ouro (2.ª).</p>
+      <p class="shop-bunker-viz-layout__hint">Reparar: custo em ouro igual ao teto dos PV em falta (1 ouro por PV completo; partes de PV contam como 1 ouro). Evoluções: 300 ouro (1.ª), 500 ouro (2.ª).</p>
       <div class="shop-bunker-viz-layout__actions">
         <button type="button" class="btn shop-bunker-action-btn" id="bunk-repair" ${missing <= 0 || !canRepair ? "disabled" : ""} aria-label="${escapeHtml(repairLabel)}">${repairInner}</button>
         <button type="button" class="btn shop-bunker-action-btn" id="bunk-evolve" ${evolveDisabled ? "disabled" : ""} aria-label="${escapeHtml(evolveLabel)}">${evolveInner}</button>
@@ -6563,7 +6565,7 @@ function showCombatHUD(): void {
     if (stipEl) {
       const coin = combatGoldCoinSvgHtml("wave-stipend-coin-svg");
       stipEl.innerHTML = `<div class="wave-stipend-stack">
-        <span class="wave-stipend-line"><span class="wave-stipend-gold">${sumWaveGold}</span> <span class="wave-stipend-drain">(−${drainNext})</span></span>
+        <span class="wave-stipend-line"><span class="wave-stipend-gold">${formatOuroDisplay(sumWaveGold)}</span> <span class="wave-stipend-drain">(−${formatOuroDisplay(drainNext)})</span></span>
         <div class="wave-stipend-wave" aria-hidden="true">
           <span class="wave-stipend-bar" style="--wave-tick:0.32"></span>
           <span class="wave-stipend-bar" style="--wave-tick:0.5"></span>
@@ -6638,7 +6640,8 @@ function showCombatHUD(): void {
     const sumBolsa = model
       .getParty()
       .reduce((s, u) => s + (u.hp > 0 ? u.ouro : 0), 0);
-    bottom.querySelector("#party-ouro-sum")!.textContent = String(sumBolsa);
+    bottom.querySelector("#party-ouro-sum")!.textContent =
+      formatOuroDisplay(sumBolsa);
     const crEl = bottom.querySelector("#combat-crystals-run");
     if (crEl) crEl.textContent = String(model.crystalsRun);
     const essStrip = bottom.querySelector("#combat-essences-strip") as HTMLElement;

@@ -11,6 +11,12 @@ export function formatTooltipNumber(n: number): string {
   return r.toFixed(2).replace(".", ",");
 }
 
+/** Ouro na UI (bolsa, custos em ouro): valor inteiro, sem casas decimais. */
+export function formatOuroDisplay(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  return String(Math.round(n));
+}
+
 function formatReductionPctFromDefense(effDef: number): string {
   const pct = damageReductionPercentFromDefense(effDef, 0);
   return formatTooltipNumber(pct);

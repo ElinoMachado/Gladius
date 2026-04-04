@@ -5625,12 +5625,13 @@ export class GameModel {
     if (!b) return false;
     const missing = b.maxHp - b.hp;
     if (missing <= 0) return false;
-    if (u.ouro < missing) return false;
-    u.ouro -= missing;
+    const cost = Math.ceil(missing);
+    if (u.ouro < cost) return false;
+    u.ouro -= cost;
     b.hp = b.maxHp;
     const biome = this.heroHomeBiome(u);
     this.log(
-      `Bunker do bioma ${BIOME_LABELS[biome]} reparado (${missing} ouro).`,
+      `Bunker do bioma ${BIOME_LABELS[biome]} reparado (${cost} ouro).`,
     );
     this.emit();
     return true;
