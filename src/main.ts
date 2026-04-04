@@ -10,6 +10,7 @@ import {
 } from "./game/gameModel";
 import { GameRenderer } from "./render/GameRenderer";
 import { preloadArenaColiseumGlb } from "./render/arenaColiseumGlb";
+import { preloadBunkerGlbs } from "./render/bunkerGlbLoader";
 import { preloadForgePieceGlbs } from "./render/forgePieceGlb";
 import { preloadAllHeroGlbs } from "./render/heroGlbLoader";
 import { HeroPreview3D } from "./render/HeroPreview3D";
@@ -296,6 +297,7 @@ Promise.all([
   preloadAllHeroGlbs(),
   preloadForgePieceGlbs(),
   preloadArenaColiseumGlb(),
+  preloadBunkerGlbs(),
 ]).then(async () => {
   await Promise.all([
     initSceneLayoutPrefsFromDeploy(),

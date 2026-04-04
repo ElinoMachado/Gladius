@@ -32,8 +32,7 @@ import {
 } from "./heroUnitAnimations";
 import { heroHitReactClipName, heroRunClipName } from "../game/heroCombatAnimMs";
 import {
-  applyBunkerTierMaterials,
-  createBunkerStructureGroup,
+  createBunkerVisualGroup,
   type BunkerRenderTier,
 } from "./bunkerMesh";
 import {
@@ -3537,11 +3536,17 @@ export class GameRenderer {
       let root = this.bunkerRoots.get(k);
       const tier = b.tier;
       if (!root) {
-        root = createBunkerStructureGroup(tier);
+        root = createBunkerVisualGroup(tier);
         this.bunkerRoots.set(k, root);
         this.arenaRoot.add(root);
       } else if ((root.userData.bunkerTier as BunkerRenderTier | undefined) !== tier) {
-        applyBunkerTierMaterials(root, tier);
+        const pos = root.position.clone();
+        this.arenaRoot.remove(root);
+        this.disposeObject3D(root);
+        root = createBunkerVisualGroup(tier);
+        this.bunkerRoots.set(k, root);
+        root.position.copy(pos);
+        this.arenaRoot.add(root);
       }
       const { x, z } = axialToWorld(b.q, b.r, HEX_SIZE);
       root.position.set(x, this.playSurfaceYOffset(), z);

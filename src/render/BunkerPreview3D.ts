@@ -1,8 +1,5 @@
 import * as THREE from "three";
-import {
-  applyBunkerTierMaterials,
-  createBunkerStructureGroup,
-} from "./bunkerMesh";
+import { createBunkerVisualGroup, type BunkerRenderTier } from "./bunkerMesh";
 
 function disposeObject3D(o: THREE.Object3D): void {
   o.traverse((obj) => {
@@ -21,10 +18,11 @@ export class BunkerPreview3D {
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
   private root = new THREE.Group();
-  private readonly bunkerModel: THREE.Group;
+  private bunkerModel: THREE.Group;
   private host: HTMLElement;
   private raf = 0;
   private running = false;
+  private previewTier: BunkerRenderTier = 0;
   private onResize = (): void => this.fit();
 
   constructor(host: HTMLElement) {
@@ -48,7 +46,7 @@ export class BunkerPreview3D {
     rim.position.set(-2, 2, -3);
     this.scene.add(amb, key, rim);
 
-    this.bunkerModel = createBunkerStructureGroup(0);
+    this.bunkerModel = createBunkerVisualGroup(0);
     this.root.add(this.bunkerModel);
     this.scene.add(this.root);
 
@@ -56,9 +54,16 @@ export class BunkerPreview3D {
     this.fit();
   }
 
-  setTier(tier: 0 | 1 | 2): void {
-    applyBunkerTierMaterials(this.bunkerModel, tier);
-    const s = tier === 0 ? 1 : tier === 1 ? 1.06 : 1.12;
+  setTier(tier: BunkerRenderTier): void {
+    if (this.previewTier !== tier) {
+      this.root.remove(this.bunkerModel);
+      disposeObject3D(this.bunkerModel);
+      this.bunkerModel = createBunkerVisualGroup(tier);
+      this.root.add(this.bunkerModel);
+      this.previewTier = tier;
+    }
+    const glb = !!this.bunkerModel.userData.bunkerGlb;
+    const s = glb ? 1 : tier === 0 ? 1 : tier === 1 ? 1.06 : 1.12;
     this.root.scale.setScalar(s);
   }
 

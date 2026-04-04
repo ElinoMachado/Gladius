@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { cloneBunkerGlbForTier } from "./bunkerGlbLoader";
 
 export type BunkerRenderTier = 0 | 1 | 2;
 
@@ -81,4 +82,17 @@ export function createBunkerStructureGroup(tier: BunkerRenderTier = 0): THREE.Gr
   root.add(base, top, lip);
   applyBunkerTierMaterials(root, tier);
   return root;
+}
+
+/** Arena / loja: GLB por nível (`bunkerNv1`…`3`) ou fallback procedural. */
+export function createBunkerVisualGroup(tier: BunkerRenderTier = 0): THREE.Group {
+  const g = cloneBunkerGlbForTier(tier);
+  if (g) {
+    g.userData.bunkerTier = tier;
+    g.userData.bunkerGlb = true;
+    return g;
+  }
+  const p = createBunkerStructureGroup(tier);
+  p.userData.bunkerGlb = false;
+  return p;
 }
