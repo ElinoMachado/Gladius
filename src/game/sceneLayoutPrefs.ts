@@ -7,16 +7,19 @@ const LS_KEY = "gladius-scene-layout-v1";
 
 export type BunkerTierKey = "0" | "1" | "2";
 
-/** Offset e escala do bunker em espaço local da arena (relativo ao hex nominal). */
+/**
+ * Ajuste fino do bunker no hex da run (centro do hex lógico): altura por tier, escala e rotação Y.
+ * `x`/`z` e `hexQ`/`hexR` em JSON antigo são ignorados na normalização — o modelo fica sempre no hex do jogo.
+ */
 export type BunkerLayoutEntry = {
   x: number;
   z: number;
   scale: number;
-  /**
-   * Hex lógico do bunker (combate / `bunkerAtHex`). Gravado ao mover o bunker no ajuste de cena;
-   * mantém skills e ocupante alinhados à malha quando o modelo está deslocado de `x,z`.
-   */
+  /** Rotação em radianos em torno do eixo Y (mount). */
+  rotY?: number;
+  /** @deprecated Ignorado; hex vem sempre do estado da run. */
   hexQ?: number;
+  /** @deprecated Ignorado. */
   hexR?: number;
   /**
    * Altura do mount por variante de modelo (nv1–3). Se ausente, usa `y` legado para todos.
@@ -88,13 +91,9 @@ function clonePrefs(p: SceneLayoutPrefs): SceneLayoutPrefs {
       x: e.x,
       z: e.z,
       scale: e.scale,
-      hexQ:
-        typeof e.hexQ === "number" && Number.isFinite(e.hexQ)
-          ? e.hexQ
-          : undefined,
-      hexR:
-        typeof e.hexR === "number" && Number.isFinite(e.hexR)
-          ? e.hexR
+      rotY:
+        typeof e.rotY === "number" && Number.isFinite(e.rotY)
+          ? e.rotY
           : undefined,
       y: typeof e.y === "number" && Number.isFinite(e.y) ? e.y : undefined,
       yByTier:
@@ -175,8 +174,6 @@ function normalizeBunkerLayoutEntry(
 ): BunkerLayoutEntry | null {
   if (!e || typeof e !== "object") return null;
   const o = e as Record<string, unknown>;
-  const x = typeof o.x === "number" && Number.isFinite(o.x) ? o.x : 0;
-  const z = typeof o.z === "number" && Number.isFinite(o.z) ? o.z : 0;
   const scale =
     typeof o.scale === "number" && Number.isFinite(o.scale)
       ? Math.min(48, Math.max(0.02, o.scale))
@@ -187,15 +184,9 @@ function normalizeBunkerLayoutEntry(
   if (!yByTier && legacyY !== undefined) {
     yByTier = { "0": legacyY, "1": legacyY, "2": legacyY };
   }
-  const hexQ =
-    typeof o.hexQ === "number" && Number.isFinite(o.hexQ)
-      ? Math.round(o.hexQ)
-      : undefined;
-  const hexR =
-    typeof o.hexR === "number" && Number.isFinite(o.hexR)
-      ? Math.round(o.hexR)
-      : undefined;
-  const entry: BunkerLayoutEntry = { x, z, scale, yByTier, hexQ, hexR };
+  const rotY =
+    typeof o.rotY === "number" && Number.isFinite(o.rotY) ? o.rotY : undefined;
+  const entry: BunkerLayoutEntry = { x: 0, z: 0, scale, yByTier, rotY };
   if (legacyY !== undefined && !o.yByTier) entry.y = legacyY;
   return entry;
 }

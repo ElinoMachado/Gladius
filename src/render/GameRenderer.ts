@@ -4,10 +4,7 @@ import {
   UNIT_MOVE_SEGMENT_MS,
 } from "../game/combatTiming";
 import { axialToWorld, axialKey, hexDistance, type Axial } from "../game/hex";
-import {
-  nearestHexInBiomeForWorldXz,
-  type HexCell,
-} from "../game/grid";
+import type { HexCell } from "../game/grid";
 import type { Unit } from "../game/types";
 import {
   bleedInstanceCount,
@@ -240,8 +237,6 @@ export class GameRenderer {
     { startMs: number; durationMs: number; peakY: number; baseX: number; baseZ: number }
   >();
   private readonly bunkerRoots = new Map<string, THREE.Group>();
-  /** Grelha do mapa: âncoras `hexQ`/`hexR` ao gravar layout dos bunkers. */
-  private bunkerAnchorGrid: Map<string, HexCell> | null = null;
   private readonly bunkerHitFlashUntil = new Map<string, number>();
   /** Quando (ms perf.now) o herói deve ficar oculto ao entrar no bunker. */
   private readonly bunkerHideAtByHeroId = new Map<string, number>();
@@ -500,11 +495,6 @@ export class GameRenderer {
   /** Chamado a partir do `render()` do jogo: em combate força vista ortográfica e controlos de câmara. */
   setCombatUsesOrthographicView(active: boolean): void {
     this.combatUsesOrthographicView = active;
-  }
-
-  /** Define a grelha usada para calcular o hex mais próximo ao mover bunkers no editor (e persistir `hexQ`/`hexR`). */
-  setBunkerAnchorGrid(grid: Map<string, HexCell> | null): void {
-    this.bunkerAnchorGrid = grid;
   }
 
   /** Se o último gesto foi arrastar a câmera, o combate deve ignorar o `click` seguinte. */
@@ -3801,14 +3791,15 @@ export class GameRenderer {
             ? snap.bunkerLayout[biome]!
             : { x: 0, z: 0, scale: 1 };
         const off: BunkerLayoutEntry = {
-          x: Number.isFinite(raw.x) ? raw.x : 0,
-          z: Number.isFinite(raw.z) ? raw.z : 0,
+          x: 0,
+          z: 0,
           scale:
             typeof raw.scale === "number" && Number.isFinite(raw.scale)
               ? THREE.MathUtils.clamp(raw.scale, 0.02, 48)
               : 1,
           y: raw.y,
           yByTier: raw.yByTier,
+          rotY: raw.rotY,
         };
         const base = axialToWorld(b.q, b.r, HEX_SIZE);
         const py = this.playSurfaceYOffset();
@@ -3819,7 +3810,12 @@ export class GameRenderer {
         const tierForY =
           this.arenaLayoutEditActive && preview != null ? preview : tier;
         const yOff = bunkerMountYOffset(off, tierForY);
-        root.position.set(base.x + off.x, py + yOff, base.z + off.z);
+        const rotY =
+          typeof off.rotY === "number" && Number.isFinite(off.rotY)
+            ? off.rotY
+            : 0;
+        root.position.set(base.x, py + yOff, base.z);
+        root.rotation.set(0, rotY, 0);
         root.scale.setScalar(off.scale);
       }
       this.ensureBunkerInteractionVolume(root);
@@ -4442,22 +4438,12 @@ export class GameRenderer {
       const r0 = root.userData.bunkerAxialR as number | undefined;
       if (!biome || q0 === undefined || r0 === undefined) continue;
       const lay = snap.bunkerLayout?.[biome];
-      const useLayHex =
-        !!(
-          lay &&
-          typeof lay.hexQ === "number" &&
-          typeof lay.hexR === "number" &&
-          Number.isFinite(lay.hexQ) &&
-          Number.isFinite(lay.hexR)
-        );
-      const anchorQ = useLayHex ? Math.round(lay!.hexQ!) : q0;
-      const anchorR = useLayHex ? Math.round(lay!.hexR!) : r0;
       const off: BunkerLayoutEntry = lay ?? {
         x: 0,
         z: 0,
         scale: 1,
       };
-      const base = axialToWorld(anchorQ, anchorR, HEX_SIZE);
+      const base = axialToWorld(q0, r0, HEX_SIZE);
       const py = this.playSurfaceYOffset();
       const sc = THREE.MathUtils.clamp(off.scale, 0.02, 48);
       const dataTier = (root.userData.bunkerDataTier ?? 0) as BunkerRenderTier;
@@ -4469,7 +4455,10 @@ export class GameRenderer {
           ? preview
           : dataTier;
       const yOff = bunkerMountYOffset(off, tierForY);
-      root.position.set(base.x + off.x, py + yOff, base.z + off.z);
+      const rotY =
+        typeof off.rotY === "number" && Number.isFinite(off.rotY) ? off.rotY : 0;
+      root.position.set(base.x, py + yOff, base.z);
+      root.rotation.set(0, rotY, 0);
       root.scale.setScalar(sc);
     }
   }
@@ -4485,22 +4474,6 @@ export class GameRenderer {
       const r = root.userData.bunkerAxialR as number | undefined;
       if (q === undefined || r === undefined) continue;
       const prev = out[biome] ?? { x: 0, z: 0, scale: 1 };
-      let anchorQ = q;
-      let anchorR = r;
-      if (this.bunkerAnchorGrid) {
-        const hit = nearestHexInBiomeForWorldXz(
-          this.bunkerAnchorGrid,
-          biome,
-          root.position.x,
-          root.position.z,
-          HEX_SIZE,
-        );
-        if (hit) {
-          anchorQ = hit.q;
-          anchorR = hit.r;
-        }
-      }
-      const baseW = axialToWorld(anchorQ, anchorR, HEX_SIZE);
       const py = this.playSurfaceYOffset();
       const yByTier: Partial<Record<"0" | "1" | "2", number>> = {
         ...(prev.yByTier ?? {}),
@@ -4516,12 +4489,11 @@ export class GameRenderer {
       const tierKey = String(tt) as "0" | "1" | "2";
       yByTier[tierKey] = root.position.y - py;
       out[biome] = {
-        x: root.position.x - baseW.x,
-        z: root.position.z - baseW.z,
+        x: 0,
+        z: 0,
         scale: THREE.MathUtils.clamp(root.scale.x, 0.02, 48),
         yByTier,
-        hexQ: anchorQ,
-        hexR: anchorR,
+        rotY: root.rotation.y,
       };
     }
     return out;
@@ -4891,6 +4863,7 @@ export class GameRenderer {
     mount: THREE.Object3D,
     dw: THREE.Vector3,
   ): void {
+    if (mount.userData?.layoutBunkerBiome != null) return;
     const c = Math.cos(-this.arenaYaw);
     const s = Math.sin(-this.arenaYaw);
     const lx = dw.x * c + dw.z * s;
@@ -5122,7 +5095,7 @@ export class GameRenderer {
       const preview = root.userData.layoutPreviewTier as BunkerRenderTier | null | undefined;
       const pv =
         preview != null ? `pré-visualização nv. ${preview + 1}` : "nv. jogo";
-      return `Bunker (${bio ?? "?"}) — 1/2/3 modelo; altura Y com X/Z grava neste nível (${pv}).`;
+      return `Bunker (${bio ?? "?"}) — fixo no hex da run. 1–3 modelo; X/Z altura; J/L rodar; [ ] escala; Shift+arrasto: altura (${pv}).`;
     }
     return "Objeto selecionado.";
   }
@@ -5287,6 +5260,8 @@ export class GameRenderer {
       "KeyD",
       "KeyX",
       "KeyZ",
+      "KeyJ",
+      "KeyL",
       "KeyQ",
       "KeyE",
       "BracketLeft",
@@ -5331,6 +5306,7 @@ export class GameRenderer {
     if (!this.layoutSelectedRoot) return;
     const sel = this.layoutSelectedRoot;
     const sp = 17 * dt;
+    const bunkerMount = sel.userData?.layoutBunkerBiome != null;
     const ix =
       (this.keysDown.has("KeyD") ? 1 : 0) -
       (this.keysDown.has("KeyA") ? 1 : 0);
@@ -5341,7 +5317,7 @@ export class GameRenderer {
       (this.keysDown.has("KeyX") ? 1 : 0) -
       (this.keysDown.has("KeyZ") ? 1 : 0);
     let moved = false;
-    if (ix !== 0 || iz !== 0) {
+    if (!bunkerMount && (ix !== 0 || iz !== 0)) {
       this.editorScratchVec3.set(ix * sp, 0, iz * sp);
       this.applyWorldDeltaToLayoutMountXZ(sel, this.editorScratchVec3);
       moved = true;
@@ -5349,6 +5325,17 @@ export class GameRenderer {
     if (iy !== 0) {
       sel.position.y += iy * sp;
       moved = true;
+    }
+    if (bunkerMount) {
+      const yaw =
+        1.85 *
+        dt *
+        ((this.keysDown.has("KeyL") ? 1 : 0) -
+          (this.keysDown.has("KeyJ") ? 1 : 0));
+      if (yaw !== 0) {
+        sel.rotation.y += yaw;
+        moved = true;
+      }
     }
     let scaled = false;
     const sUp = 0.88 * dt;
@@ -5382,6 +5369,8 @@ export class GameRenderer {
       "KeyD",
       "KeyX",
       "KeyZ",
+      "KeyJ",
+      "KeyL",
       "BracketLeft",
       "BracketRight",
       "NumpadAdd",
@@ -5531,9 +5520,12 @@ export class GameRenderer {
             this.layoutSelectedRoot,
           )
         ) {
+          const selRoot = this.layoutSelectedRoot;
+          const selIsBunker = selRoot?.userData?.layoutBunkerBiome != null;
           if (e.shiftKey) {
             this.editorDragMode = "coliseum_y";
           } else if (
+            !selIsBunker &&
             this.intersectGroundWithCamera(
               pickCam,
               ndc.x,

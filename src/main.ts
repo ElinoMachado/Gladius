@@ -2082,7 +2082,7 @@ function showArenaLayoutEditHud(): void {
   const wrap = el(`
     <div class="arena-layout-edit-shell">
       <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar cena</strong> — Coliseu, trono, bunkers, três heróis e um inimigo de referência (ao clicar nele abre a lista do compendium). <strong>Câmara em tempo real</strong> (não grava no JSON). Realce violeta como em «Ajustar equipamento». Fora do voo: botão direito arrasta o plano, roda zoom. <kbd>Espaço</kbd>: voo livre. Bunker: <kbd>1</kbd>–<kbd>3</kbd> modelo.
+      <strong>Ajustar cena</strong> — Coliseu, trono, bunkers (fixos no hex da run: altura X/Z, rotação J/L, escala [ ]), três heróis e um inimigo de referência (ao clicar nele abre a lista do compendium). <strong>Câmara em tempo real</strong> (não grava no JSON). Realce violeta como em «Ajustar equipamento». Fora do voo: botão direito arrasta o plano, roda zoom. <kbd>Espaço</kbd>: voo livre. Bunker: <kbd>1</kbd>–<kbd>3</kbd> modelo.
       <br /><span id="arena-layout-dynamic-hint" class="arena-layout-edit-hud__dynamic">${escapeHtml(view.getArenaLayoutEditSelectionHint())}</span>
       <div id="arena-layout-enemy-picker-wrap" class="arena-layout-enemy-picker-wrap" hidden aria-hidden="true">
         <label class="arena-layout-enemy-picker__label" for="arena-layout-enemy-select">Inimigo do compendium</label>
@@ -8331,7 +8331,6 @@ function render(): void {
     model.phase === "main_menu" &&
     view.isArenaLayoutEditActive();
 
-  view.setBunkerAnchorGrid(model.grid);
   const mv = model.takePendingMoveAnimation();
   view.syncUnits(
     layoutSceneEdit ? model.layoutEditorSyntheticUnits() : model.units,

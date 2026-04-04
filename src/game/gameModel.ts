@@ -20,7 +20,6 @@ import {
   getCell,
   type HexCell,
 } from "./grid";
-import { loadSceneLayoutPrefs } from "./sceneLayoutPrefs";
 import { findPath, reachableHexes } from "./pathfinding";
 import { getSkipCombatAnimations } from "./combatPrefs";
 import {
@@ -692,29 +691,10 @@ export class GameModel {
     q: number;
     r: number;
   }[] {
-    const snap = loadSceneLayoutPrefs();
     const used = new Set<string>();
     const out: { biome: BiomeId; q: number; r: number }[] = [];
     for (const bi of COMBAT_BIOMES) {
-      let pos = this.pickBunkerHexForLayoutEditorSynthetic(bi, used);
-      const lay = snap.bunkerLayout?.[bi];
-      if (
-        lay &&
-        typeof lay.hexQ === "number" &&
-        typeof lay.hexR === "number" &&
-        Number.isFinite(lay.hexQ) &&
-        Number.isFinite(lay.hexR)
-      ) {
-        const iq = Math.round(lay.hexQ);
-        const ir = Math.round(lay.hexR);
-        const cell = getCell(this.grid, iq, ir);
-        if (cell && cell.biome === bi) {
-          const k = axialKey(iq, ir);
-          if (!used.has(k)) {
-            pos = { q: iq, r: ir };
-          }
-        }
-      }
+      const pos = this.pickBunkerHexForLayoutEditorSynthetic(bi, used);
       if (!pos) continue;
       used.add(axialKey(pos.q, pos.r));
       out.push({ biome: bi, q: pos.q, r: pos.r });
@@ -1723,34 +1703,6 @@ export class GameModel {
       if (!pos) continue;
       this.bunkers[bi] = createInitialBunkerState(pos.q, pos.r);
       used.add(axialKey(pos.q, pos.r));
-    }
-    this.applyBunkerAnchorsFromSceneLayoutPrefs();
-  }
-
-  /** Hex lógico do bunker alinha ao JSON de cena (`hexQ`/`hexR`) após arrasto no editor. */
-  private applyBunkerAnchorsFromSceneLayoutPrefs(): void {
-    const prefs = loadSceneLayoutPrefs();
-    for (const bi of COMBAT_BIOMES) {
-      const b = this.bunkers[bi];
-      if (!b) continue;
-      const entry = prefs.bunkerLayout?.[bi];
-      if (!entry) continue;
-      const hq = entry.hexQ;
-      const hr = entry.hexR;
-      if (
-        typeof hq !== "number" ||
-        typeof hr !== "number" ||
-        !Number.isFinite(hq) ||
-        !Number.isFinite(hr)
-      ) {
-        continue;
-      }
-      const iq = Math.round(hq);
-      const ir = Math.round(hr);
-      const cell = getCell(this.grid, iq, ir);
-      if (!cell || cell.biome !== bi) continue;
-      b.q = iq;
-      b.r = ir;
     }
   }
 
