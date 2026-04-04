@@ -314,6 +314,9 @@ export class GameRenderer {
   private readonly groundHitC = new THREE.Vector3();
   private readonly groundHitR = new THREE.Vector3();
   private readonly groundHitU = new THREE.Vector3();
+  /** Bbox do corpo da unidade para colocar barras acima da cabeça. */
+  private readonly unitBarBBoxScratch = new THREE.Box3();
+  private readonly unitBarTopScratch = new THREE.Vector3();
   /** Arrastar com botão esquerdo no canvas (combate). */
   private panPointerDown = false;
   private panDragMoved = false;
@@ -1255,7 +1258,7 @@ export class GameRenderer {
     barRoot.userData.tierLabelSig = sig;
     if (!spec) return;
     const mesh = this.makeEnemyTierLabelMesh(spec.text, spec.fill);
-    mesh.position.set(0, 0.86, 0.02);
+    mesh.position.set(0, 0.36, 0.02);
     barRoot.add(mesh);
     barRoot.userData.tierLabelMesh = mesh;
   }
@@ -1421,7 +1424,7 @@ export class GameRenderer {
     if (!stack) {
       stack = new THREE.Group();
       stack.userData.role = "statusStack";
-      stack.position.set(0, 0.52, 0);
+      stack.position.set(0, 0.34, 0);
       barRoot.add(stack);
       barRoot.userData.statusStack = stack;
     }
@@ -2715,33 +2718,56 @@ export class GameRenderer {
     this.disposeGroup(g);
   }
 
+  /** Só escudo + vida; v2 remove XP/mana e repõe posição pela bbox do modelo. */
+  private static readonly UNIT_BAR_LAYOUT_VERSION = 2;
+
+  /** Topo do corpo (Y local do grupo da unidade) a partir da AABB mundial do mesh. */
+  private computeBodyTopLocalY(unitGroup: THREE.Group, body: THREE.Object3D): number {
+    const box = this.unitBarBBoxScratch.setFromObject(body);
+    if (box.isEmpty()) return unitGroup.userData.isPlayer === true ? 1.45 : 1.5;
+    const v = this.unitBarTopScratch;
+    v.set((box.min.x + box.max.x) * 0.5, box.max.y, (box.min.z + box.max.z) * 0.5);
+    unitGroup.worldToLocal(v);
+    return v.y;
+  }
+
+  private positionBarRootAboveBody(g: THREE.Group): void {
+    const barRoot = g.userData.barRoot as THREE.Group | undefined;
+    const body = g.children.find((c) => c.userData?.role === "body") as
+      | THREE.Object3D
+      | undefined;
+    if (!barRoot || !body) return;
+    const margin = 0.12;
+    barRoot.position.y = this.computeBodyTopLocalY(g, body) + margin;
+  }
+
   private ensureUnitBars(g: THREE.Group, u: Unit): void {
     let barRoot = g.userData.barRoot as THREE.Group | undefined;
+    if (
+      barRoot &&
+      barRoot.userData.layoutVersion !== GameRenderer.UNIT_BAR_LAYOUT_VERSION
+    ) {
+      this.clearEnemyTierLabel(barRoot);
+      const stack = barRoot.userData.statusStack as THREE.Group | undefined;
+      if (stack) {
+        for (const ch of [...stack.children]) {
+          this.disposeStatusBadge(ch as THREE.Mesh);
+          stack.remove(ch);
+        }
+        barRoot.remove(stack);
+        delete barRoot.userData.statusStack;
+      }
+      delete barRoot.userData.statusSig;
+      g.remove(barRoot);
+      this.disposeGroup(barRoot);
+      g.userData.barRoot = undefined;
+      barRoot = undefined;
+    }
     if (!barRoot) {
       barRoot = new THREE.Group();
       const hpW = 1.05;
       const hpH = 0.12;
-
-      if (u.isPlayer) {
-        const xpBg = new THREE.Mesh(
-          new THREE.PlaneGeometry(hpW, 0.1),
-          new THREE.MeshBasicMaterial({ color: 0x1a0a22 }),
-        );
-        xpBg.position.y = 0.34;
-        xpBg.renderOrder = 2;
-        const xpFill = new THREE.Mesh(
-          new THREE.PlaneGeometry(hpW, 0.068),
-          new THREE.MeshBasicMaterial({ color: 0xb94dff }),
-        );
-        xpFill.position.set(0, 0.34, 0.02);
-        xpFill.renderOrder = 3;
-        barRoot.add(xpBg);
-        barRoot.add(xpFill);
-        barRoot.userData.xpFill = xpFill;
-        barRoot.userData.xpW = hpW;
-      }
-
-      const shY = u.isPlayer ? 0.22 : 0.24;
+      const shY = 0.22;
       const shH = 0.075;
       const shBg = new THREE.Mesh(
         new THREE.PlaneGeometry(hpW, shH),
@@ -2760,7 +2786,7 @@ export class GameRenderer {
       barRoot.userData.shieldFill = shFill;
       barRoot.userData.shieldW = hpW;
 
-      const hpY = u.isPlayer ? 0.08 : 0.12;
+      const hpY = 0.08;
       const hpBg = new THREE.Mesh(
         new THREE.PlaneGeometry(hpW, hpH),
         new THREE.MeshBasicMaterial({ color: 0x0d0d12 }),
@@ -2778,31 +2804,12 @@ export class GameRenderer {
       barRoot.userData.hpFill = hpFill;
       barRoot.userData.hpW = hpW;
 
-      if (u.isPlayer) {
-        const manaY = -0.1;
-        const manaBg = new THREE.Mesh(
-          new THREE.PlaneGeometry(hpW, 0.09),
-          new THREE.MeshBasicMaterial({ color: 0x12122a }),
-        );
-        manaBg.position.y = manaY;
-        manaBg.renderOrder = 2;
-        const manaFill = new THREE.Mesh(
-          new THREE.PlaneGeometry(hpW, 0.06),
-          new THREE.MeshBasicMaterial({ color: 0x3388ee }),
-        );
-        manaFill.position.set(0, manaY, 0.02);
-        manaFill.renderOrder = 3;
-        barRoot.add(manaBg);
-        barRoot.add(manaFill);
-        barRoot.userData.manaFill = manaFill;
-        barRoot.userData.manaW = hpW;
-      }
-
-      barRoot.position.y = u.isPlayer ? 1.52 : 1.58;
+      barRoot.userData.layoutVersion = GameRenderer.UNIT_BAR_LAYOUT_VERSION;
       barRoot.userData.role = "bars";
       g.add(barRoot);
       g.userData.barRoot = barRoot;
     }
+    this.positionBarRootAboveBody(g);
     this.updateUnitBars(barRoot, u);
   }
 
@@ -2830,25 +2837,6 @@ export class GameRenderer {
       0.08,
     );
     (hpFill.material as THREE.MeshBasicMaterial).color.copy(col);
-
-    const manaFill = barRoot.userData.manaFill as THREE.Mesh | undefined;
-    if (manaFill && u.maxMana > 0) {
-      const mw = barRoot.userData.manaW as number;
-      const mr = Math.max(0, Math.min(1, u.mana / u.maxMana));
-      manaFill.scale.x = Math.max(0.05, mr);
-      manaFill.position.x = (mw * (mr - 1)) / 2;
-    }
-
-    const xpFill = barRoot.userData.xpFill as THREE.Mesh | undefined;
-    if (xpFill && u.isPlayer) {
-      const xw = barRoot.userData.xpW as number;
-      let xr = 1;
-      if (Number.isFinite(u.xpToNext) && u.xpToNext > 0) {
-        xr = Math.max(0, Math.min(1, u.xp / u.xpToNext));
-      }
-      xpFill.scale.x = Math.max(0.05, xr);
-      xpFill.position.x = (xw * (xr - 1)) / 2;
-    }
   }
 
   private ensureShieldBubble(g: THREE.Group, u: Unit): void {
