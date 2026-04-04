@@ -3744,6 +3744,12 @@ function tipInt(n: number): string {
   return String(Math.round(n));
 }
 
+/** Cantos do mapa no combate: sempre inteiros (sem vírgula / `formatTooltipNumber`). */
+function combatCornerIntText(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  return String(Math.max(0, Math.round(n)));
+}
+
 /** Botão quadrado de skill: ícone + tecla + mana; nome no tooltip/`aria-label`. */
 function combatSquareSkillHtml(opts: {
   disabled: boolean;
@@ -6570,12 +6576,14 @@ function showCombatHUD(): void {
   combatDockStack.appendChild(bottom);
   const combatCornerLayer = el(`<div class="combat-corner-layer" id="combat-corner-layer" hidden>
     <div class="combat-corner-triangle combat-corner-triangle--attacks" role="status" aria-live="polite">
+      <div class="combat-corner-triangle__shape" aria-hidden="true"></div>
       <div class="combat-corner-triangle__stack">
-        <span class="combat-corner-triangle__lbl">Ataques</span>
+        <span class="combat-corner-triangle__lbl">ataques</span>
         <span class="combat-corner-triangle__val" id="combat-corner-atk"></span>
       </div>
     </div>
     <div class="combat-corner-triangle combat-corner-triangle--moves" role="status" aria-live="polite">
+      <div class="combat-corner-triangle__shape" aria-hidden="true"></div>
       <div class="combat-corner-triangle__stack">
         <span class="combat-corner-triangle__lbl">Movimento</span>
         <span class="combat-corner-triangle__val" id="combat-corner-mov"></span>
@@ -7686,13 +7694,15 @@ function showCombatHUD(): void {
         syncCombatCornerStackOffset();
         const capB = model.maxBasicAttacksForHero(h);
         const movMax = model.heroMovementPool(h);
-        const movCur = Math.max(0, Math.round(model.movementLeft));
-        const movTot = Math.max(0, Math.round(movMax));
-        combatCornerAtk.textContent = `${model.basicLeft}/${capB}`;
+        const atkCur = combatCornerIntText(model.basicLeft);
+        const atkTot = combatCornerIntText(capB);
+        const movCur = combatCornerIntText(model.movementLeft);
+        const movTot = combatCornerIntText(movMax);
+        combatCornerAtk.textContent = `${atkCur}/${atkTot}`;
         combatCornerMov.textContent = `${movCur}/${movTot}`;
         combatCornerAtk.parentElement!.parentElement!.setAttribute(
           "aria-label",
-          `Ataques básicos: ${model.basicLeft} de ${capB}`,
+          `ataques: ${atkCur} de ${atkTot}`,
         );
         combatCornerMov.parentElement!.parentElement!.setAttribute(
           "aria-label",

@@ -136,9 +136,19 @@ body {
   padding: 0 0.35rem 0.45rem;
 }
 
-/* Triângulo reto no canto: hipotenusa sobe para o centro do mapa */
+/* Fundo recortado à parte — rótulo + valor não são cortados pelo clip-path */
+.combat-corner-triangle__shape {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
 .combat-corner-triangle--attacks {
   left: 0;
+}
+
+.combat-corner-triangle--attacks .combat-corner-triangle__shape {
   clip-path: polygon(0 100%, 0 10%, 88% 100%);
   background: linear-gradient(
     0deg,
@@ -155,6 +165,9 @@ body {
 
 .combat-corner-triangle--moves {
   right: 0;
+}
+
+.combat-corner-triangle--moves .combat-corner-triangle__shape {
   clip-path: polygon(100% 100%, 100% 10%, 12% 100%);
   background: linear-gradient(
     0deg,
@@ -188,10 +201,10 @@ body {
 }
 
 .combat-corner-triangle__lbl {
-  font-size: clamp(0.52rem, 1.65vmin, 0.62rem);
+  font-size: clamp(0.58rem, 1.85vmin, 0.72rem);
   font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-transform: none;
   color: rgba(255, 248, 248, 0.95);
   line-height: 1.1;
   text-shadow:
