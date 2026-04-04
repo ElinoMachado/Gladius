@@ -3,7 +3,13 @@ import {
   FURACAO_ULT_JUMP_MS,
   UNIT_MOVE_SEGMENT_MS,
 } from "../game/combatTiming";
-import { axialToWorld, axialKey, hexDistance, type Axial } from "../game/hex";
+import {
+  axialToWorld,
+  axialKey,
+  hexDistance,
+  worldXzToAxial,
+  type Axial,
+} from "../game/hex";
 import type { HexCell } from "../game/grid";
 import type { Unit } from "../game/types";
 import {
@@ -103,15 +109,6 @@ const ORTHO_FRUSTUM = 108;
 const LAYOUT_EDIT_ZOOM_OUT_FRUSTUM_FACTOR = 5;
 /** Manter mesh de inimigo morto (invisível) até os números de dano usarem a posição (float ~950ms). */
 const ENEMY_DEATH_MESH_HOLD_MS = 1050;
-
-/** Malha do bunker (GLB/procedural) não participa em `intersectObject`; só o cilindro invisível. */
-function disableMeshRaycastForBunkerVisual(o: THREE.Object3D): void {
-  o.traverse((ch) => {
-    if (ch instanceof THREE.Mesh || ch instanceof THREE.SkinnedMesh) {
-      ch.raycast = (): void => {};
-    }
-  });
-}
 
 function createHexShape(size: number): THREE.Shape {
   const sh = new THREE.Shape();
@@ -567,6 +564,18 @@ export class GameRenderer {
     const c = Math.cos(this.arenaYaw);
     const s = Math.sin(this.arenaYaw);
     out.set(x * c + z * s, -x * s + z * c);
+  }
+
+  /**
+   * Inverso de `worldPanInto` no plano XZ: coordenadas de mundo da cena → hex axial lógico
+   * (rotação Y da arena aplicada antes de `worldXzToAxial`).
+   */
+  private worldXZToArenaAxial(wx: number, wz: number): Axial {
+    const c = Math.cos(this.arenaYaw);
+    const s = Math.sin(this.arenaYaw);
+    const lx = wx * c - wz * s;
+    const lz = wx * s + wz * c;
+    return worldXzToAxial(lx, lz, HEX_SIZE);
   }
 
   /**
@@ -1934,8 +1943,14 @@ export class GameRenderer {
         );
         let bunkerDist = Infinity;
         for (const root of this.bunkerRoots.values()) {
-          const bh = rayPick.intersectObject(root, true);
-          if (bh.length > 0) bunkerDist = Math.min(bunkerDist, bh[0]!.distance);
+          const q0 = root.userData.bunkerAxialQ as number | undefined;
+          const r0 = root.userData.bunkerAxialR as number | undefined;
+          if (q0 === undefined || r0 === undefined) continue;
+          for (const h of rayPick.intersectObject(root, true)) {
+            const a = this.worldXZToArenaAxial(h.point.x, h.point.z);
+            if (a.q !== q0 || a.r !== r0) continue;
+            bunkerDist = Math.min(bunkerDist, h.distance);
+          }
         }
         const hexHits = rayPick.intersectObjects(
           [...this.hexMeshes.values()],
@@ -3165,8 +3180,8 @@ export class GameRenderer {
   }
 
   /**
-   * Hex sob o ponteiro com prioridade ao modelo 3D do bunker quando este é o hit mais próximo.
-   * Com GLB alto ou deslocado, `pickHex` (só o chão) pode não corresponder ao hex do bunker que o jogador vê.
+   * Hex sob o ponteiro: chão mais próximo, ou hit no bunker só se o ponto do hit projetar no hex
+   * lógico desse bunker (evita overhang / volume no hex vizinho).
    */
   pickCombatHex(
     ndcX: number,
@@ -3175,10 +3190,10 @@ export class GameRenderer {
   ): { q: number; r: number } | null {
     const ray = new THREE.Raycaster();
     ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.getRenderCamera());
-    let bestDist = Infinity;
-    let best: { q: number; r: number } | null = null;
 
     const hexHits = ray.intersectObjects([...this.hexMeshes.values()], false);
+    let bestDist = Infinity;
+    let best: { q: number; r: number } | null = null;
     if (hexHits.length > 0) {
       const k = hexHits[0]!.object.userData.hexKey as string | undefined;
       if (k && grid.has(k)) {
@@ -3193,9 +3208,13 @@ export class GameRenderer {
       const r0 = root.userData.bunkerAxialR as number | undefined;
       if (q0 === undefined || r0 === undefined) continue;
       const bh = ray.intersectObject(root, true);
-      if (bh.length > 0 && bh[0]!.distance < bestDist) {
-        bestDist = bh[0]!.distance;
-        best = { q: q0, r: r0 };
+      for (const h of bh) {
+        const a = this.worldXZToArenaAxial(h.point.x, h.point.z);
+        if (a.q !== q0 || a.r !== r0) continue;
+        if (h.distance < bestDist) {
+          bestDist = h.distance;
+          best = { q: q0, r: r0 };
+        }
       }
     }
 
@@ -3835,15 +3854,6 @@ export class GameRenderer {
         root.scale.setScalar(off.scale);
       }
       this.ensureBunkerInteractionVolume(root);
-      const vis = root.userData.bunkerVisual as THREE.Object3D | undefined;
-      const visFlags = vis?.userData as
-        | { bunkerCombatRaycastDisabled?: boolean }
-        | undefined;
-      if (vis && !visFlags?.bunkerCombatRaycastDisabled) {
-        disableMeshRaycastForBunkerVisual(vis);
-        (vis.userData as { bunkerCombatRaycastDisabled?: boolean }).bunkerCombatRaycastDisabled =
-          true;
-      }
     }
   }
 
@@ -5185,9 +5195,6 @@ export class GameRenderer {
     hit.add(vis);
     hit.userData.bunkerVisual = vis;
     hit.userData.bunkerVisualTier = t;
-    disableMeshRaycastForBunkerVisual(vis);
-    (vis.userData as { bunkerCombatRaycastDisabled?: boolean }).bunkerCombatRaycastDisabled =
-      true;
     this.applyBunkerMountsPoseFromPrefs();
     this.scheduleArenaLayoutPersist();
     this.clearLayoutSelectionEmissive(hit);

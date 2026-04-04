@@ -38,6 +38,18 @@ export function axialToWorld(q: number, r: number, size: number): { x: number; z
   return { x, z };
 }
 
+/**
+ * Hex axial que contém o ponto no plano XZ (mesma convenção que `axialToWorld` / grelha da arena).
+ */
+export function worldXzToAxial(x: number, z: number, size: number): Axial {
+  const qf = x / (size * Math.sqrt(3)) - z / (3 * size);
+  const rf = (2 * z) / (3 * size);
+  const xf = qf;
+  const yf = -qf - rf;
+  const zf = rf;
+  return cubeRoundFrac(xf, yf, zf);
+}
+
 function cubeRoundFrac(x: number, y: number, z: number): Axial {
   let rx = Math.round(x);
   let ry = Math.round(y);
