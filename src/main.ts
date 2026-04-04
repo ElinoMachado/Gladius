@@ -23,7 +23,10 @@ import {
   EquipmentLayoutEditor,
   type ForgeEditSlot,
 } from "./render/EquipmentLayoutEditor";
-import { clearAllForgeEquipmentLayoutPrefs } from "./render/forgeEquipmentLayoutPrefs";
+import {
+  clearAllForgeEquipmentLayoutPrefs,
+  loadForgeEquipmentLayoutPrefs,
+} from "./render/forgeEquipmentLayoutPrefs";
 import type {
   GamePhase,
   HeroClassId,
@@ -2047,9 +2050,24 @@ function showArenaLayoutEditHud(): void {
       <br /><kbd>Espaço</kbd> alterna para o modo câmara (quando no coliseu) ou de volta.
       <br /><kbd>Esc</kbd> grava e volta ao menu (ferramenta de desenvolvimento).
       ${camRow}
+      <div class="arena-layout-edit-hud__copy-row">
+        <button type="button" class="btn" id="arena-layout-copy-json">Copiar JSON (repo)</button>
+        <span id="arena-layout-copy-json-feedback" class="arena-layout-edit-hud__copy-feedback" aria-live="polite"></span>
+      </div>
     </div>
   `);
   uiRoot.appendChild(wrap);
+  wrap.querySelector("#arena-layout-copy-json")!.addEventListener("click", async () => {
+    const fb = wrap.querySelector("#arena-layout-copy-json-feedback") as HTMLElement;
+    const raw = JSON.stringify(view.collectSceneLayoutPrefs(), null, 2);
+    try {
+      await navigator.clipboard.writeText(raw);
+      fb.textContent = "Copiado — cola no Cursor (Encorporar coordenadas).";
+    } catch {
+      fb.textContent =
+        "Clipboard bloqueado. DevTools → consola: copy(localStorage.getItem('gladius-scene-layout-v1'))";
+    }
+  });
   const isoCb = wrap.querySelector(
     "#arena-layout-iso-cb",
   ) as HTMLInputElement | null;
@@ -2144,6 +2162,8 @@ function enterEquipmentLayoutEditFromMenu(): void {
         <pre id="eq-layout-values" class="equipment-layout-overlay__pre"></pre>
         <p id="eq-layout-saved-badge" class="equipment-layout-overlay__note"></p>
         <div class="equipment-layout-overlay__actions">
+          <button type="button" class="equipment-layout-overlay__btn" id="eq-layout-copy-json">Copiar JSON (repo)</button>
+          <span id="eq-layout-copy-json-feedback" class="equipment-layout-overlay__note" aria-live="polite"></span>
           <button type="button" class="equipment-layout-overlay__btn equipment-layout-overlay__btn--primary" id="eq-layout-save">Gravar esta classe</button>
           <button type="button" class="equipment-layout-overlay__btn" id="eq-layout-reset-auto">Repor automático (só ecrã)</button>
           <button type="button" class="equipment-layout-overlay__btn" id="eq-layout-clear-saved">Apagar gravação desta classe</button>
@@ -2199,6 +2219,18 @@ function enterEquipmentLayoutEditFromMenu(): void {
     b.addEventListener("click", () => {
       bindSlot((b as HTMLElement).dataset.eqSlot as ForgeEditSlot);
     });
+  });
+  overlay.querySelector("#eq-layout-copy-json")!.addEventListener("click", async () => {
+    const fb = overlay.querySelector("#eq-layout-copy-json-feedback") as HTMLElement;
+    equipmentLayoutEditor?.saveCurrentClassToStorage();
+    const raw = JSON.stringify(loadForgeEquipmentLayoutPrefs(), null, 2);
+    try {
+      await navigator.clipboard.writeText(raw);
+      fb.textContent = "Copiado — cola no Cursor (Encorporar coordenadas).";
+    } catch {
+      fb.textContent =
+        "Clipboard bloqueado. Consola: copy(localStorage.getItem('gladius-forge-equipment-layout-v1')).";
+    }
   });
   overlay.querySelector("#eq-layout-save")!.addEventListener("click", () => {
     equipmentLayoutEditor?.saveCurrentClassToStorage();

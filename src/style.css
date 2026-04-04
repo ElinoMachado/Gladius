@@ -7992,6 +7992,23 @@ select.forge-biome-sel option:disabled {
   opacity: 0.92;
 }
 
+.arena-layout-edit-hud__copy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+  pointer-events: auto;
+}
+
+.arena-layout-edit-hud__copy-feedback {
+  flex: 1 1 100%;
+  font-size: 0.72rem;
+  color: rgba(170, 210, 155, 0.95);
+  min-height: 1.15em;
+}
+
 /* [Dev] Editor de posição do elmo/capa/manoplas (localStorage). */
 .equipment-layout-overlay {
   position: fixed;
