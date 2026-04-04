@@ -857,6 +857,10 @@ function lolViewedHero(m: GameModel): Unit | null {
 }
 /** Índice do herói na loja de ouro; `render()` reabre a loja após `emit()` (ex.: compra), sem resetar. */
 let goldShopHeroIndex = 0;
+/** Qual painel 3D está em primeiro plano na loja (com bunker no bioma). */
+let goldShopVizFocus: "hero" | "bunker" = "hero";
+/** Ao mudar de bolsa de herói, volta a mostrar o herói em primeiro plano. */
+let goldShopVizLastHeroId: string | null = null;
 let goldShopStall3d: ShopStall3D | null = null;
 let crystalShop3d: CrystalShop3D | null = null;
 let goldShopBunker3d: BunkerPreview3D | null = null;
@@ -3415,6 +3419,10 @@ function showGoldShop(isInitial: boolean): void {
       return;
     }
     const h = party[idx]!;
+    if (goldShopVizLastHeroId !== h.id) {
+      goldShopVizFocus = "hero";
+      goldShopVizLastHeroId = h.id;
+    }
     const list = GOLD_SHOP.map((it, si) => {
       const xpFull =
         it.id === "xp_pct" && (h.artifacts["_xp_shop"] ?? 0) >= 60;
@@ -3473,20 +3481,7 @@ function showGoldShop(isInitial: boolean): void {
       })
       .join("");
     const bunkerShop = model.bunkerForHeroHomeBiome(h);
-    const bunkerSide = bunkerShop
-      ? `<div class="shop-bunker-viz shop-hero-viz" aria-label="Bunker da arena">${goldShopBunkerSectionHtml(bunkerShop, h)}</div>`
-      : "";
-    panel.innerHTML = `
-      <div class="shop-panel-inner">
-        <h1 class="shop-title hero-setup-main-title">Loja do coliseu</h1>
-        <div class="shop-hero-gold-bags" role="group" aria-label="Ouro por herói — cada um tem a sua bolsa">
-          ${goldBagsHtml}
-        </div>
-        ${goldMultiHint}
-        <div class="shop-hero-bunker-pair">
-          <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
-            <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
-            <div class="shop-hero-stats-col">
+    const heroStatsColHtml = `
               <p class="shop-hero-stats-head">Atributos atuais</p>
               <div id="gold-shop-hero-stats" class="lol-stats-list gold-shop-hero-stats-grid"></div>
               <div id="gold-shop-hero-skills-wrap" class="gold-shop-hero-skills-wrap" hidden>
@@ -3500,16 +3495,68 @@ function showGoldShop(isInitial: boolean): void {
                   <div id="shop-hero-artifacts-strip" class="shop-hero-artifacts-strip" aria-label="Artefatos do herói"></div>
                   <button type="button" class="shop-hero-artifacts-pager shop-hero-artifacts-pager--down" id="shop-artifacts-down" aria-label="Artefatos seguintes" hidden>▼</button>
                 </div>
+              </div>`;
+    const vizAndGridBlock = bunkerShop
+      ? (() => {
+          const cubeBunker =
+            goldShopVizFocus === "bunker"
+              ? " shop-viz-flip-cube--bunker"
+              : "";
+          const heroGridHidden = goldShopVizFocus === "bunker" ? " hidden" : "";
+          const bunkGridHidden = goldShopVizFocus === "hero" ? " hidden" : "";
+          return `<div class="shop-viz-flip-wrap">
+        <div class="shop-viz-flip-row">
+          <div class="shop-viz-flip-scene">
+            <div id="shop-viz-flip-cube" class="shop-viz-flip-cube${cubeBunker}">
+              <div class="shop-viz-flip-face shop-viz-flip-face--hero">
+                <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
+                  <p class="shop-viz-flip-entity-title">${escapeHtml(h.name)}</p>
+                  <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
+                  <div class="shop-hero-stats-col">${heroStatsColHtml}
+                  </div>
+                </div>
+              </div>
+              <div class="shop-viz-flip-face shop-viz-flip-face--bunker">
+                <div class="shop-bunker-viz shop-hero-viz" aria-label="Bunker da arena">
+                  <p class="shop-viz-flip-entity-title">Bunker da arena</p>
+                  ${goldShopBunkerSectionHtml(bunkerShop)}
+                </div>
               </div>
             </div>
           </div>
-          ${bunkerSide}
+          <button type="button" class="shop-viz-flip-arrow" id="shop-viz-flip-toggle" aria-label="Mostrar bunker — reparar e evoluir na grelha abaixo">
+            <span class="shop-viz-flip-arrow__chevron" aria-hidden="true">→</span>
+            <span class="shop-viz-flip-arrow__text">Bunker</span>
+          </button>
+        </div>
+      </div>
+        <div class="shop-mid-row">
+          <div class="shop-mid-cell shop-mid-cell--gold">
+            <div id="shop-grid-hero-gold" class="shop-grid"${heroGridHidden}>${list}</div>
+            <div id="shop-grid-bunker-gold" class="shop-grid shop-grid--bunker-buy"${bunkGridHidden}>${goldShopBunkerBuyGridHtml(bunkerShop, h)}</div>
+          </div>
+        </div>`;
+        })()
+      : `<div class="shop-hero-bunker-pair shop-hero-bunker-pair--solo">
+          <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
+            <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
+            <div class="shop-hero-stats-col">${heroStatsColHtml}
+            </div>
+          </div>
         </div>
         <div class="shop-mid-row">
           <div class="shop-mid-cell shop-mid-cell--gold">
-            <div class="shop-grid">${list}</div>
+            <div id="shop-grid-hero-gold" class="shop-grid">${list}</div>
           </div>
+        </div>`;
+    panel.innerHTML = `
+      <div class="shop-panel-inner">
+        <h1 class="shop-title hero-setup-main-title">Loja do coliseu</h1>
+        <div class="shop-hero-gold-bags" role="group" aria-label="Ouro por herói — cada um tem a sua bolsa">
+          ${goldBagsHtml}
         </div>
+        ${goldMultiHint}
+        ${vizAndGridBlock}
         <div class="shop-footer">
           <p id="shop-footer-msg" class="shop-footer-msg" role="status" hidden></p>
           <div class="shop-footer-crystals" aria-label="Cristais disponíveis">
@@ -3533,6 +3580,11 @@ function showGoldShop(isInitial: boolean): void {
       ) as HTMLElement | null;
       if (bunkerSkillsRow)
         mountGoldShopBunkerSkillsRow(bunkerSkillsRow, bunkerShop, h, model);
+      applyGoldShopVizFocus(panel, true);
+      panel.querySelector("#shop-viz-flip-toggle")?.addEventListener("click", () => {
+        goldShopVizFocus = goldShopVizFocus === "hero" ? "bunker" : "hero";
+        applyGoldShopVizFocus(panel, true);
+      });
     }
     panel.querySelectorAll("[data-gold-shop-item]").forEach((b) => {
       b.addEventListener("click", () => {
@@ -3548,13 +3600,13 @@ function showGoldShop(isInitial: boolean): void {
         /* `emit` → `render` → `refreshGoldShop`; evitar segundo `renderShop` aqui (WebGL). */
       });
     });
-    panel.querySelector("#bunk-repair")?.addEventListener("click", () => {
+    panel.querySelector("#gold-shop-bunk-repair")?.addEventListener("click", () => {
       model.buyBunkerRepair(h.id);
     });
-    panel.querySelector("#bunk-evolve")?.addEventListener("click", () => {
+    panel.querySelector("#gold-shop-bunk-evolve")?.addEventListener("click", () => {
       model.buyBunkerEvolve(h.id);
     });
-    const bEv = panel.querySelector("#bunk-evolve") as HTMLElement | null;
+    const bEv = panel.querySelector("#gold-shop-bunk-evolve") as HTMLElement | null;
     if (bEv && bunkerShop && bunkerShop.tier < 2) {
       bindGameTooltip(bEv, () => bunkerEvolveTooltipHtml(bunkerShop.tier));
     }
@@ -4514,6 +4566,82 @@ function goldShopBunkerSkillSquareHtml(opts: {
   });
 }
 
+/** Botões de compra do bunker no mesmo estilo da grelha de ouro do herói. */
+function goldShopBunkerBuyGridHtml(bunk: BunkerState, h: Unit): string {
+  const missing = bunk.maxHp - bunk.hp;
+  const repairCost = Math.ceil(missing);
+  const canRepair = missing > 0 && h.ouro >= repairCost;
+  const t = bunk.tier;
+  const rawEv = t >= 2 ? 0 : BUNKER_EVOLVE_COSTS[t as 0 | 1] ?? 0;
+  let evCost = rawEv;
+  if (t < 2 && h.ultimateId === "estrategista_nato") {
+    evCost = Math.ceil(evCost * 0.5);
+  }
+  const canEv = t < 2 && h.ouro >= evCost;
+  const repairLabel =
+    missing <= 0
+      ? "Nada a reparar"
+      : canRepair
+        ? `Reparar por ${formatOuroDisplay(repairCost)} ouro`
+        : `Reparar: ouro insuficiente (${formatOuroDisplay(repairCost)} necessário)`;
+  const evolveDisabled = t >= 2 || !canEv;
+  const evolveLabel =
+    t >= 2
+      ? "Bunker no nível máximo"
+      : canEv
+        ? `Evoluir por ${formatOuroDisplay(evCost)} ouro`
+        : `Evoluir: ouro insuficiente (${formatOuroDisplay(evCost)} necessário)`;
+  const repairInner = `<span class="shop-item__row">
+        <span class="shop-item__ico">${statIconWrap("max_hp", 0)}</span>
+        <span class="shop-item__meta">
+          <span class="shop-item__label">Reparar bunker</span>
+          <span class="shop-item__cost">${missing <= 0 ? "—" : `${repairCost} ouro`}</span>
+        </span>
+      </span>`;
+  const evolveInner =
+    t >= 2
+      ? `<span class="shop-item__row">
+        <span class="shop-item__ico">${statIconWrap("def", 1)}</span>
+        <span class="shop-item__meta">
+          <span class="shop-item__label">Evoluir bunker</span>
+          <span class="shop-item__cost">Nível máximo</span>
+        </span>
+      </span>`
+      : `<span class="shop-item__row">
+        <span class="shop-item__ico">${statIconWrap("def", 1)}</span>
+        <span class="shop-item__meta">
+          <span class="shop-item__label">Evoluir bunker</span>
+          <span class="shop-item__cost">${evCost} ouro</span>
+        </span>
+      </span>`;
+  return `<button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-repair" data-gold-bunker-buy="repair" ${missing <= 0 || !canRepair ? "disabled" : ""} aria-label="${escapeHtml(repairLabel)}">${repairInner}</button>
+      <button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-evolve" data-gold-bunker-buy="evolve" ${evolveDisabled ? "disabled" : ""} aria-label="${escapeHtml(evolveLabel)}">${evolveInner}</button>`;
+}
+
+function applyGoldShopVizFocus(panel: HTMLElement, hasBunker: boolean): void {
+  if (!hasBunker) return;
+  const cube = panel.querySelector("#shop-viz-flip-cube");
+  const heroGrid = panel.querySelector("#shop-grid-hero-gold") as HTMLElement | null;
+  const bunkGrid = panel.querySelector("#shop-grid-bunker-gold") as HTMLElement | null;
+  const toggle = panel.querySelector("#shop-viz-flip-toggle") as HTMLElement | null;
+  const chev = toggle?.querySelector(".shop-viz-flip-arrow__chevron");
+  const txt = toggle?.querySelector(".shop-viz-flip-arrow__text");
+  const bunker = goldShopVizFocus === "bunker";
+  cube?.classList.toggle("shop-viz-flip-cube--bunker", bunker);
+  if (heroGrid) heroGrid.hidden = bunker;
+  if (bunkGrid) bunkGrid.hidden = !bunker;
+  if (chev) chev.textContent = bunker ? "←" : "→";
+  if (txt) txt.textContent = bunker ? "Herói" : "Bunker";
+  if (toggle) {
+    toggle.setAttribute(
+      "aria-label",
+      bunker
+        ? "Mostrar herói e melhorias do herói"
+        : "Mostrar bunker — reparar e evoluir na grelha abaixo",
+    );
+  }
+}
+
 function mountGoldShopBunkerSkillsRow(
   row: HTMLElement,
   bunk: BunkerState,
@@ -4548,28 +4676,10 @@ function mountGoldShopBunkerSkillsRow(
   );
 }
 
-function goldShopBunkerSectionHtml(bunk: BunkerState, h: Unit): string {
-  const missing = bunk.maxHp - bunk.hp;
-  const repairCost = Math.ceil(missing);
-  const canRepair = missing > 0 && h.ouro >= repairCost;
+function goldShopBunkerSectionHtml(bunk: BunkerState): string {
   const t = bunk.tier;
-  const rawEv = t >= 2 ? 0 : BUNKER_EVOLVE_COSTS[t as 0 | 1] ?? 0;
-  let evCost = rawEv;
-  if (t < 2 && h.ultimateId === "estrategista_nato") {
-    evCost = Math.ceil(evCost * 0.5);
-  }
-  const canEv = t < 2 && h.ouro >= evCost;
   const disp = bunkerDisplayLevel(t);
   const nvStr = `${disp}/3`;
-  const repairLabel = `Reparar ${formatOuroDisplay(repairCost)} ouro`;
-  const repairInner = `<span class="shop-bunker-action-btn__inner"><span class="shop-bunker-action-btn__label">Reparar</span><span class="shop-bunker-action-btn__cost">${formatOuroDisplay(repairCost)}</span>${combatGoldCoinSvgHtml("shop-bunker-action-btn__coin")}</span>`;
-  const evolveDisabled = t >= 2 || !canEv;
-  const evolveInner =
-    t >= 2
-      ? `<span class="shop-bunker-action-btn__inner shop-bunker-action-btn__inner--solo">Nível máximo</span>`
-      : `<span class="shop-bunker-action-btn__inner"><span class="shop-bunker-action-btn__label">Evoluir</span><span class="shop-bunker-action-btn__cost">${formatOuroDisplay(evCost)}</span>${combatGoldCoinSvgHtml("shop-bunker-action-btn__coin")}</span>`;
-  const evolveLabel =
-    t >= 2 ? "Nível máximo do bunker" : `Evoluir por ${formatOuroDisplay(evCost)} ouro`;
   return `<div class="shop-bunker-viz-layout">
     <div class="shop-bunker-viz-layout__preview">
       <div id="bunker-preview-host" class="gold-shop-hero-3d-host shop-bunker-viz-layout__3d-host" aria-hidden="true"></div>
@@ -4585,11 +4695,7 @@ function goldShopBunkerSectionHtml(bunk: BunkerState, h: Unit): string {
         <p class="shop-hero-stats-head shop-bunker-skills-block__head">Habilidades</p>
         <div id="gold-shop-bunker-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do bunker"></div>
       </div>
-      <p class="shop-bunker-viz-layout__hint">Reparar: custo em ouro igual ao teto dos PV em falta (1 ouro por PV completo; partes de PV contam como 1 ouro). Evoluções: 300 ouro (1.ª), 500 ouro (2.ª).</p>
-      <div class="shop-bunker-viz-layout__actions">
-        <button type="button" class="btn shop-bunker-action-btn" id="bunk-repair" ${missing <= 0 || !canRepair ? "disabled" : ""} aria-label="${escapeHtml(repairLabel)}">${repairInner}</button>
-        <button type="button" class="btn shop-bunker-action-btn" id="bunk-evolve" ${evolveDisabled ? "disabled" : ""} aria-label="${escapeHtml(evolveLabel)}">${evolveInner}</button>
-      </div>
+      <p class="shop-bunker-viz-layout__hint">Reparar e evoluir: usa a grelha de compras quando o bunker estiver em primeiro plano (seta). Custo de reparação = PV em falta (mín. 1 ouro por PV incompleto). Evoluções: 300 ouro (1.ª), 500 ouro (2.ª).</p>
     </div>
   </div>`;
 }

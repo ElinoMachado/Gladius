@@ -5133,6 +5133,176 @@ body.enemy-inspect--dragging-body {
     0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
+/* Loja ouro: herói / bunker num “cartão” com flip 3D + seta */
+.shop-viz-flip-wrap {
+  margin-bottom: 0.75rem;
+}
+
+.shop-viz-flip-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.75rem 1rem;
+}
+
+.shop-viz-flip-scene {
+  flex: 1;
+  min-width: 0;
+  perspective: 1180px;
+  perspective-origin: 50% 45%;
+}
+
+.shop-viz-flip-cube {
+  position: relative;
+  width: 100%;
+  min-height: 340px;
+  transform-style: preserve-3d;
+  transition: transform 0.58s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: rotateY(0deg);
+}
+
+.shop-viz-flip-cube--bunker {
+  transform: rotateY(180deg);
+}
+
+.shop-viz-flip-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: auto;
+  box-sizing: border-box;
+  border-radius: 2px;
+}
+
+.shop-viz-flip-face--hero {
+  transform: rotateY(0deg);
+}
+
+.shop-viz-flip-face--bunker {
+  transform: rotateY(180deg);
+}
+
+.shop-viz-flip-entity-title {
+  margin: 0 0 0.55rem;
+  padding: 0.35rem 0.5rem 0.42rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #e8c96a;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+  border-bottom: 1px solid rgba(201, 162, 39, 0.35);
+  background: linear-gradient(
+    90deg,
+    rgba(201, 162, 39, 0.12),
+    transparent 70%
+  );
+}
+
+.shop-viz-flip-arrow {
+  flex: 0 0 auto;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  min-width: 4.5rem;
+  max-width: 5.5rem;
+  padding: 0.7rem 0.55rem;
+  margin: 0.25rem 0;
+  border: 2px solid rgba(201, 162, 39, 0.52);
+  border-radius: 6px;
+  background: linear-gradient(
+    155deg,
+    rgba(96, 88, 72, 0.55) 0%,
+    rgba(22, 20, 28, 0.88) 100%
+  );
+  color: #f0e4c4;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 0.68rem;
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  transform: skewX(-6deg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 3px 12px rgba(0, 0, 0, 0.35);
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.shop-viz-flip-arrow:hover:not(:disabled) {
+  border-color: rgba(232, 201, 106, 0.75);
+  color: #fff8e8;
+  background: linear-gradient(
+    155deg,
+    rgba(120, 108, 78, 0.65) 0%,
+    rgba(32, 28, 38, 0.92) 100%
+  );
+}
+
+.shop-viz-flip-arrow:focus-visible {
+  outline: 2px solid rgba(232, 201, 106, 0.85);
+  outline-offset: 2px;
+}
+
+.shop-viz-flip-arrow__chevron {
+  font-size: 1.4rem;
+  line-height: 1;
+  font-weight: 700;
+  transform: skewX(6deg);
+}
+
+.shop-viz-flip-arrow__text {
+  transform: skewX(6deg);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-viz-flip-cube {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .shop-viz-flip-row {
+    flex-direction: column;
+  }
+
+  .shop-viz-flip-arrow {
+    flex-direction: row;
+    width: 100%;
+    max-width: none;
+    min-width: unset;
+    justify-content: center;
+    gap: 0.5rem;
+    transform: none;
+    padding: 0.55rem 0.75rem;
+  }
+
+  .shop-viz-flip-arrow__chevron,
+  .shop-viz-flip-arrow__text {
+    transform: none;
+  }
+}
+
+.shop-hero-bunker-pair--solo {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 1.25rem 1.75rem;
+  margin-bottom: 0.75rem;
+}
+
 .shop-hero-bunker-pair {
   display: flex;
   flex-direction: row;
@@ -5145,6 +5315,13 @@ body.enemy-inspect--dragging-body {
 
 /* Mesmo padding no cartão do herói quando ao lado do bunker */
 .shop-screen__panel--gold .shop-hero-bunker-pair > .shop-hero-viz {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding: 1.15rem 1.2rem 1.25rem;
+}
+
+.shop-screen__panel--gold .shop-viz-flip-face .shop-hero-viz,
+.shop-screen__panel--gold .shop-viz-flip-face .shop-bunker-viz.shop-hero-viz {
   margin-top: 0;
   margin-bottom: 0;
   padding: 1.15rem 1.2rem 1.25rem;
