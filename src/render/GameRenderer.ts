@@ -296,6 +296,10 @@ export class GameRenderer {
   private readonly scratchFacingRight = new THREE.Vector3();
   private readonly scratchFacingScreenUp = new THREE.Vector3();
   private readonly scratchFacingDiag = new THREE.Vector3();
+  /** Herói com turno (fase jogador): só ele usa facing de ataque para o último clique. */
+  private combatTurnHeroIdForFacing: string | null = null;
+  /** Rotação Y após ataque com clique no canvas (só aplicada ao herói do turno). */
+  private readonly heroAttackFacingY = new Map<string, number>();
   /** WASD + zoom só no combate (evita mexer na câmera atrás dos menus). */
   private cameraInputEnabled = false;
 
@@ -3864,8 +3868,49 @@ export class GameRenderer {
   }
 
   /**
-   * Heróis olham para a diagonal superior-esquerda do ecrã; inimigos para a inferior-direita.
-   * Em deslocamento hex-a-hex, alinha ao sentido do segmento (mesma convenção dos feixes de preview).
+   * Herói do turno (fase jogador) para aplicar facing pós-clique de ataque.
+   * Inimigos / fase inimiga: null (todos os heróis usam a baseline da run).
+   */
+  setCombatTurnHeroIdForFacing(id: string | null): void {
+    this.combatTurnHeroIdForFacing = id;
+  }
+
+  /** Após mover, o herói volta à baseline da run (seta / diagonal sup.-esq.). */
+  clearHeroAttackFacing(heroId: string): void {
+    this.heroAttackFacingY.delete(heroId);
+  }
+
+  /**
+   * Olhar na direção do clique no plano do chão (só faz sentido chamar após ataque com rato).
+   * Convenção de yaw igual a `queueUnitMoveAlongCells`.
+   */
+  applyHeroAttackFacingFromPointer(
+    heroId: string,
+    ndcX: number,
+    ndcY: number,
+  ): void {
+    const g = this.unitMeshes.get(heroId);
+    if (!g) return;
+    this.rayGround.setFromCamera(
+      new THREE.Vector2(ndcX, ndcY),
+      this.getRenderCamera(),
+    );
+    if (!this.rayGround.ray.intersectPlane(this.groundPlane, this.hitGround))
+      return;
+    const tx = this.hitGround.x;
+    const tz = this.hitGround.z;
+    const hx = g.position.x;
+    const hz = g.position.z;
+    const dx = tx - hx;
+    const dz = tz - hz;
+    if (Math.hypot(dx, dz) < 1e-5) return;
+    this.heroAttackFacingY.set(heroId, -Math.atan2(dz, dx));
+  }
+
+  /**
+   * Heróis olham para a diagonal superior-esquerda do ecrã (baseline da run).
+   * Só o herói do turno pode olhar para o último clique após um ataque com rato.
+   * Em deslocamento: heróis mantêm baseline/ataque; inimigos alinham ao segmento.
    */
   private refreshUnitFacingForCombatView(): void {
     if (this.unitMeshes.size === 0) return;
@@ -3904,26 +3949,56 @@ export class GameRenderer {
 
     const c = Math.cos(this.arenaYaw);
     const s = Math.sin(this.arenaYaw);
+    const turnId = this.combatTurnHeroIdForFacing;
 
     for (const [uid, g] of this.unitMeshes) {
       if (this.unitMoveAnims.has(uid)) {
-        const a = this.unitMoveAnims.get(uid)!;
-        const i = a.segIndex;
-        if (i < a.cells.length - 1) {
-          const u0 = a.cells[i]!;
-          const u1 = a.cells[i + 1]!;
-          const p0 = axialToWorld(u0.q, u0.r, HEX_SIZE);
-          const p1 = axialToWorld(u1.q, u1.r, HEX_SIZE);
-          const dx = p1.x - p0.x;
-          const dz = p1.z - p0.z;
-          g.rotation.y = -Math.atan2(dz, dx);
+        const isPlayer = g.userData.isPlayer === true;
+        if (!isPlayer) {
+          const a = this.unitMoveAnims.get(uid)!;
+          const i = a.segIndex;
+          if (i < a.cells.length - 1) {
+            const u0 = a.cells[i]!;
+            const u1 = a.cells[i + 1]!;
+            const p0 = axialToWorld(u0.q, u0.r, HEX_SIZE);
+            const p1 = axialToWorld(u1.q, u1.r, HEX_SIZE);
+            const dx = p1.x - p0.x;
+            const dz = p1.z - p0.z;
+            g.rotation.y = -Math.atan2(dz, dx);
+          }
+        }
+        if (isPlayer) {
+          const useAtk = turnId === uid && this.heroAttackFacingY.has(uid);
+          if (useAtk) {
+            g.rotation.y = this.heroAttackFacingY.get(uid)!;
+          } else {
+            const Dx = towardUpperLeft.x;
+            const Dz = towardUpperLeft.z;
+            const lx = Dx * c - Dz * s;
+            const lz = Dx * s + Dz * c;
+            g.rotation.y = Math.atan2(lx, lz);
+          }
         }
         continue;
       }
 
       const isPlayer = g.userData.isPlayer === true;
-      const Dx = isPlayer ? towardUpperLeft.x : -towardUpperLeft.x;
-      const Dz = isPlayer ? towardUpperLeft.z : -towardUpperLeft.z;
+      if (isPlayer) {
+        const useAtk = turnId === uid && this.heroAttackFacingY.has(uid);
+        if (useAtk) {
+          g.rotation.y = this.heroAttackFacingY.get(uid)!;
+        } else {
+          const Dx = towardUpperLeft.x;
+          const Dz = towardUpperLeft.z;
+          const lx = Dx * c - Dz * s;
+          const lz = Dx * s + Dz * c;
+          g.rotation.y = Math.atan2(lx, lz);
+        }
+        continue;
+      }
+
+      const Dx = -towardUpperLeft.x;
+      const Dz = -towardUpperLeft.z;
       const lx = Dx * c - Dz * s;
       const lz = Dx * s + Dz * c;
       g.rotation.y = Math.atan2(lx, lz);

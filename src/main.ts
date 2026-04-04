@@ -7750,6 +7750,7 @@ function showCombatHUD(): void {
       const tid = resolveLiveEnemyAtClick();
       if (tid && model.validateEnemyForBasicAttack(tid)) {
         if (model.tryBasicAttack(tid)) {
+          view.applyHeroAttackFacingFromPointer(active.id, x, y);
           resetCombatSelection();
           update();
         }
@@ -7784,6 +7785,7 @@ function showCombatHUD(): void {
           );
         if (onHex || onEnemy) {
           if (model.trySkill("atirar_todo_lado")) {
+            view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
             update();
           }
@@ -7809,6 +7811,7 @@ function showCombatHUD(): void {
         if (
           model.trySkill("tiro_destruidor", `beam:${hex.q}:${hex.r}`)
         ) {
+          view.applyHeroAttackFacingFromPointer(active.id, x, y);
           resetCombatSelection();
           update();
         }
@@ -7818,6 +7821,7 @@ function showCombatHUD(): void {
         const tid = resolveLiveEnemyAtClick();
         if (tid && model.canSkillTargetEnemy(sid, tid)) {
           if (model.trySkill(sid, tid)) {
+            view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
             update();
           }
@@ -7835,6 +7839,7 @@ function showCombatHUD(): void {
         const tid = resolveLiveEnemyAtClick();
         if (tid && model.canSkillTargetEnemy(sid, tid)) {
           if (model.trySkill(sid, tid)) {
+            view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
             update();
           }
@@ -7853,6 +7858,7 @@ function showCombatHUD(): void {
         const onHex = hex && model.hexInSkillRange(sid, hex.q, hex.r);
         if (onHex) {
           if (model.trySkill("bunker_minas")) {
+            view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
             update();
           }
@@ -7902,6 +7908,7 @@ function showCombatHUD(): void {
       const k = axialKey(hex.q, hex.r);
       const reach = model.reachableForCurrentHero();
       if (reach.has(k) && model.tryMoveHero(hex.q, hex.r)) {
+        view.clearHeroAttackFacing(active.id);
         refreshOverlays();
         update();
       }
@@ -8399,8 +8406,15 @@ function loop(): void {
     view.setCombatSelectionUnitId(
       vh && vh.isPlayer && vh.hp > 0 ? vh.id : null,
     );
+    const turnHero = model.currentHero();
+    view.setCombatTurnHeroIdForFacing(
+      model.inEnemyPhase || !turnHero || turnHero.hp <= 0 || !turnHero.isPlayer
+        ? null
+        : turnHero.id,
+    );
   } else {
     view.setCombatSelectionUnitId(null);
+    view.setCombatTurnHeroIdForFacing(null);
   }
   const pops =
     model.phase === "combat" && !runPauseOpen
