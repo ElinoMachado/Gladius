@@ -12,10 +12,10 @@ function disposeObject3D(o: THREE.Object3D): void {
   });
 }
 
-/** Pivot da rotação Y — elevado para o bunker ficar centrado no canvas da loja. */
-const BUNKER_PREVIEW_ROOT_Y = 0.14;
-/** Mesh nv.1 (GLB): pivot baixo; sobe para o corpo ficar no meio do quadro (não só chaminé em baixo). */
-const BUNKER_PREVIEW_MODEL_Y_NV1 = 0.22;
+/** Pivot da rotação Y — sobe o conjunto no canvas da loja. */
+const BUNKER_PREVIEW_ROOT_Y = 0.42;
+/** Mesh nv.1 (GLB): pivot em baixo; offset forte para centrar volume + fumo no quadro. */
+const BUNKER_PREVIEW_MODEL_Y_NV1 = 0.58;
 /** Escala extra na loja (GLB + procedural). */
 const BUNKER_PREVIEW_SHOP_SCALE_MUL = 1.32;
 
@@ -87,12 +87,12 @@ export class BunkerPreview3D {
     this.bunkerModel.position.z = 0;
     if (tier === 0) {
       this.bunkerModel.position.y = BUNKER_PREVIEW_MODEL_Y_NV1;
-      this.camera.position.set(2.75, 1.12, 2.75);
-      this.camera.lookAt(0, 0.62, 0);
+      this.camera.position.set(2.78, 1.42, 2.78);
+      this.camera.lookAt(0, 0.95, 0);
     } else {
-      this.bunkerModel.position.y = 0.06;
-      this.camera.position.set(2.68, 1.18, 2.68);
-      this.camera.lookAt(0, 0.58, 0);
+      this.bunkerModel.position.y = 0.38;
+      this.camera.position.set(2.72, 1.48, 2.72);
+      this.camera.lookAt(0, 0.92, 0);
     }
     this.camera.updateProjectionMatrix();
   }
