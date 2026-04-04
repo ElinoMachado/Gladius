@@ -6403,6 +6403,19 @@ body.enemy-inspect--dragging-body {
   margin-top: 0.75rem;
 }
 
+/* `display: grid` acima ganha ao `[hidden]` do UA; sem isto as duas grelhas ficam visíveis em simultâneo. */
+.shop-grid[hidden] {
+  display: none !important;
+}
+
+/* Reparo / evolução: uma coluna, abaixo do painel 3D */
+.shop-grid.shop-grid--bunker-buy {
+  grid-template-columns: 1fr;
+  max-width: min(520px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
 @media (max-width: 520px) {
   .shop-grid {
     grid-template-columns: 1fr;
