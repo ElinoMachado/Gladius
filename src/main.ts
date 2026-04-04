@@ -1529,25 +1529,22 @@ function applyCombatOverlays(): void {
       if (k !== cur) moveKeys.add(k);
     }
   }
-  /**
-   * Só esconde o preview de movimento do inimigo sob o rato (âmbar), para não empilhar com o alcance.
-   * Hexes de ataque/movimento do herói e mira do Tiro destruidor mantêm-se ao pairar no modelo 3D do alvo.
-   */
-  const hideEnemyHoverMovePreview =
+  /** Inimigo sob o rato + seleção de ataque/VFX: esconde overlays de inspeção do inimigo (evita ruído). */
+  const hideEnemyInspectOverlays =
     combatHoverEnemyId != null &&
     (pendingCombat != null || model.hasPendingCombatSchedule());
   view.setMovementOverlay(moveKeys);
   view.setAttackOverlay(atkKeys);
-  const hoverMoveKeys =
-    hideEnemyHoverMovePreview || combatHoverEnemyId == null
-      ? new Set<string>()
-      : model.enemyMovementPreviewKeys(combatHoverEnemyId);
-  const inspectAtkKeys =
-    combatInspectEnemyId == null
-      ? new Set<string>()
-      : model.enemyAttackPreviewKeys(combatInspectEnemyId);
-  view.setEnemyInspectMovementOverlay(hoverMoveKeys);
-  view.setEnemyInspectAttackOverlay(inspectAtkKeys);
+  const enemyOverlayId = hideEnemyInspectOverlays
+    ? null
+    : (combatHoverEnemyId ?? combatInspectEnemyId);
+  let enemyMoveKeys = new Set<string>();
+  let enemyAtkKeys = new Set<string>();
+  if (enemyOverlayId) {
+    enemyMoveKeys = model.enemyMovementPreviewKeys(enemyOverlayId);
+    enemyAtkKeys = model.enemyAttackPreviewKeys(enemyOverlayId);
+  }
+  view.setEnemyInspectCombinedOverlay(enemyMoveKeys, enemyAtkKeys);
 
   const showTiroAim =
     pendingCombat?.kind === "skill" && pendingCombat.id === "tiro_destruidor";
@@ -4963,8 +4960,8 @@ interface HeroStatCell {
 }
 
 function bunkerShopStatCells(bunk: BunkerState): HeroStatCell[] {
-  const hpDisp = `${formatTooltipNumber(bunk.hp)}/${formatTooltipNumber(bunk.maxHp)}`;
-  const defDisp = formatTooltipNumber(bunk.defesa);
+  const hpDisp = `${tipInt(bunk.hp)}/${tipInt(bunk.maxHp)}`;
+  const defDisp = tipInt(bunk.defesa);
   return [
     {
       icon: "max_hp",

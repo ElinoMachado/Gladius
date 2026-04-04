@@ -5370,6 +5370,15 @@ body.enemy-inspect--dragging-body {
   height: 100%;
   max-height: min(52vh, 380px);
   box-sizing: border-box;
+  /* Margem interna para o WebGL não “colar” nas bordas do cartão com modelo maior. */
+  padding: 5% 6% 3% 6%;
+  overflow: hidden;
+}
+
+.shop-viz-turntable-panel--bunker .shop-bunker-viz-layout__3d-host canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .shop-viz-turntable-panel--bunker .shop-bunker-viz-layout__col {

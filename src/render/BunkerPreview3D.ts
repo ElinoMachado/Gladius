@@ -12,10 +12,12 @@ function disposeObject3D(o: THREE.Object3D): void {
   });
 }
 
-/** Pivot da rotação Y; o deslocamento vertical do nv.1 vai no `bunkerModel` + câmara. */
-const BUNKER_PREVIEW_ROOT_Y = -0.24;
-/** Extra só no mesh nv.1 (GLB): empurra o modelo para baixo no mundo. */
-const BUNKER_PREVIEW_MODEL_Y_NV1 = -0.78;
+/** Pivot da rotação Y — mais alto para o modelo ocupar melhor o quadro da loja. */
+const BUNKER_PREVIEW_ROOT_Y = -0.02;
+/** Extra só no mesh nv.1 (GLB): fumo precisa de margem sem “cair” para fora do canvas. */
+const BUNKER_PREVIEW_MODEL_Y_NV1 = -0.52;
+/** Escala extra na loja (GLB + procedural) para preencher o viewport sem clip nas bordas. */
+const BUNKER_PREVIEW_SHOP_SCALE_MUL = 1.38;
 
 /** Preview do bunker na loja (mesmo modelo da arena, escala por tier). */
 export class BunkerPreview3D {
@@ -72,8 +74,8 @@ export class BunkerPreview3D {
       this.previewTier = tier;
     }
     const glb = !!this.bunkerModel.userData.bunkerGlb;
-    const s = glb ? 1 : tier === 0 ? 1 : tier === 1 ? 1.06 : 1.12;
-    this.root.scale.setScalar(s);
+    const base = glb ? 1 : tier === 0 ? 1 : tier === 1 ? 1.06 : 1.12;
+    this.root.scale.setScalar(base * BUNKER_PREVIEW_SHOP_SCALE_MUL);
     this.applyPreviewFraming(tier);
     this.host.dataset.bunkerPreviewTier = String(tier);
   }
@@ -85,12 +87,12 @@ export class BunkerPreview3D {
     this.bunkerModel.position.z = 0;
     if (tier === 0) {
       this.bunkerModel.position.y = BUNKER_PREVIEW_MODEL_Y_NV1;
-      this.camera.position.set(3.28, 0.65, 3.28);
-      this.camera.lookAt(-0.1, 0.02, 0);
+      this.camera.position.set(2.62, 0.92, 2.62);
+      this.camera.lookAt(0, 0.38, 0);
     } else {
       this.bunkerModel.position.y = 0;
-      this.camera.position.set(3.2, 0.88, 3.2);
-      this.camera.lookAt(-0.1, 0.22, 0);
+      this.camera.position.set(2.55, 1.02, 2.55);
+      this.camera.lookAt(0, 0.42, 0);
     }
     this.camera.updateProjectionMatrix();
   }

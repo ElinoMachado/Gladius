@@ -2736,24 +2736,55 @@ export class GameRenderer {
     }
   }
 
-  /** Alcance de movimento do inimigo sob o rato (âmbar). */
-  setEnemyInspectMovementOverlay(keys: Set<string>): void {
+  /**
+   * Movimento (âmbar) + alcance de ataque (magenta) do mesmo inimigo ao pairar / painel.
+   * O conjunto com **menos** hexes desenha-se por cima para o movimento curto não ficar tapado.
+   */
+  setEnemyInspectCombinedOverlay(
+    moveKeys: Set<string>,
+    attackKeys: Set<string>,
+  ): void {
     this.disposeOverlayGroup(this.enemyInspectMoveOverlayGroup);
-    this.enemyInspectMoveOverlayGroup = keys.size
-      ? this.buildHexOverlay(keys, 0xffaa33, 0.42, 0.095)
-      : null;
-    if (this.enemyInspectMoveOverlayGroup)
-      this.arenaRoot.add(this.enemyInspectMoveOverlayGroup);
-  }
-
-  /** Alcance de ataque básico do inimigo inspecionado ao clicar (magenta/rosa). */
-  setEnemyInspectAttackOverlay(keys: Set<string>): void {
     this.disposeOverlayGroup(this.enemyInspectAttackOverlayGroup);
-    this.enemyInspectAttackOverlayGroup = keys.size
-      ? this.buildHexOverlay(keys, 0xe040a8, 0.4, 0.102)
-      : null;
-    if (this.enemyInspectAttackOverlayGroup)
-      this.arenaRoot.add(this.enemyInspectAttackOverlayGroup);
+    this.enemyInspectMoveOverlayGroup = null;
+    this.enemyInspectAttackOverlayGroup = null;
+
+    const nM = moveKeys.size;
+    const nA = attackKeys.size;
+    if (nM === 0 && nA === 0) return;
+
+    let orderMove = 12;
+    let orderAtk = 13;
+    if (nM > 0 && nA > 0) {
+      if (nM <= nA) {
+        orderMove = 13;
+        orderAtk = 12;
+      } else {
+        orderMove = 12;
+        orderAtk = 13;
+      }
+    } else {
+      orderMove = 12;
+      orderAtk = 12;
+    }
+
+    const moveGroup =
+      nM > 0
+        ? this.buildHexOverlay(moveKeys, 0xffaa33, 0.42, 0.095, orderMove)
+        : null;
+    const atkGroup =
+      nA > 0
+        ? this.buildHexOverlay(attackKeys, 0xe040a8, 0.4, 0.102, orderAtk)
+        : null;
+
+    this.enemyInspectMoveOverlayGroup = moveGroup;
+    this.enemyInspectAttackOverlayGroup = atkGroup;
+
+    const layers: { g: THREE.Group; ord: number }[] = [];
+    if (moveGroup) layers.push({ g: moveGroup, ord: orderMove });
+    if (atkGroup) layers.push({ g: atkGroup, ord: orderAtk });
+    layers.sort((a, b) => a.ord - b.ord);
+    for (const { g } of layers) this.arenaRoot.add(g);
   }
 
   private buildHexOverlay(
@@ -2761,6 +2792,7 @@ export class GameRenderer {
     color: number,
     opacity: number,
     y: number,
+    groupRenderOrder = 2,
   ): THREE.Group {
     const shape = createHexShape(HEX_SIZE * 0.96);
     const mat = new THREE.MeshBasicMaterial({
@@ -2774,11 +2806,12 @@ export class GameRenderer {
       polygonOffsetUnits: -10,
     });
     const group = new THREE.Group();
-    group.renderOrder = 2;
+    group.renderOrder = groupRenderOrder;
     for (const k of keys) {
       const geo = new THREE.ShapeGeometry(shape);
       geo.rotateX(-Math.PI / 2);
       const mesh = new THREE.Mesh(geo, mat);
+      mesh.renderOrder = groupRenderOrder;
       const cell = k.split(",").map(Number) as [number, number];
       const { x, z } = axialToWorld(cell[0]!, cell[1]!, HEX_SIZE);
       mesh.position.set(x, y + this.playSurfaceYOffset(), z);
