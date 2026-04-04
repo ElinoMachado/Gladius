@@ -2737,7 +2737,7 @@ export class GameRenderer {
       | THREE.Object3D
       | undefined;
     if (!barRoot || !body) return;
-    const margin = 0.12;
+    const margin = 0.36;
     barRoot.position.y = this.computeBodyTopLocalY(g, body) + margin;
   }
 
