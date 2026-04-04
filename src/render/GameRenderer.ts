@@ -290,6 +290,11 @@ export class GameRenderer {
   private readonly camDistance = 152;
   /** Rotação Y da arena: alinha o setor do herói com a vista (radial → diagonal +X/+Z na tela). */
   private arenaYaw = 0;
+  private readonly unitFacingWorldUp = new THREE.Vector3(0, 1, 0);
+  private readonly scratchFacingView = new THREE.Vector3();
+  private readonly scratchFacingRight = new THREE.Vector3();
+  private readonly scratchFacingScreenUp = new THREE.Vector3();
+  private readonly scratchFacingDiag = new THREE.Vector3();
   /** WASD + zoom só no combate (evita mexer na câmera atrás dos menus). */
   private cameraInputEnabled = false;
 
@@ -3856,6 +3861,73 @@ export class GameRenderer {
     }
   }
 
+  /**
+   * Heróis olham para a diagonal superior-esquerda do ecrã; inimigos para a inferior-direita.
+   * Em deslocamento hex-a-hex, alinha ao sentido do segmento (mesma convenção dos feixes de preview).
+   */
+  private refreshUnitFacingForCombatView(): void {
+    if (this.unitMeshes.size === 0) return;
+    const cam = this.getRenderCamera();
+    cam.updateMatrixWorld(true);
+
+    const view = this.scratchFacingView;
+    cam.getWorldDirection(view);
+    view.negate();
+    view.y = 0;
+    if (view.lengthSq() < 1e-8) return;
+    view.normalize();
+
+    const right = this.scratchFacingRight.crossVectors(
+      this.unitFacingWorldUp,
+      view,
+    );
+    if (right.lengthSq() < 1e-8) return;
+    right.normalize();
+
+    const screenUp = this.scratchFacingScreenUp.crossVectors(view, right);
+    screenUp.y = 0;
+    if (screenUp.lengthSq() < 1e-8) {
+      screenUp.copy(view).cross(this.unitFacingWorldUp).normalize();
+    } else {
+      screenUp.normalize();
+    }
+
+    const towardUpperLeft = this.scratchFacingDiag.copy(screenUp).sub(right);
+    towardUpperLeft.y = 0;
+    if (towardUpperLeft.lengthSq() < 1e-8) {
+      towardUpperLeft.set(-1, 0, -1);
+    } else {
+      towardUpperLeft.normalize();
+    }
+
+    const c = Math.cos(this.arenaYaw);
+    const s = Math.sin(this.arenaYaw);
+
+    for (const [uid, g] of this.unitMeshes) {
+      if (this.unitMoveAnims.has(uid)) {
+        const a = this.unitMoveAnims.get(uid)!;
+        const i = a.segIndex;
+        if (i < a.cells.length - 1) {
+          const u0 = a.cells[i]!;
+          const u1 = a.cells[i + 1]!;
+          const p0 = axialToWorld(u0.q, u0.r, HEX_SIZE);
+          const p1 = axialToWorld(u1.q, u1.r, HEX_SIZE);
+          const dx = p1.x - p0.x;
+          const dz = p1.z - p0.z;
+          g.rotation.y = -Math.atan2(dz, dx);
+        }
+        continue;
+      }
+
+      const isPlayer = g.userData.isPlayer === true;
+      const Dx = isPlayer ? towardUpperLeft.x : -towardUpperLeft.x;
+      const Dz = isPlayer ? towardUpperLeft.z : -towardUpperLeft.z;
+      const lx = Dx * c - Dz * s;
+      const lz = Dx * s + Dz * c;
+      g.rotation.y = Math.atan2(lx, lz);
+    }
+  }
+
   tick(): void {
     const dt = this.clock.getDelta();
     const cometOn = this.cometaArcanoCinematic !== null;
@@ -3926,6 +3998,7 @@ export class GameRenderer {
         this.roseParticles = null;
       }
     }
+    this.refreshUnitFacingForCombatView();
     const rc = this.getRenderCamera();
     for (const g of this.unitMeshes.values()) {
       const br = g.userData.barRoot as THREE.Group | undefined;
