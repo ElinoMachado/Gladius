@@ -3443,10 +3443,6 @@ function showGoldShop(isInitial: boolean): void {
         </span>
       </button>`;
     }).join("");
-    const goldMultiHint =
-      party.length > 1
-        ? `<p class="shop-hero-gold-multi-hint" role="note">Cada bolsa é <strong>só desse herói</strong> — clica numa para ver a loja com esse herói.</p>`
-        : "";
     const refundCost = model.nextShopRefundCrystalCost();
     const hasShopChanges = model.shopHasChangesFromSnapshot();
     const canRefund =
@@ -3559,7 +3555,6 @@ function showGoldShop(isInitial: boolean): void {
         <div class="shop-hero-gold-bags" role="group" aria-label="Ouro por herói — cada um tem a sua bolsa">
           ${goldBagsHtml}
         </div>
-        ${goldMultiHint}
         ${vizAndGridBlock}
         <div class="shop-footer">
           <p id="shop-footer-msg" class="shop-footer-msg" role="status" hidden></p>
