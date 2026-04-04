@@ -5621,15 +5621,17 @@ export class GameModel {
   buyBunkerRepair(heroId: string): boolean {
     const u = this.units.find((x) => x.id === heroId);
     if (!u || !u.isPlayer) return false;
-    const list = this.allBunkerStates();
-    if (list.length === 0) return false;
-    let missing = 0;
-    for (const b of list) missing += b.maxHp - b.hp;
+    const b = this.bunkerForHeroHomeBiome(u);
+    if (!b) return false;
+    const missing = b.maxHp - b.hp;
     if (missing <= 0) return false;
     if (u.ouro < missing) return false;
     u.ouro -= missing;
-    for (const b of list) b.hp = b.maxHp;
-    this.log(`Bunkers reparados (${missing} ouro).`);
+    b.hp = b.maxHp;
+    const biome = this.heroHomeBiome(u);
+    this.log(
+      `Bunker do bioma ${BIOME_LABELS[biome]} reparado (${missing} ouro).`,
+    );
     this.emit();
     return true;
   }
