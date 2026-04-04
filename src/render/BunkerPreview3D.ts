@@ -12,6 +12,10 @@ function disposeObject3D(o: THREE.Object3D): void {
   });
 }
 
+/** Offset Y do pivot no preview: nv.1 (GLB + fumo alto) desce mais; nv.2/3 inalterados. */
+const BUNKER_PREVIEW_ROOT_Y_TIER0 = -0.38;
+const BUNKER_PREVIEW_ROOT_Y_TIER12 = -0.24;
+
 /** Preview do bunker na loja (mesmo modelo da arena, escala por tier). */
 export class BunkerPreview3D {
   private renderer: THREE.WebGLRenderer;
@@ -51,7 +55,7 @@ export class BunkerPreview3D {
 
     this.bunkerModel = createBunkerVisualGroup(0);
     this.root.add(this.bunkerModel);
-    this.root.position.y = -0.24;
+    this.root.position.y = BUNKER_PREVIEW_ROOT_Y_TIER0;
     this.scene.add(this.root);
 
     window.addEventListener("resize", this.onResize);
@@ -72,6 +76,8 @@ export class BunkerPreview3D {
     const glb = !!this.bunkerModel.userData.bunkerGlb;
     const s = glb ? 1 : tier === 0 ? 1 : tier === 1 ? 1.06 : 1.12;
     this.root.scale.setScalar(s);
+    this.root.position.y =
+      tier === 0 ? BUNKER_PREVIEW_ROOT_Y_TIER0 : BUNKER_PREVIEW_ROOT_Y_TIER12;
   }
 
   private fit(): void {
