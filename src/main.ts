@@ -3498,28 +3498,32 @@ function showGoldShop(isInitial: boolean): void {
               </div>`;
     const vizAndGridBlock = bunkerShop
       ? (() => {
-          const cubeBunker =
+          const carouselBunker =
             goldShopVizFocus === "bunker"
-              ? " shop-viz-flip-cube--bunker"
+              ? " shop-viz-carousel--bunker"
               : "";
           const heroGridHidden = goldShopVizFocus === "bunker" ? " hidden" : "";
           const bunkGridHidden = goldShopVizFocus === "hero" ? " hidden" : "";
+          const heroGridAria = goldShopVizFocus === "bunker" ? ' aria-hidden="true"' : "";
+          const bunkGridAria = goldShopVizFocus === "hero" ? ' aria-hidden="true"' : "";
           return `<div class="shop-viz-flip-wrap">
         <div class="shop-viz-flip-row">
-          <div class="shop-viz-flip-scene">
-            <div id="shop-viz-flip-cube" class="shop-viz-flip-cube${cubeBunker}">
-              <div class="shop-viz-flip-face shop-viz-flip-face--hero">
-                <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
-                  <p class="shop-viz-flip-entity-title">${escapeHtml(h.name)}</p>
-                  <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host" aria-hidden="true"></div>
-                  <div class="shop-hero-stats-col">${heroStatsColHtml}
+          <div class="shop-viz-stage">
+            <div id="shop-viz-carousel" class="shop-viz-carousel${carouselBunker}">
+              <div class="shop-viz-carousel-scene">
+                <div class="shop-viz-carousel-card shop-viz-carousel-card--hero">
+                  <div class="shop-hero-viz" aria-label="Herói e atributos atuais">
+                    <p class="shop-viz-flip-entity-title">${escapeHtml(h.name)}</p>
+                    <div id="gold-shop-hero-3d" class="gold-shop-hero-3d-host gold-shop-hero-3d-host--carousel" aria-hidden="true"></div>
+                    <div class="shop-hero-stats-col">${heroStatsColHtml}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div class="shop-viz-flip-face shop-viz-flip-face--bunker">
-                <div class="shop-bunker-viz shop-hero-viz" aria-label="Bunker da arena">
-                  <p class="shop-viz-flip-entity-title">Bunker da arena</p>
-                  ${goldShopBunkerSectionHtml(bunkerShop)}
+                <div class="shop-viz-carousel-card shop-viz-carousel-card--bunker">
+                  <div class="shop-bunker-viz shop-hero-viz" aria-label="Bunker da arena">
+                    <p class="shop-viz-flip-entity-title">Bunker da arena</p>
+                    ${goldShopBunkerSectionHtml(bunkerShop)}
+                  </div>
                 </div>
               </div>
             </div>
@@ -3532,8 +3536,8 @@ function showGoldShop(isInitial: boolean): void {
       </div>
         <div class="shop-mid-row">
           <div class="shop-mid-cell shop-mid-cell--gold">
-            <div id="shop-grid-hero-gold" class="shop-grid"${heroGridHidden}>${list}</div>
-            <div id="shop-grid-bunker-gold" class="shop-grid shop-grid--bunker-buy"${bunkGridHidden}>${goldShopBunkerBuyGridHtml(bunkerShop, h)}</div>
+            <div id="shop-grid-hero-gold" class="shop-grid"${heroGridHidden}${heroGridAria}>${list}</div>
+            <div id="shop-grid-bunker-gold" class="shop-grid shop-grid--bunker-buy"${bunkGridHidden}${bunkGridAria}>${goldShopBunkerBuyGridHtml(bunkerShop, h)}</div>
           </div>
         </div>`;
         })()
@@ -3648,7 +3652,12 @@ function showGoldShop(isInitial: boolean): void {
     ) as HTMLElement | null;
     if (h.heroClass) {
       if (skillsWrap) skillsWrap.hidden = false;
-      goldShopHeroPreview3d = new HeroPreview3D(hero3dHost, 220, 260);
+      goldShopHeroPreview3d = bunkerShop
+        ? new HeroPreview3D(hero3dHost, 196, 156, {
+            cameraZ: 3.02,
+            lookAtY: 0.66,
+          })
+        : new HeroPreview3D(hero3dHost, 220, 260);
       const shopForma =
         h.formaFinal && h.ultimateId
           ? { formaFinal: true as const, ultimateId: h.ultimateId }
@@ -4620,16 +4629,24 @@ function goldShopBunkerBuyGridHtml(bunk: BunkerState, h: Unit): string {
 
 function applyGoldShopVizFocus(panel: HTMLElement, hasBunker: boolean): void {
   if (!hasBunker) return;
-  const cube = panel.querySelector("#shop-viz-flip-cube");
+  const carousel = panel.querySelector("#shop-viz-carousel");
   const heroGrid = panel.querySelector("#shop-grid-hero-gold") as HTMLElement | null;
   const bunkGrid = panel.querySelector("#shop-grid-bunker-gold") as HTMLElement | null;
   const toggle = panel.querySelector("#shop-viz-flip-toggle") as HTMLElement | null;
   const chev = toggle?.querySelector(".shop-viz-flip-arrow__chevron");
   const txt = toggle?.querySelector(".shop-viz-flip-arrow__text");
   const bunker = goldShopVizFocus === "bunker";
-  cube?.classList.toggle("shop-viz-flip-cube--bunker", bunker);
-  if (heroGrid) heroGrid.hidden = bunker;
-  if (bunkGrid) bunkGrid.hidden = !bunker;
+  carousel?.classList.toggle("shop-viz-carousel--bunker", bunker);
+  if (heroGrid) {
+    heroGrid.hidden = bunker;
+    if (bunker) heroGrid.setAttribute("aria-hidden", "true");
+    else heroGrid.removeAttribute("aria-hidden");
+  }
+  if (bunkGrid) {
+    bunkGrid.hidden = !bunker;
+    if (!bunker) bunkGrid.setAttribute("aria-hidden", "true");
+    else bunkGrid.removeAttribute("aria-hidden");
+  }
   if (chev) chev.textContent = bunker ? "←" : "→";
   if (txt) txt.textContent = bunker ? "Herói" : "Bunker";
   if (toggle) {

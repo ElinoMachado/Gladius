@@ -5133,7 +5133,7 @@ body.enemy-inspect--dragging-body {
     0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
-/* Loja ouro: herói / bunker num “cartão” com flip 3D + seta */
+/* Loja ouro: carrossel 3D (painel de trás visível) + inclinação + seta */
 .shop-viz-flip-wrap {
   margin-bottom: 0.75rem;
 }
@@ -5143,46 +5143,153 @@ body.enemy-inspect--dragging-body {
   flex-direction: row;
   align-items: stretch;
   gap: 0.75rem 1rem;
+  transform-style: preserve-3d;
 }
 
-.shop-viz-flip-scene {
+/* Esquerda ligeiramente mais próxima: rotação em Y + leve em X (profundidade) */
+.shop-viz-stage {
   flex: 1;
   min-width: 0;
-  perspective: 1180px;
-  perspective-origin: 50% 45%;
+  transform-style: preserve-3d;
+  transform: perspective(1040px) rotateY(-11deg) rotateX(3deg);
+  transform-origin: 50% 50%;
 }
 
-.shop-viz-flip-cube {
+.shop-viz-carousel {
+  width: 100%;
+  transform-style: preserve-3d;
+}
+
+.shop-viz-carousel-scene {
   position: relative;
   width: 100%;
-  min-height: 340px;
+  height: 268px;
   transform-style: preserve-3d;
-  transition: transform 0.58s cubic-bezier(0.4, 0, 0.2, 1);
-  transform: rotateY(0deg);
+  transform-origin: center center;
 }
 
-.shop-viz-flip-cube--bunker {
-  transform: rotateY(180deg);
-}
-
-.shop-viz-flip-face {
+.shop-viz-carousel-card {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
   width: 100%;
-  min-height: 100%;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  overflow: auto;
+  height: 100%;
+  max-height: 100%;
   box-sizing: border-box;
-  border-radius: 2px;
+  overflow: hidden;
+  border-radius: 3px;
+  transform-style: preserve-3d;
+  transition:
+    transform 0.58s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.48s ease,
+    filter 0.48s ease;
+  will-change: transform, opacity;
 }
 
-.shop-viz-flip-face--hero {
-  transform: rotateY(0deg);
+/* Frente: herói — bunker recua à direita, visível atrás */
+.shop-viz-carousel:not(.shop-viz-carousel--bunker) .shop-viz-carousel-card--hero {
+  transform: translateZ(44px) scale(1);
+  opacity: 1;
+  z-index: 4;
+  filter: brightness(1);
+  pointer-events: auto;
 }
 
-.shop-viz-flip-face--bunker {
-  transform: rotateY(180deg);
+.shop-viz-carousel:not(.shop-viz-carousel--bunker) .shop-viz-carousel-card--bunker {
+  transform: translateZ(-102px) translateX(30%) scale(0.76) rotateY(-26deg);
+  opacity: 0.52;
+  z-index: 1;
+  filter: brightness(0.72);
+  pointer-events: none;
+}
+
+/* Frente: bunker — herói recua à esquerda */
+.shop-viz-carousel--bunker .shop-viz-carousel-card--bunker {
+  transform: translateZ(44px) scale(1);
+  opacity: 1;
+  z-index: 4;
+  filter: brightness(1);
+  pointer-events: auto;
+}
+
+.shop-viz-carousel--bunker .shop-viz-carousel-card--hero {
+  transform: translateZ(-102px) translateX(-30%) scale(0.76) rotateY(26deg);
+  opacity: 0.52;
+  z-index: 1;
+  filter: brightness(0.72);
+  pointer-events: none;
+}
+
+/* Preview 3D mais baixo — cabe no cartão sem scroll */
+.shop-screen__panel--gold .gold-shop-hero-3d-host--carousel {
+  width: 100%;
+  height: 152px;
+  min-height: 152px;
+  max-height: 152px;
+}
+
+.shop-viz-carousel-card .shop-bunker-viz-layout__preview {
+  width: 148px;
+  max-width: 42%;
+}
+
+.shop-viz-carousel-card .shop-bunker-viz-layout__3d-host {
+  min-height: 148px;
+  height: 148px;
+  max-height: 148px;
+}
+
+.shop-viz-carousel-card .shop-bunker-viz-layout {
+  gap: 0.55rem 0.85rem;
+  padding: 0.15rem 0.05rem 0;
+}
+
+.shop-viz-carousel-card .shop-bunker-viz-layout__col {
+  padding: 0.1rem 0.05rem 0.15rem 0.2rem;
+}
+
+.shop-viz-carousel-card .shop-bunker-viz-layout__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.65rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.shop-viz-carousel-card .shop-hero-stats-col {
+  gap: 0.35rem;
+}
+
+.shop-viz-carousel-card .shop-hero-artifacts-section {
+  margin-top: 0.25rem;
+}
+
+.shop-viz-carousel-card .shop-hero-stats-head {
+  margin-bottom: 0.28rem;
+  font-size: 0.7rem;
+}
+
+.shop-viz-carousel-card .shop-viz-flip-entity-title {
+  margin-bottom: 0.38rem;
+  padding: 0.28rem 0.4rem 0.32rem;
+  font-size: 0.72rem;
+}
+
+.shop-viz-carousel-card .gold-shop-hero-stats-grid.lol-stats-list {
+  margin-top: 0.05rem;
+  margin-bottom: 0.25rem;
+}
+
+.shop-viz-carousel-card .shop-bunker-skills-block {
+  margin-top: 0.25rem;
+  padding-top: 0.45rem;
+}
+
+.shop-viz-carousel-card .gold-shop-hero-skills-row {
+  gap: 0.4rem;
 }
 
 .shop-viz-flip-entity-title {
@@ -5267,14 +5374,26 @@ body.enemy-inspect--dragging-body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .shop-viz-flip-cube {
+  .shop-viz-carousel-card {
     transition: none;
+  }
+
+  .shop-viz-stage {
+    transform: none;
   }
 }
 
 @media (max-width: 720px) {
   .shop-viz-flip-row {
     flex-direction: column;
+  }
+
+  .shop-viz-stage {
+    transform: perspective(920px) rotateY(-7deg) rotateX(2deg);
+  }
+
+  .shop-viz-carousel-scene {
+    height: 288px;
   }
 
   .shop-viz-flip-arrow {
@@ -5320,11 +5439,15 @@ body.enemy-inspect--dragging-body {
   padding: 1.15rem 1.2rem 1.25rem;
 }
 
-.shop-screen__panel--gold .shop-viz-flip-face .shop-hero-viz,
-.shop-screen__panel--gold .shop-viz-flip-face .shop-bunker-viz.shop-hero-viz {
+.shop-screen__panel--gold .shop-viz-carousel-card .shop-hero-viz,
+.shop-screen__panel--gold .shop-viz-carousel-card .shop-bunker-viz.shop-hero-viz {
   margin-top: 0;
   margin-bottom: 0;
-  padding: 1.15rem 1.2rem 1.25rem;
+  padding: 0.55rem 0.65rem 0.6rem;
+  height: 100%;
+  max-height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .shop-hero-bunker-pair > .shop-hero-viz,
