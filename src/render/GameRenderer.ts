@@ -76,6 +76,12 @@ const BIOME_HEX_COLOR: Record<BiomeId, number> = {
  * Raio centro→vértice no grid axial (vizinhos a distância √3·HEX_SIZE; mesh com o mesmo raio encosta sem folga).
  */
 const HEX_SIZE = 2.18;
+/**
+ * Raio horizontal do cilindro de raycast do bunker (malha visível não recebe raycast).
+ * Apotema do hex = √3/2·HEX_SIZE; ficar ligeiramente por dentro evita tratar o hex vizinho como bunker.
+ */
+const BUNKER_PICK_RADIUS_XZ = HEX_SIZE * (Math.sqrt(3) / 2) * 0.9;
+const BUNKER_PICK_CYLINDER_SEGMENTS = 20;
 /** Com o coliseu GLB, hexes/unidades sobem ligeiramente acima da areia (após afundar o modelo). */
 const ARENA_PLAY_SURFACE_Y_WITH_COLISEUM = 0.11;
 /** Heróis com `flying`: altura base acima do hex (~4× a elevação inicial). */
@@ -97,6 +103,15 @@ const ORTHO_FRUSTUM = 108;
 const LAYOUT_EDIT_ZOOM_OUT_FRUSTUM_FACTOR = 5;
 /** Manter mesh de inimigo morto (invisível) até os números de dano usarem a posição (float ~950ms). */
 const ENEMY_DEATH_MESH_HOLD_MS = 1050;
+
+/** Malha do bunker (GLB/procedural) não participa em `intersectObject`; só o cilindro invisível. */
+function disableMeshRaycastForBunkerVisual(o: THREE.Object3D): void {
+  o.traverse((ch) => {
+    if (ch instanceof THREE.Mesh || ch instanceof THREE.SkinnedMesh) {
+      ch.raycast = (): void => {};
+    }
+  });
+}
 
 function createHexShape(size: number): THREE.Shape {
   const sh = new THREE.Shape();
@@ -3025,11 +3040,12 @@ export class GameRenderer {
 
     let proxy = g.userData.bunkerPickProxy as THREE.Mesh | undefined;
     if (inBunker) {
-      /** Cobre ~todo o hex + volume do bunker GLB (deslocado do centro); só para raycast. */
-      const pickXZ = HEX_SIZE * Math.sqrt(3) * 1.06;
+      /** Cilindro ~inscrito no hex (não invade vizinhos); só para raycast ao ocupante. */
       const pickH = 1.45;
+      const r = BUNKER_PICK_RADIUS_XZ;
+      const segs = BUNKER_PICK_CYLINDER_SEGMENTS;
       if (!proxy) {
-        const geo = new THREE.BoxGeometry(pickXZ, pickH, pickXZ);
+        const geo = new THREE.CylinderGeometry(r, r, pickH, segs);
         const mat = new THREE.MeshBasicMaterial({
           transparent: true,
           opacity: 0,
@@ -3819,26 +3835,51 @@ export class GameRenderer {
         root.scale.setScalar(off.scale);
       }
       this.ensureBunkerInteractionVolume(root);
+      const vis = root.userData.bunkerVisual as THREE.Object3D | undefined;
+      const visFlags = vis?.userData as
+        | { bunkerCombatRaycastDisabled?: boolean }
+        | undefined;
+      if (vis && !visFlags?.bunkerCombatRaycastDisabled) {
+        disableMeshRaycastForBunkerVisual(vis);
+        (vis.userData as { bunkerCombatRaycastDisabled?: boolean }).bunkerCombatRaycastDisabled =
+          true;
+      }
     }
   }
 
   /** Volume invisível para raycast (GLB pode falhar ou ser irregular); não altera aspeto. */
   private ensureBunkerInteractionVolume(root: THREE.Group): void {
-    const pickXZ = HEX_SIZE * Math.sqrt(3) * 1.12;
     const pickH = 2.85;
+    const r = BUNKER_PICK_RADIUS_XZ;
+    const segs = BUNKER_PICK_CYLINDER_SEGMENTS;
     let pick = root.userData.bunkerRayPick as THREE.Mesh | undefined;
+    const mat =
+      pick?.material instanceof THREE.MeshBasicMaterial
+        ? (pick.material as THREE.MeshBasicMaterial)
+        : new THREE.MeshBasicMaterial({
+            transparent: true,
+            opacity: 0,
+            depthWrite: false,
+          });
+    const geoOk =
+      pick?.geometry instanceof THREE.CylinderGeometry &&
+      (pick.userData.bunkerPickR as number | undefined) === r &&
+      (pick.userData.bunkerPickH as number | undefined) === pickH;
     if (!pick) {
       pick = new THREE.Mesh(
-        new THREE.BoxGeometry(pickXZ, pickH, pickXZ),
-        new THREE.MeshBasicMaterial({
-          transparent: true,
-          opacity: 0,
-          depthWrite: false,
-        }),
+        new THREE.CylinderGeometry(r, r, pickH, segs),
+        mat,
       );
       pick.userData.role = "bunkerRayPick";
+      pick.userData.bunkerPickR = r;
+      pick.userData.bunkerPickH = pickH;
       root.add(pick);
       root.userData.bunkerRayPick = pick;
+    } else if (!geoOk) {
+      pick.geometry.dispose();
+      pick.geometry = new THREE.CylinderGeometry(r, r, pickH, segs);
+      pick.userData.bunkerPickR = r;
+      pick.userData.bunkerPickH = pickH;
     }
     pick.position.y = pickH * 0.5 - 0.02;
   }
@@ -5144,6 +5185,9 @@ export class GameRenderer {
     hit.add(vis);
     hit.userData.bunkerVisual = vis;
     hit.userData.bunkerVisualTier = t;
+    disableMeshRaycastForBunkerVisual(vis);
+    (vis.userData as { bunkerCombatRaycastDisabled?: boolean }).bunkerCombatRaycastDisabled =
+      true;
     this.applyBunkerMountsPoseFromPrefs();
     this.scheduleArenaLayoutPersist();
     this.clearLayoutSelectionEmissive(hit);
