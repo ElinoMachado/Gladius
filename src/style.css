@@ -7476,6 +7476,47 @@ select.forge-biome-sel option:disabled {
   cursor: not-allowed;
 }
 
+/* Texto + custo numérico + brasão da essência (forja/aprimorar). */
+.forge-do-btn__inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.45rem;
+  line-height: 1.2;
+}
+
+.forge-do-btn__verb {
+  font-weight: 700;
+}
+
+.forge-do-btn__cost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.forge-do-btn__cost-num {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  min-width: 1ch;
+}
+
+.forge-do-btn__cost-crest {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+
+.forge-do-btn__cost-crest .forge-biome-crest-wrap {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.forge-do-btn__cost-crest .forge-biome-crest {
+  display: block;
+}
+
 .forge-piece-label {
   font-weight: 700;
   color: #c9b8a0;

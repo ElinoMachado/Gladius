@@ -1749,14 +1749,22 @@ function syncForgeKindRow(
     : curPiece.level === 1
       ? FORGE_COST_UPGRADE_TO_2
       : FORGE_COST_UPGRADE_TO_3;
-  btn.textContent =
-    biomeNow == null
-      ? "—"
-      : fullyMaxedThisLine
-        ? "Máximo"
-        : !curPiece
-          ? `Forjar (${cost})`
-          : `Aprimorar (${cost})`;
+  if (biomeNow == null) {
+    btn.textContent = "—";
+    btn.removeAttribute("aria-label");
+  } else if (fullyMaxedThisLine) {
+    btn.textContent = "Máximo";
+    btn.removeAttribute("aria-label");
+  } else {
+    const verb = !curPiece ? "Forjar" : "Aprimorar";
+    const crest = biomeCrestWrap(biomeNow, 22);
+    const essenceName = FORGE_ESSENCE_LABELS[biomeNow];
+    btn.innerHTML = `<span class="forge-do-btn__inner"><span class="forge-do-btn__verb">${escapeHtml(verb)}</span><span class="forge-do-btn__cost"><span class="forge-do-btn__cost-num">${cost}</span><span class="forge-do-btn__cost-crest" aria-hidden="true">${crest}</span></span>`;
+    btn.setAttribute(
+      "aria-label",
+      `${verb}: custo ${cost} de ${essenceName}`,
+    );
+  }
   if (biomeNow == null) {
     btn.setAttribute("aria-disabled", "true");
     btn.classList.remove("forge-do-btn--max");
