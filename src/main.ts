@@ -1350,7 +1350,7 @@ function updateTiroDestruidorAimPreview(ndcX: number, ndcY: number): void {
     }
     return;
   }
-  const hex = view.pickHex(ndcX, ndcY, model.grid);
+  const hex = view.pickCombatHex(ndcX, ndcY, model.grid);
   if (!hex) {
     if (combatTiroAimCacheSig !== "") {
       combatTiroBeamPreviewKeys = null;
@@ -6544,7 +6544,7 @@ function showCombatHUD(): void {
     const r = canvas.getBoundingClientRect();
     const x = ((ev.clientX - r.left) / r.width) * 2 - 1;
     const y = -((ev.clientY - r.top) / r.height) * 2 + 1;
-    const hex = view.pickHex(x, y, model.grid);
+    const hex = view.pickCombatHex(x, y, model.grid);
     if (!hex) {
       clearBunkerHoverHint();
       return;
@@ -7682,7 +7682,7 @@ function showCombatHUD(): void {
         }
         return;
       }
-      const hex = view.pickHex(ndcX, ndcY, model.grid);
+      const hex = view.pickCombatHex(ndcX, ndcY, model.grid);
       const b =
         hex != null ? model.bunkerAtHex(hex.q, hex.r) : undefined;
       if (b && b.hp > 0) {
@@ -7737,7 +7737,7 @@ function showCombatHUD(): void {
     if (!active || model.phase !== "combat") return;
     if (view.isUnitMoveAnimating()) return;
 
-    const hexAtPointer = view.pickHex(x, y, model.grid);
+    const hexAtPointer = view.pickCombatHex(x, y, model.grid);
     if (combatInspectEnemyId != null && hexAtPointer != null) {
       combatInspectEnemyId = null;
       update();
@@ -7787,7 +7787,7 @@ function showCombatHUD(): void {
         const u = model.units.find((z) => z.id === uid);
         if (u && !u.isPlayer && u.hp > 0) return uid;
       }
-      const hex = view.pickHex(x, y, model.grid);
+      const hex = view.pickCombatHex(x, y, model.grid);
       if (!hex) return null;
       return model.liveEnemyIdAtHex(hex.q, hex.r);
     };
@@ -7802,7 +7802,7 @@ function showCombatHUD(): void {
         }
         return;
       }
-      const hex = view.pickHex(x, y, model.grid);
+      const hex = view.pickCombatHex(x, y, model.grid);
       if (!hex) {
         cancelPendingCombatToMove();
         return;
@@ -7818,7 +7818,7 @@ function showCombatHUD(): void {
     if (pendingCombat?.kind === "skill") {
       const sid = pendingCombat.id;
       if (sid === "atirar_todo_lado") {
-        const hex = view.pickHex(x, y, model.grid);
+        const hex = view.pickCombatHex(x, y, model.grid);
         const onHex =
           hex && model.hexInSkillRange(sid, hex.q, hex.r);
         const onEnemy =
@@ -7841,7 +7841,7 @@ function showCombatHUD(): void {
         return;
       }
       if (sid === "tiro_destruidor") {
-        const hex = view.pickHex(x, y, model.grid);
+        const hex = view.pickCombatHex(x, y, model.grid);
         if (!hex) {
           cancelPendingCombatToMove();
           return;
@@ -7873,7 +7873,7 @@ function showCombatHUD(): void {
           }
           return;
         }
-        const hex = view.pickHex(x, y, model.grid);
+        const hex = view.pickCombatHex(x, y, model.grid);
         if (!hex || !model.hexInSkillRange(sid, hex.q, hex.r)) {
           cancelPendingCombatToMove();
           return;
@@ -7891,7 +7891,7 @@ function showCombatHUD(): void {
           }
           return;
         }
-        const hex = view.pickHex(x, y, model.grid);
+        const hex = view.pickCombatHex(x, y, model.grid);
         if (!hex || !model.hexInSkillRange(sid, hex.q, hex.r)) {
           cancelPendingCombatToMove();
           return;
@@ -7900,7 +7900,7 @@ function showCombatHUD(): void {
         return;
       }
       if (sid === "bunker_minas") {
-        const hex = view.pickHex(x, y, model.grid);
+        const hex = view.pickCombatHex(x, y, model.grid);
         const onHex = hex && model.hexInSkillRange(sid, hex.q, hex.r);
         if (onHex) {
           if (model.trySkill("bunker_minas")) {
@@ -7949,7 +7949,7 @@ function showCombatHUD(): void {
       return;
     }
 
-    const hex = view.pickHex(x, y, model.grid);
+    const hex = view.pickCombatHex(x, y, model.grid);
     if (hex && movePreviewActive) {
       const k = axialKey(hex.q, hex.r);
       const reach = model.reachableForCurrentHero();

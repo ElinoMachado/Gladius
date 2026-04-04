@@ -1907,6 +1907,29 @@ export class GameRenderer {
       if (!this.cameraInputEnabled || isTypingTarget(e.target)) return;
       if (e.button !== 0) return;
       const ndc = this.clientToNdc(canvas, e.clientX, e.clientY);
+      /**
+       * Se o raio atinge primeiro a malha do bunker (vista oblíqua / GLB alto), não iniciar pan:
+       * evita `suppressCanvasClick` e deixa o `click` tratar o bunker (skills, movimento, ocupante).
+       */
+      if (this.bunkerRoots.size > 0 && this.hexMeshes.size > 0) {
+        const rayPick = new THREE.Raycaster();
+        rayPick.setFromCamera(
+          new THREE.Vector2(ndc.x, ndc.y),
+          this.getRenderCamera(),
+        );
+        let bunkerDist = Infinity;
+        for (const root of this.bunkerRoots.values()) {
+          const bh = rayPick.intersectObject(root, true);
+          if (bh.length > 0) bunkerDist = Math.min(bunkerDist, bh[0]!.distance);
+        }
+        const hexHits = rayPick.intersectObjects(
+          [...this.hexMeshes.values()],
+          false,
+        );
+        const hexDist =
+          hexHits.length > 0 ? hexHits[0]!.distance : Infinity;
+        if (bunkerDist < hexDist) return;
+      }
       const hit = this.intersectGroundNdc(ndc.x, ndc.y);
       if (!hit) return;
       this.panPointerDown = true;
@@ -3125,6 +3148,44 @@ export class GameRenderer {
     return { q: q!, r: r! };
   }
 
+  /**
+   * Hex sob o ponteiro com prioridade ao modelo 3D do bunker quando este é o hit mais próximo.
+   * Com GLB alto ou deslocado, `pickHex` (só o chão) pode não corresponder ao hex do bunker que o jogador vê.
+   */
+  pickCombatHex(
+    ndcX: number,
+    ndcY: number,
+    grid: Map<string, HexCell>,
+  ): { q: number; r: number } | null {
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.getRenderCamera());
+    let bestDist = Infinity;
+    let best: { q: number; r: number } | null = null;
+
+    const hexHits = ray.intersectObjects([...this.hexMeshes.values()], false);
+    if (hexHits.length > 0) {
+      const k = hexHits[0]!.object.userData.hexKey as string | undefined;
+      if (k && grid.has(k)) {
+        const [q, r] = k.split(",").map(Number);
+        best = { q: q!, r: r! };
+        bestDist = hexHits[0]!.distance;
+      }
+    }
+
+    for (const root of this.bunkerRoots.values()) {
+      const q0 = root.userData.bunkerAxialQ as number | undefined;
+      const r0 = root.userData.bunkerAxialR as number | undefined;
+      if (q0 === undefined || r0 === undefined) continue;
+      const bh = ray.intersectObject(root, true);
+      if (bh.length > 0 && bh[0]!.distance < bestDist) {
+        bestDist = bh[0]!.distance;
+        best = { q: q0, r: r0 };
+      }
+    }
+
+    return best;
+  }
+
   pickUnit(
     ndcX: number,
     ndcY: number,
@@ -3149,7 +3210,7 @@ export class GameRenderer {
     if (bestId !== null) return bestId;
     const occFn = opts?.bunkerOccupantIdAt;
     if (opts?.grid && occFn) {
-      const hex = this.pickHex(ndcX, ndcY, opts.grid);
+      const hex = this.pickCombatHex(ndcX, ndcY, opts.grid);
       if (hex) {
         const occ = occFn(hex.q, hex.r);
         if (occ) return occ;
@@ -3751,7 +3812,29 @@ export class GameRenderer {
         root.position.set(base.x + off.x, py + yOff, base.z + off.z);
         root.scale.setScalar(off.scale);
       }
+      this.ensureBunkerInteractionVolume(root);
     }
+  }
+
+  /** Volume invisível para raycast (GLB pode falhar ou ser irregular); não altera aspeto. */
+  private ensureBunkerInteractionVolume(root: THREE.Group): void {
+    const pickXZ = HEX_SIZE * Math.sqrt(3) * 1.12;
+    const pickH = 2.85;
+    let pick = root.userData.bunkerRayPick as THREE.Mesh | undefined;
+    if (!pick) {
+      pick = new THREE.Mesh(
+        new THREE.BoxGeometry(pickXZ, pickH, pickXZ),
+        new THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+        }),
+      );
+      pick.userData.role = "bunkerRayPick";
+      root.add(pick);
+      root.userData.bunkerRayPick = pick;
+    }
+    pick.position.y = pickH * 0.5 - 0.02;
   }
 
   private spawnSentencaExplosion(x: number, y: number, z: number): void {
