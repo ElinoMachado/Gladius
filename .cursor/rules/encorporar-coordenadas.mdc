@@ -1,0 +1,24 @@
+---
+description: Quando o utilizador pedir «Encorporar coordenadas» ou «incorporar coordenadas», fundir JSON no coliseu e equipamentos.
+alwaysApply: true
+---
+
+# Encorporar / incorporar coordenadas
+
+Se a mensagem do utilizador pedir **encorporar** ou **incorporar coordenadas** (qualquer capitalização razoável):
+
+1. **Objetivo:** gravar no repositório os posicionamentos usados em deploy, com **paridade** entre ficheiro público e fallback no bundle.
+
+2. **Coliseu / cena 3D** — atualizar **os dois** com o **mesmo** JSON de layout de cena (estrutura `SceneLayoutPrefs`: `coliseum`, `coliseumScale`, `freeCamera`):
+   - `public/scene-layout-default.json`
+   - `src/game/sceneLayoutDefaults.json`
+
+3. **Equipamento da forja** — atualizar **os dois** com o **mesmo** objeto `{ "byClass": { ... } }` (classes `gladiador`, `sacerdotisa`, `pistoleiro` com `helmet`, `cape`, `manoplas` conforme o editor):
+   - `public/forge-equipment-layout-default.json`
+   - `src/render/forgeEquipmentLayoutDefaults.json`
+
+4. **Origem dos dados:** se o utilizador **não colar** JSON na mensagem, pede-lhe explicitamente o valor de `localStorage` (`gladius-scene-layout-v1` e `gladius-forge-equipment-layout-v1`) ou um export colável. Não inventar números.
+
+5. **Validação:** JSON válido; números finitos; respeitar limites já usados nos sanitizers (ex.: escalas do equipamento). Se só vier um dos blocos (só cena ou só equipamento), atualiza só os ficheiros correspondentes e mantém o resto.
+
+6. No fim da tarefa, segue a regra de **commits** do projeto (add + commit com mensagem clara, ex.: `chore: sincroniza layout de cena e equipamento`).
