@@ -8758,6 +8758,17 @@ function render(): void {
     showWaveSummaryOverlay();
   } else if (model.phase === "combat") {
     canvas.style.opacity = "1";
+    if (!model.inEnemyPhase && model.consumePlayerTurnJustStarted()) {
+      const ch = model.currentHero();
+      if (ch && ch.hp > 0 && ch.heroClass) {
+        combatLolInspectHeroId = null;
+        movePreviewActive = true;
+        pendingCombat = null;
+        combatInspectEnemyId = null;
+        combatHoverEnemyId = null;
+        view.snapCameraToAxial(ch.q, ch.r);
+      }
+    }
     showCombatHUD();
     if (prevPhase === "shop_initial" || prevPhase === "shop_wave") {
       requestAnimationFrame(() =>
@@ -8878,29 +8889,12 @@ model.subscribe(() => {
     view.burstRoses();
   }
   render();
-  let combatHudNeedsRefresh = false;
   if (model.phase === "combat") {
-    if (
-      model.consumePlayerTurnJustStarted() &&
-      !model.inEnemyPhase
-    ) {
-      const ch = model.currentHero();
-      if (ch && ch.hp > 0) {
-        combatLolInspectHeroId = null;
-        view.snapCameraToAxial(ch.q, ch.r);
-        movePreviewActive = true;
-        pendingCombat = null;
-        combatInspectEnemyId = null;
-        combatHoverEnemyId = null;
-        applyCombatOverlays();
-        combatHudNeedsRefresh = true;
-      }
-    } else if (model.inEnemyPhase && model.lastEnemyActedId) {
+    if (model.inEnemyPhase && model.lastEnemyActedId) {
       const eu = model.units.find((x) => x.id === model.lastEnemyActedId);
       if (eu && eu.hp > 0) view.focusOnAxial(eu.q, eu.r);
     }
   }
-  if (combatHudNeedsRefresh) render();
   schedulePersistRunSessionCheckpoint();
 });
 

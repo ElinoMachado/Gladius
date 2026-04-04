@@ -12,12 +12,12 @@ function disposeObject3D(o: THREE.Object3D): void {
   });
 }
 
-/** Pivot da rotação Y — mais alto para o modelo ocupar melhor o quadro da loja. */
-const BUNKER_PREVIEW_ROOT_Y = -0.02;
-/** Extra só no mesh nv.1 (GLB): fumo precisa de margem sem “cair” para fora do canvas. */
-const BUNKER_PREVIEW_MODEL_Y_NV1 = -0.52;
-/** Escala extra na loja (GLB + procedural) para preencher o viewport sem clip nas bordas. */
-const BUNKER_PREVIEW_SHOP_SCALE_MUL = 1.38;
+/** Pivot da rotação Y — elevado para o bunker ficar centrado no canvas da loja. */
+const BUNKER_PREVIEW_ROOT_Y = 0.14;
+/** Mesh nv.1 (GLB): pivot baixo; sobe para o corpo ficar no meio do quadro (não só chaminé em baixo). */
+const BUNKER_PREVIEW_MODEL_Y_NV1 = 0.22;
+/** Escala extra na loja (GLB + procedural). */
+const BUNKER_PREVIEW_SHOP_SCALE_MUL = 1.32;
 
 /** Preview do bunker na loja (mesmo modelo da arena, escala por tier). */
 export class BunkerPreview3D {
@@ -87,12 +87,12 @@ export class BunkerPreview3D {
     this.bunkerModel.position.z = 0;
     if (tier === 0) {
       this.bunkerModel.position.y = BUNKER_PREVIEW_MODEL_Y_NV1;
-      this.camera.position.set(2.62, 0.92, 2.62);
-      this.camera.lookAt(0, 0.38, 0);
+      this.camera.position.set(2.75, 1.12, 2.75);
+      this.camera.lookAt(0, 0.62, 0);
     } else {
-      this.bunkerModel.position.y = 0;
-      this.camera.position.set(2.55, 1.02, 2.55);
-      this.camera.lookAt(0, 0.42, 0);
+      this.bunkerModel.position.y = 0.06;
+      this.camera.position.set(2.68, 1.18, 2.68);
+      this.camera.lookAt(0, 0.58, 0);
     }
     this.camera.updateProjectionMatrix();
   }
