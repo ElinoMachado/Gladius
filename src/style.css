@@ -5159,7 +5159,7 @@ body.enemy-inspect--dragging-body {
 .shop-viz-turntable {
   width: 100%;
   /* Altura mínima para caber título + 3D + stats + artefatos; painel com scroll se faltar espaço */
-  height: clamp(520px, 58vh, 760px);
+  height: clamp(440px, 52vh, 720px);
   transform-style: preserve-3d;
 }
 
@@ -5212,12 +5212,16 @@ body.enemy-inspect--dragging-body {
   pointer-events: none;
 }
 
-/* Preview 3D mais baixo — cabe no cartão sem scroll */
-.shop-screen__panel--gold .gold-shop-hero-3d-host--carousel {
+/* Preview 3D no turntable: coluna esquerda (grid no .shop-hero-viz) */
+.shop-viz-turntable-panel--hero .gold-shop-hero-3d-host--carousel {
+  grid-column: 1;
+  grid-row: 2;
   width: 100%;
-  height: 152px;
-  min-height: 152px;
-  max-height: 152px;
+  max-width: 220px;
+  height: 200px;
+  min-height: 200px;
+  max-height: 220px;
+  justify-self: center;
 }
 
 .shop-viz-turntable-panel .shop-bunker-viz-layout__preview {
@@ -5273,6 +5277,10 @@ body.enemy-inspect--dragging-body {
   margin-bottom: 0.38rem;
   padding: 0.28rem 0.4rem 0.32rem;
   font-size: 0.72rem;
+}
+
+.shop-viz-turntable-panel--hero .shop-viz-flip-entity-title {
+  margin-bottom: 0.32rem;
 }
 
 .shop-viz-turntable-panel .gold-shop-hero-stats-grid.lol-stats-list {
@@ -5413,6 +5421,27 @@ body.enemy-inspect--dragging-body {
   }
 }
 
+@media (max-width: 560px) {
+  .shop-screen__panel--gold .shop-viz-turntable-panel--hero .shop-hero-viz {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+
+  .shop-viz-turntable-panel--hero .gold-shop-hero-3d-host--carousel {
+    grid-column: 1;
+    grid-row: 2;
+    max-width: 100%;
+    height: 168px;
+    min-height: 168px;
+    max-height: 180px;
+  }
+
+  .shop-viz-turntable-panel--hero .shop-hero-stats-col {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
+
 .shop-hero-bunker-pair--solo {
   display: flex;
   flex-direction: row;
@@ -5439,8 +5468,39 @@ body.enemy-inspect--dragging-body {
   padding: 1.15rem 1.2rem 1.25rem;
 }
 
-.shop-screen__panel--gold .shop-viz-turntable-panel .shop-hero-viz,
-.shop-screen__panel--gold .shop-viz-turntable-panel .shop-bunker-viz.shop-hero-viz {
+/* Herói: título em cima; modelo 3D e coluna de atributos lado a lado */
+.shop-screen__panel--gold .shop-viz-turntable-panel--hero .shop-hero-viz {
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-left: 0;
+  margin-right: 0;
+  padding: 0.7rem 0.75rem 0.85rem;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(148px, 36%) 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  column-gap: 0.65rem;
+  row-gap: 0.4rem;
+  align-items: start;
+  min-height: min-content;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
+.shop-viz-turntable-panel--hero .shop-viz-flip-entity-title {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
+.shop-viz-turntable-panel--hero .shop-hero-stats-col {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+}
+
+/* Bunker: título + layout já em linha (preview | coluna) */
+.shop-screen__panel--gold .shop-viz-turntable-panel--bunker .shop-bunker-viz.shop-hero-viz {
   margin-top: 0;
   margin-bottom: 0;
   margin-left: 0;
