@@ -4998,7 +4998,7 @@ body.enemy-inspect--dragging-body {
   align-items: stretch;
   justify-content: center;
   gap: 0.5rem 0.65rem;
-  margin: 0 0 0.55rem;
+  margin: 0 0 0.7rem;
 }
 
 .shop-hero-gold-bag {
@@ -5139,7 +5139,7 @@ body.enemy-inspect--dragging-body {
 /* Loja ouro: prato 3D — dois painéis opostos em Z; rotação ~180° troca frente/fundo */
 /* Padding-top: margens com as bolsas não colapsam (só max entre dois margins); assim há distância real até ao cartão de ouro */
 .shop-viz-flip-wrap {
-  padding-top: 0.85rem;
+  padding-top: 1.15rem;
   margin: 0 0 0.28rem;
 }
 
