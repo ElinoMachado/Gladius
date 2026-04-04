@@ -1,7 +1,11 @@
 import type { HeroClassId } from "../game/types";
 import type { HeroForgeAttachConfig } from "./heroGlbShared";
+import bundledDefaults from "./forgeEquipmentLayoutDefaults.json";
 
 const LS_KEY = "gladius-forge-equipment-layout-v1";
+
+/** Preenchido em `initForgeEquipmentLayoutPrefsFromDeploy()`; localStorage continua a mandar por origem. */
+let prefsCache: ForgeEquipmentLayoutPrefs | null = null;
 
 export type ForgeEquipmentLayoutPrefs = {
   /** Posições/rotações/escala guardadas por classe (substituem o cálculo automático). */
@@ -9,6 +13,15 @@ export type ForgeEquipmentLayoutPrefs = {
 };
 
 const EMPTY: ForgeEquipmentLayoutPrefs = { byClass: {} };
+
+function clonePrefs(p: ForgeEquipmentLayoutPrefs): ForgeEquipmentLayoutPrefs {
+  const byClass: Partial<Record<HeroClassId, HeroForgeAttachConfig>> = {};
+  for (const [k, v] of Object.entries(p.byClass)) {
+    if (!isHeroClassId(k) || !v) continue;
+    byClass[k] = cloneForgeAttachConfig(v);
+  }
+  return { byClass };
+}
 
 function isHeroClassId(s: string): s is HeroClassId {
   return s === "gladiador" || s === "sacerdotisa" || s === "pistoleiro";
@@ -88,29 +101,87 @@ export function cloneForgeAttachConfig(c: HeroForgeAttachConfig): HeroForgeAttac
   return JSON.parse(JSON.stringify(c)) as HeroForgeAttachConfig;
 }
 
-export function loadForgeEquipmentLayoutPrefs(): ForgeEquipmentLayoutPrefs {
-  if (typeof localStorage === "undefined") return { byClass: {} };
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return { byClass: {} };
-    const p = JSON.parse(raw) as Partial<ForgeEquipmentLayoutPrefs>;
-    const byClass: Partial<Record<HeroClassId, HeroForgeAttachConfig>> = {};
-    if (p.byClass && typeof p.byClass === "object") {
-      for (const k of Object.keys(p.byClass)) {
-        if (!isHeroClassId(k)) continue;
-        const v = (p.byClass as Record<string, unknown>)[k];
-        if (v && typeof v === "object") {
-          byClass[k] = v as HeroForgeAttachConfig;
-        }
+function normalizePrefsFromParsed(p: unknown): ForgeEquipmentLayoutPrefs {
+  if (!p || typeof p !== "object") return { byClass: {} };
+  const o = p as Partial<ForgeEquipmentLayoutPrefs>;
+  const byClass: Partial<Record<HeroClassId, HeroForgeAttachConfig>> = {};
+  if (o.byClass && typeof o.byClass === "object") {
+    for (const k of Object.keys(o.byClass)) {
+      if (!isHeroClassId(k)) continue;
+      const v = (o.byClass as Record<string, unknown>)[k];
+      if (v && typeof v === "object") {
+        byClass[k] = v as HeroForgeAttachConfig;
       }
     }
-    return { byClass };
+  }
+  return { byClass };
+}
+
+function parsePrefsJsonString(raw: string): ForgeEquipmentLayoutPrefs {
+  try {
+    return normalizePrefsFromParsed(JSON.parse(raw));
   } catch {
-    return { byClass: {} };
+    return prefsFromBundledFile();
   }
 }
 
+function prefsFromBundledFile(): ForgeEquipmentLayoutPrefs {
+  return normalizePrefsFromParsed(bundledDefaults);
+}
+
+/** URL de `public/forge-equipment-layout-default.json` (respeita `import.meta.env.BASE_URL`). */
+function forgeEquipmentLayoutDefaultJsonUrl(): string {
+  const base = import.meta.env.BASE_URL;
+  if (base.startsWith("/")) {
+    const path = base.endsWith("/") ? base : `${base}/`;
+    return `${window.location.origin}${path}forge-equipment-layout-default.json`;
+  }
+  return new URL("forge-equipment-layout-default.json", window.location.href).href;
+}
+
+/**
+ * Chamar uma vez antes de usar anexos de equipamento forjado em 3D.
+ * Ordem: localStorage desta origem → `forge-equipment-layout-default.json` (público) → bundle.
+ *
+ * [Dev] Ajustar equipamento grava só em `localStorage` do localhost; GitHub Pages é outra origem.
+ * Para os mesmos valores em produção, copia `gladius-forge-equipment-layout-v1` para
+ * `public/forge-equipment-layout-default.json` (e/ou `src/render/forgeEquipmentLayoutDefaults.json`).
+ */
+export async function initForgeEquipmentLayoutPrefsFromDeploy(): Promise<void> {
+  if (typeof localStorage !== "undefined") {
+    const ls = localStorage.getItem(LS_KEY);
+    if (ls != null && ls.trim() !== "") {
+      prefsCache = parsePrefsJsonString(ls);
+      return;
+    }
+  }
+  if (typeof fetch !== "undefined" && typeof window !== "undefined") {
+    try {
+      const r = await fetch(forgeEquipmentLayoutDefaultJsonUrl(), { cache: "no-store" });
+      if (r.ok) {
+        prefsCache = parsePrefsJsonString(await r.text());
+        return;
+      }
+    } catch {
+      /* rede / CORS */
+    }
+  }
+  prefsCache = prefsFromBundledFile();
+}
+
+export function loadForgeEquipmentLayoutPrefs(): ForgeEquipmentLayoutPrefs {
+  if (prefsCache) return clonePrefs(prefsCache);
+  if (typeof localStorage !== "undefined") {
+    const ls = localStorage.getItem(LS_KEY);
+    if (ls != null && ls.trim() !== "") {
+      return parsePrefsJsonString(ls);
+    }
+  }
+  return prefsFromBundledFile();
+}
+
 export function saveForgeEquipmentLayoutPrefs(p: ForgeEquipmentLayoutPrefs): void {
+  prefsCache = clonePrefs(p);
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(p));
   } catch {

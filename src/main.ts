@@ -193,6 +193,7 @@ import {
   initSceneLayoutPrefsFromDeploy,
   loadSceneLayoutPrefs,
 } from "./game/sceneLayoutPrefs";
+import { initForgeEquipmentLayoutPrefsFromDeploy } from "./render/forgeEquipmentLayoutPrefs";
 import { UNIT_MOVE_SEGMENT_MS } from "./game/combatTiming";
 import { heroAttackClipName } from "./game/heroCombatAnimMs";
 import {
@@ -292,7 +293,10 @@ Promise.all([
   preloadForgePieceGlbs(),
   preloadArenaColiseumGlb(),
 ]).then(async () => {
-  await initSceneLayoutPrefsFromDeploy();
+  await Promise.all([
+    initSceneLayoutPrefsFromDeploy(),
+    initForgeEquipmentLayoutPrefsFromDeploy(),
+  ]);
   view.attachArenaColiseumDecoration();
   view.applySceneLayoutPrefs(loadSceneLayoutPrefs());
   render();
