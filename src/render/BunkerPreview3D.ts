@@ -36,11 +36,11 @@ export class BunkerPreview3D {
     this.renderer.setClearColor(0x000000, 0);
     host.appendChild(this.renderer.domElement);
 
-    /* Enquadramento loja: GLB com chaminé/fumo precisa de margem no topo; vista simétrica
-     * e lookAt ligeiramente à esquerda do pivot corrige modelo “puxado” para a esquerda. */
-    this.camera = new THREE.PerspectiveCamera(41, 1, 0.1, 40);
-    this.camera.position.set(2.78, 0.98, 2.78);
-    this.camera.lookAt(-0.12, 0.34, 0);
+    /* GLB: fumo da chaminé sobe acima do bbox — câmara mais afastada + FOV maior + modelo
+     * mais baixo no quadro para não cortar partículas no topo. */
+    this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 40);
+    this.camera.position.set(3.2, 0.88, 3.2);
+    this.camera.lookAt(-0.1, 0.22, 0);
 
     const amb = new THREE.AmbientLight(0xfff0e0, 0.55);
     const key = new THREE.DirectionalLight(0xffffff, 0.95);
@@ -51,8 +51,7 @@ export class BunkerPreview3D {
 
     this.bunkerModel = createBunkerVisualGroup(0);
     this.root.add(this.bunkerModel);
-    /* Desce um pouco no quadro (pivot GLB tende a ficar alto). */
-    this.root.position.y = -0.07;
+    this.root.position.y = -0.24;
     this.scene.add(this.root);
 
     window.addEventListener("resize", this.onResize);
