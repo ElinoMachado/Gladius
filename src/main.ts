@@ -146,7 +146,7 @@ import {
   bravuraInstancesCount,
   deslumbroInstancesCount,
 } from "./game/effectInstances";
-import { biomeAt } from "./game/unitFactory";
+import { biomeAt, effectiveEnemyBaseDefesa } from "./game/unitFactory";
 import { HERO_STAT_TIP } from "./ui/heroStatRichText";
 import {
   combatHeroStatTooltip,
@@ -1464,15 +1464,20 @@ function showEnemyCompendium(): void {
     const mult = pm * wm;
     const hpS = Math.round(def.baseHp * mult);
     const danoS = Math.round(def.baseDano * mult);
-    const defS = Math.round(def.baseDefesa * mult * 0.75);
+    const baseDefEff = effectiveEnemyBaseDefesa(def);
+    const defS = Math.round(baseDefEff * mult * 0.75);
+    const defBaseStatHtml =
+      def.tier === "elite" || def.tier === "boss"
+        ? `<span class="enemy-codex-base-stat">(catálogo ${def.baseDefesa}; −50% elite/chefe na base → ${baseDefEff % 1 === 0 ? baseDefEff : baseDefEff.toFixed(1)})</span>`
+        : `<span class="enemy-codex-base-stat">(base ${def.baseDefesa})</span>`;
     const movGame = def.movimento + 2;
     detailEl.innerHTML = `<h2 class="enemy-codex-name">${escapeHtml(def.name)}</h2>
       <p class="enemy-codex-meta">${escapeHtml(enemyTierLabelPt(def.tier))} · ${escapeHtml(enemyWaveRangeLabel(def))}${tag}</p>
-      <p class="enemy-codex-scale-hint">Atributos abaixo: onda 1 · <strong>${partyN}</strong> herói(s) · movimento como no combate (+2). Defesa: valor já com −25% global no combate (face à base × escala).</p>
+      <p class="enemy-codex-scale-hint">Atributos abaixo: onda 1 · <strong>${partyN}</strong> herói(s) · movimento como no combate (+2). Defesa: base efectiva × escala, depois −25% global no combate; elite e chefes têm −50% na defesa base (face ao valor de catálogo).</p>
       <dl class="enemy-codex-stats">
         <dt>HP</dt><dd>${hpS} <span class="enemy-codex-base-stat">(base ${def.baseHp})</span></dd>
         <dt>Dano</dt><dd>${danoS} <span class="enemy-codex-base-stat">(base ${def.baseDano})</span></dd>
-        <dt>Defesa</dt><dd>${defS} <span class="enemy-codex-base-stat">(base ${def.baseDefesa})</span></dd>
+        <dt>Defesa</dt><dd>${defS} ${defBaseStatHtml}</dd>
         <dt>Movimento</dt><dd>${movGame}</dd>
         <dt>Alcance</dt><dd>${def.alcance}</dd>
       </dl>

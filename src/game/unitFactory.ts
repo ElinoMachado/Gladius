@@ -225,6 +225,17 @@ function displayColorForEnemy(arch: EnemyArchetype): number {
   }
 }
 
+/**
+ * Defesa base usada no combate e no compendium: elite e chefes aplicam −50% ao valor
+ * de catálogo **antes** da escala de onda/party e do factor global ×0,75.
+ */
+export function effectiveEnemyBaseDefesa(
+  arch: Pick<EnemyArchetype, "baseDefesa" | "tier">,
+): number {
+  const tierCut = arch.tier === "elite" || arch.tier === "boss" ? 0.5 : 1;
+  return arch.baseDefesa * tierCut;
+}
+
 export function createEnemyUnit(
   arch: EnemyArchetype,
   wave: number,
@@ -238,9 +249,7 @@ export function createEnemyUnit(
   const mult = wm * pm;
   const hp = Math.round(arch.baseHp * mult);
   const dano = Math.round(arch.baseDano * mult);
-  const eliteOrBossDef =
-    arch.tier === "elite" || arch.tier === "boss" ? 0.5 : 1;
-  const def = Math.round(arch.baseDefesa * mult * 0.75 * eliteOrBossDef);
+  const def = Math.round(effectiveEnemyBaseDefesa(arch) * mult * 0.75);
   const guaranteeCrystal = arch.tier === "elite";
   return {
     id: nid("enemy"),
