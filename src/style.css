@@ -4984,6 +4984,8 @@ body.enemy-inspect--dragging-body {
   /* Mais ar do que a loja genérica — evita sobrepor o cabeçalho / contador */
   padding-top: 1.55rem;
   padding-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .shop-screen__panel--gold .shop-title.hero-setup-main-title {
@@ -6001,6 +6003,12 @@ body.enemy-inspect--dragging-body {
   margin-top: 1rem;
 }
 
+/* Rodapé colado ao fundo da área útil: não sobe/desce ao trocar herói ↔ bunker */
+.shop-screen__panel--gold .shop-footer {
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
 .shop-footer {
   display: flex;
   flex-direction: column;
@@ -6142,7 +6150,16 @@ body.enemy-inspect--dragging-body {
 
 /* Loja ouro: bunker · grelha de melhorias (ouro) em linha */
 .shop-screen__panel--gold .shop-panel-inner {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   max-width: min(1200px, 98vw);
+  /* Ocupa a área útil do painel para o rodapé com margin-top: auto ficar fixo na base */
+  min-height: calc(100vh - 3.55rem);
+  min-height: calc(100dvh - 3.55rem);
+  margin-left: auto;
+  margin-right: auto;
   padding-top: 0.35rem;
   box-sizing: border-box;
 }
