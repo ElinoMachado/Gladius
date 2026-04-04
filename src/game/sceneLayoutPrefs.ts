@@ -27,6 +27,18 @@ export type LayoutActorPose = {
   scale: number;
 };
 
+/**
+ * Inimigos de referência no editor (`layout-enemy-*`): só a altura Y (offset vertical)
+ * é guardada; X/Z seguem sempre o hex da unidade.
+ */
+export type LayoutEnemyHeightOnly = { y: number };
+
+export type LayoutActorEntry = LayoutActorPose | LayoutEnemyHeightOnly;
+
+export function isLayoutEnemyActorId(id: string): boolean {
+  return id.startsWith("layout-enemy-");
+}
+
 export type SceneLayoutPrefs = {
   /** Deslocamento extra do grupo que contém o GLB do coliseu (mundo → local do arenaRoot). */
   coliseum: { x: number; y: number; z: number };
@@ -34,8 +46,8 @@ export type SceneLayoutPrefs = {
   coliseumScale: number;
   /** Por bioma de combate: ajuste fino da mesh do bunker (editor de cena). */
   bunkerLayout: Partial<Record<BiomeId, BunkerLayoutEntry>>;
-  /** Trono + unidades sintéticas do editor (ids estáveis `layout-*` e `throne`). */
-  layoutActors?: Partial<Record<string, LayoutActorPose>>;
+  /** Trono + unidades sintéticas do editor (`throne`, `layout-hero-*` pose completa; `layout-enemy-*` só `{ y }`). */
+  layoutActors?: Partial<Record<string, LayoutActorEntry>>;
   /** Câmara livre (perspetiva); null = usar câmara ortográfica de combate. */
   freeCamera: null | {
     position: [number, number, number];
@@ -75,14 +87,24 @@ function clonePrefs(p: SceneLayoutPrefs): SceneLayoutPrefs {
           : undefined,
     };
   }
-  const la: Partial<Record<string, LayoutActorPose>> = {};
+  const la: Partial<Record<string, LayoutActorEntry>> = {};
   for (const [k, a] of Object.entries(p.layoutActors ?? {})) {
     if (!a || typeof a !== "object") continue;
+    if (isLayoutEnemyActorId(k)) {
+      const y =
+        typeof (a as LayoutEnemyHeightOnly).y === "number" &&
+        Number.isFinite((a as LayoutEnemyHeightOnly).y)
+          ? (a as LayoutEnemyHeightOnly).y
+          : 0;
+      la[k] = { y };
+      continue;
+    }
+    const pose = a as LayoutActorPose;
     la[k] = {
-      x: a.x,
-      y: a.y,
-      z: a.z,
-      scale: a.scale,
+      x: pose.x,
+      y: pose.y,
+      z: pose.z,
+      scale: pose.scale,
     };
   }
   return {
@@ -147,13 +169,18 @@ function normalizeBunkerLayoutEntry(
 
 function normalizeLayoutActors(
   raw: unknown,
-): Partial<Record<string, LayoutActorPose>> {
+): Partial<Record<string, LayoutActorEntry>> {
   if (!raw || typeof raw !== "object") return {};
   const o = raw as Record<string, unknown>;
-  const out: Partial<Record<string, LayoutActorPose>> = {};
+  const out: Partial<Record<string, LayoutActorEntry>> = {};
   for (const [k, v] of Object.entries(o)) {
     if (!v || typeof v !== "object") continue;
     const a = v as Record<string, unknown>;
+    if (isLayoutEnemyActorId(k)) {
+      const y = typeof a.y === "number" && Number.isFinite(a.y) ? a.y : 0;
+      out[k] = { y };
+      continue;
+    }
     const x = typeof a.x === "number" && Number.isFinite(a.x) ? a.x : 0;
     const y = typeof a.y === "number" && Number.isFinite(a.y) ? a.y : 0;
     const z = typeof a.z === "number" && Number.isFinite(a.z) ? a.z : 0;

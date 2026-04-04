@@ -41,10 +41,12 @@ import {
 } from "./arenaColiseumGlb";
 import {
   type BunkerLayoutEntry,
+  type LayoutActorEntry,
   type LayoutActorPose,
   type SceneLayoutPrefs,
   bunkerMountYOffset,
   cloneSceneLayoutPrefs,
+  isLayoutEnemyActorId,
   loadSceneLayoutPrefs,
   saveSceneLayoutPrefs,
 } from "../game/sceneLayoutPrefs";
@@ -2386,10 +2388,13 @@ export class GameRenderer {
   private applyThroneLayoutPose(playSurfaceY: number): void {
     const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
     const a = snap.layoutActors?.throne;
-    const dx = a?.x ?? 0;
-    const dy = a?.y ?? 0;
-    const dz = a?.z ?? 0;
-    const sc = THREE.MathUtils.clamp(a?.scale ?? 1, 0.02, 48);
+    const pose =
+      a && "x" in a && "scale" in a ? (a as LayoutActorPose) : undefined;
+    const dx = pose?.x ?? 0;
+    const dy =
+      a && typeof a.y === "number" && Number.isFinite(a.y) ? a.y : 0;
+    const dz = pose?.z ?? 0;
+    const sc = THREE.MathUtils.clamp(pose?.scale ?? 1, 0.02, 48);
     this.throneGroup.position.set(
       THRONE_BASE_X + dx,
       playSurfaceY + dy,
@@ -2495,9 +2500,16 @@ export class GameRenderer {
             const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
             const la = snap.layoutActors?.[u.id];
             if (la) {
-              wx += la.x;
-              wy += la.y;
-              wz += la.z;
+              if (isLayoutEnemyActorId(u.id)) {
+                const oy =
+                  typeof la.y === "number" && Number.isFinite(la.y) ? la.y : 0;
+                wy += oy;
+              } else {
+                const pose = la as LayoutActorPose;
+                wx += pose.x ?? 0;
+                wy += pose.y ?? 0;
+                wz += pose.z ?? 0;
+              }
             }
             g.userData.layoutActorAxialQ = u.q;
             g.userData.layoutActorAxialR = u.r;
@@ -2509,10 +2521,19 @@ export class GameRenderer {
       /** 2× no gigante: evita cobrir inimigos no raycast (antes 5×). */
       const furyScale =
         u.isPlayer && (u.furiaGiganteTurns ?? 0) > 0 ? 2 : 1;
+      const layoutLa = u.id.startsWith("layout-")
+        ? (this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs()).layoutActors?.[
+            u.id
+          ]
+        : undefined;
       const layoutActorSc =
         u.id.startsWith("layout-") &&
-        (this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs()).layoutActors?.[u.id]
-          ?.scale;
+        !isLayoutEnemyActorId(u.id) &&
+        layoutLa &&
+        "scale" in layoutLa &&
+        typeof layoutLa.scale === "number"
+          ? layoutLa.scale
+          : undefined;
       const layoutSc =
         typeof layoutActorSc === "number" && Number.isFinite(layoutActorSc)
           ? THREE.MathUtils.clamp(layoutActorSc, 0.02, 48)
@@ -4287,9 +4308,9 @@ export class GameRenderer {
   }
 
   private mergeLayoutActorsFromScene(
-    base: Partial<Record<string, LayoutActorPose>>,
-  ): Partial<Record<string, LayoutActorPose>> {
-    const out: Partial<Record<string, LayoutActorPose>> = { ...base };
+    base: Partial<Record<string, LayoutActorEntry>>,
+  ): Partial<Record<string, LayoutActorEntry>> {
+    const out: Partial<Record<string, LayoutActorEntry>> = { ...base };
     const py = this.playSurfaceYOffset();
     const tg = this.throneGroup;
     out.throne = {
@@ -4306,12 +4327,16 @@ export class GameRenderer {
       const baseW = axialToWorld(q, r, HEX_SIZE);
       const flyY = Number(g.userData.layoutActorFlyY) || 0;
       const baseY = py + flyY;
-      out[id] = {
-        x: g.position.x - baseW.x,
-        y: g.position.y - baseY,
-        z: g.position.z - baseW.z,
-        scale: THREE.MathUtils.clamp(g.scale.x, 0.02, 48),
-      };
+      if (isLayoutEnemyActorId(id)) {
+        out[id] = { y: g.position.y - baseY };
+      } else {
+        out[id] = {
+          x: g.position.x - baseW.x,
+          y: g.position.y - baseY,
+          z: g.position.z - baseW.z,
+          scale: THREE.MathUtils.clamp(g.scale.x, 0.02, 48),
+        };
+      }
     }
     return out;
   }
@@ -4823,8 +4848,14 @@ export class GameRenderer {
       return "Trono — mesmos controlos que o coliseu.";
     }
     const uid = s.userData.unitId as string | undefined;
+    if (uid?.startsWith("layout-enemy-")) {
+      return `Inimigo ${uid} — só a altura (Y) grava no JSON; X/Z no ecrã são só para ver na sessão.`;
+    }
+    if (uid?.startsWith("layout-hero-")) {
+      return `Herói ${uid} — posição/escala gravam no JSON.`;
+    }
     if (uid?.startsWith("layout-")) {
-      return `Figura ${uid} — posição/escala (herói ou inimigo de referência).`;
+      return `Figura ${uid} — ajuste fino.`;
     }
     for (const root of this.bunkerRoots.values()) {
       if (root !== s) continue;
