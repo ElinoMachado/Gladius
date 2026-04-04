@@ -1529,34 +1529,28 @@ function applyCombatOverlays(): void {
       if (k !== cur) moveKeys.add(k);
     }
   }
-  /** Durante seleção de alvo ou execução (fila VFX), inimigo sob o rato + hexes do herói confundem — esconder. */
-  const suppressMoveRangeForEnemyHover =
+  /**
+   * Só esconde o preview de movimento do inimigo sob o rato (âmbar), para não empilhar com o alcance.
+   * Hexes de ataque/movimento do herói e mira do Tiro destruidor mantêm-se ao pairar no modelo 3D do alvo.
+   */
+  const hideEnemyHoverMovePreview =
     combatHoverEnemyId != null &&
     (pendingCombat != null || model.hasPendingCombatSchedule());
-  if (suppressMoveRangeForEnemyHover) {
-    moveKeys = new Set();
-    atkKeys = new Set();
-    combatTiroBeamPreviewKeys = null;
-    combatTiroBeamPath = null;
-    combatTiroAimCacheSig = "";
-  }
   view.setMovementOverlay(moveKeys);
   view.setAttackOverlay(atkKeys);
   const hoverMoveKeys =
-    suppressMoveRangeForEnemyHover || combatHoverEnemyId == null
+    hideEnemyHoverMovePreview || combatHoverEnemyId == null
       ? new Set<string>()
       : model.enemyMovementPreviewKeys(combatHoverEnemyId);
   const inspectAtkKeys =
-    suppressMoveRangeForEnemyHover || combatInspectEnemyId == null
+    combatInspectEnemyId == null
       ? new Set<string>()
       : model.enemyAttackPreviewKeys(combatInspectEnemyId);
   view.setEnemyInspectMovementOverlay(hoverMoveKeys);
   view.setEnemyInspectAttackOverlay(inspectAtkKeys);
 
   const showTiroAim =
-    !suppressMoveRangeForEnemyHover &&
-    pendingCombat?.kind === "skill" &&
-    pendingCombat.id === "tiro_destruidor";
+    pendingCombat?.kind === "skill" && pendingCombat.id === "tiro_destruidor";
   view.setTiroDestruidorAimPreview(
     showTiroAim ? combatTiroBeamPreviewKeys : null,
     showTiroAim ? combatTiroBeamPath : null,
@@ -1574,14 +1568,6 @@ function updateTiroDestruidorAimPreview(ndcX: number, ndcY: number): void {
     applyCombatOverlays();
   };
   if (combatHoverEnemyId != null && model.hasPendingCombatSchedule()) {
-    clearTiroAim();
-    return;
-  }
-  if (
-    pendingCombat?.kind === "skill" &&
-    pendingCombat.id === "tiro_destruidor" &&
-    combatHoverEnemyId != null
-  ) {
     clearTiroAim();
     return;
   }
@@ -8984,7 +8970,7 @@ function loop(): void {
         p.unitId === BUNKER_COMBAT_FLOAT_ID && p.bunkerHex
           ? view.worldBunkerTopToScreen(canvas, p.bunkerHex.q, p.bunkerHex.r)
           : p.unitId === BUNKER_COMBAT_FLOAT_ID
-            ? view.worldBunkerTopToScreen(canvas)
+            ? null
             : view.worldUnitHeadToScreen(canvas, p.unitId);
       if (!pos && p.floatHex) {
         pos = view.worldAxialHeadToScreen(canvas, p.floatHex.q, p.floatHex.r);

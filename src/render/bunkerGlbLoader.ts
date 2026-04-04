@@ -114,7 +114,7 @@ export function isBunkerGlbTierLoaded(tier: BunkerRenderTier): boolean {
   return templates[tier] != null;
 }
 
-/** Clone para arena/preview; geometrias próprias (materiais partilhados com o template). */
+/** Clone para arena/preview: geometria e materiais próprios (flash de dano não afeta outros bunkers). */
 export function cloneBunkerGlbForTier(tier: BunkerRenderTier): THREE.Group | null {
   const t = templates[tier];
   if (!t) return null;
@@ -122,6 +122,13 @@ export function cloneBunkerGlbForTier(tier: BunkerRenderTier): THREE.Group | nul
   g.traverse((obj) => {
     if (obj instanceof THREE.Mesh && obj.geometry) {
       obj.geometry = obj.geometry.clone();
+    }
+    if (obj instanceof THREE.Mesh && obj.material) {
+      if (Array.isArray(obj.material)) {
+        obj.material = obj.material.map((m) => m.clone());
+      } else {
+        obj.material = obj.material.clone();
+      }
     }
   });
   return g;
