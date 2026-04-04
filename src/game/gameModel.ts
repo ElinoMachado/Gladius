@@ -698,6 +698,70 @@ export class GameModel {
     return out;
   }
 
+  /**
+   * Editor de cena: heróis das três classes + inimigos representativos em hexes válidos (só visual).
+   */
+  layoutEditorSyntheticUnits(): Unit[] {
+    const colors: TeamColor[] = ["azul", "verde", "vermelho"];
+    const meta = this.meta;
+    const hGlad = createHeroUnit(
+      "gladiador",
+      "azul",
+      colors,
+      meta,
+      -2,
+      3,
+      undefined,
+      1,
+    );
+    hGlad.id = "layout-hero-gladiador";
+    const hPriest = createHeroUnit(
+      "sacerdotisa",
+      "verde",
+      colors,
+      meta,
+      0,
+      3,
+      undefined,
+      1,
+    );
+    hPriest.id = "layout-hero-sacerdotisa";
+    const hGun = createHeroUnit(
+      "pistoleiro",
+      "vermelho",
+      colors,
+      meta,
+      2,
+      3,
+      undefined,
+      1,
+    );
+    hGun.id = "layout-hero-pistoleiro";
+    const bio = (q: number, r: number): BiomeId =>
+      biomeAt(this.grid, q, r) as BiomeId;
+    const eGlad = createEnemyUnit(
+      ENEMY_BY_ID["gladinio"]!,
+      1,
+      3,
+      3,
+      -2,
+      bio(3, -2),
+    );
+    eGlad.id = "layout-enemy-gladinio";
+    const eEsc = createEnemyUnit(ESCRAVO, 1, 3, 0, -4, bio(0, -4));
+    eEsc.id = "layout-enemy-escravo";
+    const eLeao = createEnemyUnit(
+      ENEMY_BY_ID["leao_selvagem"]!,
+      1,
+      3,
+      -3,
+      -3,
+      bio(-3, -3),
+    );
+    eLeao.id = "layout-enemy-leao";
+    return [hGlad, hPriest, hGun, eGlad, eEsc, eLeao];
+  }
+
   /** Resumo da wave (UI do overlay antes da loja / vitória). */
   peekWaveLootSummary(): WaveEndLootSummary | null {
     return this.waveLootSummaryPending;

@@ -4,8 +4,23 @@ import type { BiomeId } from "./types";
 
 const LS_KEY = "gladius-scene-layout-v1";
 
+export type BunkerTierKey = "0" | "1" | "2";
+
 /** Offset e escala do bunker em espaço local da arena (relativo ao hex nominal). */
 export type BunkerLayoutEntry = {
+  x: number;
+  z: number;
+  scale: number;
+  /**
+   * Altura do mount por variante de modelo (nv1–3). Se ausente, usa `y` legado para todos.
+   */
+  yByTier?: Partial<Record<BunkerTierKey, number>>;
+  /** Legado: altura única; migrado para yByTier igual nos três níveis. */
+  y?: number;
+};
+
+/** Ajuste fino de atores só para o editor / encenação (heróis sintéticos, trono). */
+export type LayoutActorPose = {
   x: number;
   y: number;
   z: number;
@@ -19,6 +34,8 @@ export type SceneLayoutPrefs = {
   coliseumScale: number;
   /** Por bioma de combate: ajuste fino da mesh do bunker (editor de cena). */
   bunkerLayout: Partial<Record<BiomeId, BunkerLayoutEntry>>;
+  /** Trono + unidades sintéticas do editor (ids estáveis `layout-*` e `throne`). */
+  layoutActors?: Partial<Record<string, LayoutActorPose>>;
   /** Câmara livre (perspetiva); null = usar câmara ortográfica de combate. */
   freeCamera: null | {
     position: [number, number, number];
@@ -31,6 +48,7 @@ const SAFE_FALLBACK: SceneLayoutPrefs = {
   coliseum: { x: 0, y: 0, z: 0 },
   coliseumScale: 1,
   bunkerLayout: {},
+  layoutActors: {},
   freeCamera: null,
 };
 
@@ -41,17 +59,37 @@ function clonePrefs(p: SceneLayoutPrefs): SceneLayoutPrefs {
   const bl: Partial<Record<BiomeId, BunkerLayoutEntry>> = {};
   for (const [id, e] of Object.entries(p.bunkerLayout ?? {})) {
     if (!e || typeof e !== "object") continue;
+    const ybt = e.yByTier;
     bl[id as BiomeId] = {
       x: e.x,
-      y: e.y,
       z: e.z,
       scale: e.scale,
+      y: typeof e.y === "number" && Number.isFinite(e.y) ? e.y : undefined,
+      yByTier:
+        ybt && typeof ybt === "object"
+          ? {
+              "0": ybt["0"],
+              "1": ybt["1"],
+              "2": ybt["2"],
+            }
+          : undefined,
+    };
+  }
+  const la: Partial<Record<string, LayoutActorPose>> = {};
+  for (const [k, a] of Object.entries(p.layoutActors ?? {})) {
+    if (!a || typeof a !== "object") continue;
+    la[k] = {
+      x: a.x,
+      y: a.y,
+      z: a.z,
+      scale: a.scale,
     };
   }
   return {
     coliseum: { ...p.coliseum },
     coliseumScale: p.coliseumScale,
     bunkerLayout: bl,
+    layoutActors: la,
     freeCamera: p.freeCamera
       ? {
           position: [...p.freeCamera.position] as [number, number, number],
@@ -72,19 +110,60 @@ export function cloneSceneLayoutPrefs(p: SceneLayoutPrefs): SceneLayoutPrefs {
   return clonePrefs(p);
 }
 
+function normalizeTierY(
+  raw: unknown,
+): Partial<Record<BunkerTierKey, number>> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const out: Partial<Record<BunkerTierKey, number>> = {};
+  for (const k of ["0", "1", "2"] as const) {
+    const v = o[k];
+    if (typeof v === "number" && Number.isFinite(v)) out[k] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 function normalizeBunkerLayoutEntry(
   e: unknown,
 ): BunkerLayoutEntry | null {
   if (!e || typeof e !== "object") return null;
   const o = e as Record<string, unknown>;
   const x = typeof o.x === "number" && Number.isFinite(o.x) ? o.x : 0;
-  const y = typeof o.y === "number" && Number.isFinite(o.y) ? o.y : 0;
   const z = typeof o.z === "number" && Number.isFinite(o.z) ? o.z : 0;
   const scale =
     typeof o.scale === "number" && Number.isFinite(o.scale)
       ? Math.min(48, Math.max(0.02, o.scale))
       : 1;
-  return { x, y, z, scale };
+  let yByTier = normalizeTierY(o.yByTier);
+  const legacyY =
+    typeof o.y === "number" && Number.isFinite(o.y) ? o.y : undefined;
+  if (!yByTier && legacyY !== undefined) {
+    yByTier = { "0": legacyY, "1": legacyY, "2": legacyY };
+  }
+  const entry: BunkerLayoutEntry = { x, z, scale, yByTier };
+  if (legacyY !== undefined && !o.yByTier) entry.y = legacyY;
+  return entry;
+}
+
+function normalizeLayoutActors(
+  raw: unknown,
+): Partial<Record<string, LayoutActorPose>> {
+  if (!raw || typeof raw !== "object") return {};
+  const o = raw as Record<string, unknown>;
+  const out: Partial<Record<string, LayoutActorPose>> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (!v || typeof v !== "object") continue;
+    const a = v as Record<string, unknown>;
+    const x = typeof a.x === "number" && Number.isFinite(a.x) ? a.x : 0;
+    const y = typeof a.y === "number" && Number.isFinite(a.y) ? a.y : 0;
+    const z = typeof a.z === "number" && Number.isFinite(a.z) ? a.z : 0;
+    const scale =
+      typeof a.scale === "number" && Number.isFinite(a.scale)
+        ? Math.min(48, Math.max(0.02, a.scale))
+        : 1;
+    out[k] = { x, y, z, scale };
+  }
+  return out;
 }
 
 function normalizeBunkerLayout(
@@ -142,10 +221,12 @@ function normalizeSceneLayoutPrefs(o: unknown): SceneLayoutPrefs {
       };
     }
     const bunkerLayout = normalizeBunkerLayout(raw.bunkerLayout);
+    const layoutActors = normalizeLayoutActors(raw.layoutActors);
     return {
       coliseum: { x: cx, y: cy, z: cz },
       coliseumScale: cScale,
       bunkerLayout,
+      layoutActors,
       freeCamera,
     };
   } catch {
@@ -223,4 +304,18 @@ export function saveSceneLayoutPrefs(p: SceneLayoutPrefs): void {
   } catch {
     /* ignore */
   }
+}
+
+/** Altura do mount do bunker (relativa ao plano de jogo) para o tier de modelo 0–2. */
+export function bunkerMountYOffset(
+  off: BunkerLayoutEntry | undefined,
+  tier: number,
+): number {
+  if (!off) return 0;
+  const ti = Math.min(2, Math.max(0, Math.round(tier))) as 0 | 1 | 2;
+  const k = String(ti) as BunkerTierKey;
+  const yb = off.yByTier;
+  if (yb?.[k] !== undefined && Number.isFinite(yb[k]!)) return yb[k]!;
+  if (typeof off.y === "number" && Number.isFinite(off.y)) return off.y;
+  return 0;
 }

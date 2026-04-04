@@ -285,8 +285,9 @@ view.setOnArenaLayoutSessionEnd(() => {
 
 view.setOnArenaLayoutEditUiRefresh(() => {
   queueMicrotask(() => {
-    if (model.phase === "main_menu" && view.isArenaLayoutEditActive()) {
-      showArenaLayoutEditHud();
+    const el = document.getElementById("arena-layout-dynamic-hint");
+    if (el && view.isArenaLayoutEditActive()) {
+      el.textContent = view.getArenaLayoutEditSelectionHint();
     }
   });
 });
@@ -2035,8 +2036,9 @@ function showArenaLayoutEditHud(): void {
   uiRoot.innerHTML = "";
   const wrap = el(`
     <div class="arena-layout-edit-hud" role="status" aria-live="polite">
-      <strong>Ajustar cena</strong> — Vista em <strong>perspetiva livre</strong> (como na run com câmara guardada, ou a vista do menu). <strong>Botão direito</strong> arrasta o plano; <strong>roda</strong> aproxima/afasta. Clique no <strong>coliseu</strong> ou num <strong>bunker</strong> para selecionar (contorno vermelho). Arrasto esquerdo no objeto: plano; Shift+arrasto: altura. Teclas no objeto: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> escala.
-      <br /><kbd>Esc</kbd> grava coliseu/bunkers e volta ao menu (a câmara no JSON mantém-se a que tinhas ao entrar).
+      <strong>Ajustar cena</strong> — <strong>Perspetiva livre em tempo real</strong>: o que vês (ângulo, zoom) grava no JSON ao sair. <strong>Botão direito</strong> arrasta o plano; <strong>roda</strong> aproxima/afasta. Vês <strong>coliseu, trono, bunkers (todos os biomas), heróis e inimigos de referência</strong>. Seleção com o mesmo <strong>realce violeta</strong> do ajuste de equipamento. Arrasto esquerdo no objeto: plano; Shift+arrasto: altura. Teclas: WASD, <kbd>X</kbd>/<kbd>Z</kbd> altura, <kbd>[</kbd> <kbd>]</kbd> escala. <strong>Bunker</strong>: <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> trocam o modelo (nv1–3); a altura grava-se <em>por nível</em>.
+      <br /><span id="arena-layout-dynamic-hint" class="arena-layout-edit-hud__dynamic">${escapeHtml(view.getArenaLayoutEditSelectionHint())}</span>
+      <br /><kbd>Esc</kbd> grava tudo (câmara incluída) e volta ao menu.
       <div class="arena-layout-edit-hud__copy-row">
         <button type="button" class="btn" id="arena-layout-copy-json">Copiar JSON (repo)</button>
         <span id="arena-layout-copy-json-feedback" class="arena-layout-edit-hud__copy-feedback" aria-live="polite"></span>
@@ -8261,9 +8263,14 @@ function render(): void {
     requestAnimationFrame(() => startCometaArcanoCinematicThenRelease());
   }
 
+  const layoutSceneEdit =
+    import.meta.env.DEV &&
+    model.phase === "main_menu" &&
+    view.isArenaLayoutEditActive();
+
   const mv = model.takePendingMoveAnimation();
   view.syncUnits(
-    model.units,
+    layoutSceneEdit ? model.layoutEditorSyntheticUnits() : model.units,
     model.phase === "combat" ? model.wave : null,
   );
   if (mv) {
@@ -8296,10 +8303,6 @@ function render(): void {
       }, totalMs + 20);
     }
   }
-  const layoutSceneEdit =
-    import.meta.env.DEV &&
-    model.phase === "main_menu" &&
-    view.isArenaLayoutEditActive();
   const showBunkers =
     shouldShowBunkerMeshes(model.phase) || layoutSceneEdit;
   const bunkersFromModel = model.bunkersForRender();

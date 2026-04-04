@@ -41,7 +41,9 @@ import {
 } from "./arenaColiseumGlb";
 import {
   type BunkerLayoutEntry,
+  type LayoutActorPose,
   type SceneLayoutPrefs,
+  bunkerMountYOffset,
   cloneSceneLayoutPrefs,
   loadSceneLayoutPrefs,
   saveSceneLayoutPrefs,
@@ -80,6 +82,8 @@ const ARENA_HEX_RADIUS = 25;
 /** Borda do pan: extensão do grid + folga (sem o anel decorativo removido). */
 const COLISEUM_XZ_MAX = HEX_SIZE * Math.sqrt(3) * ARENA_HEX_RADIUS + 10;
 const COLISEUM_XZ_MIN = -COLISEUM_XZ_MAX;
+const THRONE_BASE_X = COLISEUM_XZ_MIN * 0.9;
+const THRONE_BASE_Z = COLISEUM_XZ_MIN * 0.78;
 /** Frustum base ajustado ao tamanho da arena com hexes mais juntos. */
 const ORTHO_FRUSTUM = 108;
 /** No ajuste de cena, o zoom-out ortográfico pode usar um frustum até este factor × o “justo” para a arena. */
@@ -331,8 +335,6 @@ export class GameRenderer {
   private arenaLayoutEditEligible = false;
   /** Sessão de ajuste (clique no coliseu no menu); Esc grava e fecha. */
   private arenaLayoutEditActive = false;
-  /** `freeCamera` gravada ao entrar no editor — não muda ao explorar a cena (só coliseu/bunker no JSON). */
-  private layoutEditFrozenFreeCamera: SceneLayoutPrefs["freeCamera"] = null;
   private readonly orbitTarget = new THREE.Vector3(0, 0, 0);
   /** Em combate/menu: usar `freeCamera` em vez da ortográfica (exceto durante cometa). */
   private usePersistentFreeCamera = false;
@@ -2237,7 +2239,8 @@ export class GameRenderer {
 
   private buildThrone(): THREE.Group {
     const g = new THREE.Group();
-    g.position.set(COLISEUM_XZ_MIN * 0.9, 0, COLISEUM_XZ_MIN * 0.78);
+    g.position.set(THRONE_BASE_X, 0, THRONE_BASE_Z);
+    g.userData.layoutSceneActorId = "throne";
     const seat = new THREE.Mesh(
       new THREE.BoxGeometry(2.2, 1.4, 1.2),
       new THREE.MeshStandardMaterial({ color: 0x4a3020, roughness: 0.6 }),
@@ -2366,7 +2369,23 @@ export class GameRenderer {
         mat.needsUpdate = true;
       }
     }
-    this.throneGroup.position.y = y;
+    this.applyThroneLayoutPose(y);
+  }
+
+  /** Posição base do trono: canto da arena + offsets em `layoutActors.throne`. */
+  private applyThroneLayoutPose(playSurfaceY: number): void {
+    const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
+    const a = snap.layoutActors?.throne;
+    const dx = a?.x ?? 0;
+    const dy = a?.y ?? 0;
+    const dz = a?.z ?? 0;
+    const sc = THREE.MathUtils.clamp(a?.scale ?? 1, 0.02, 48);
+    this.throneGroup.position.set(
+      THRONE_BASE_X + dx,
+      playSurfaceY + dy,
+      THRONE_BASE_Z + dz,
+    );
+    this.throneGroup.scale.setScalar(sc);
   }
 
   buildHexGrid(grid: Map<string, HexCell>): void {
@@ -2458,13 +2477,39 @@ export class GameRenderer {
           ju.baseX = x;
           ju.baseZ = z;
         } else {
-          g.position.set(x, this.playSurfaceYOffset() + flyY, z);
+          const py0 = this.playSurfaceYOffset();
+          let wx = x;
+          let wy = py0 + flyY;
+          let wz = z;
+          if (u.id.startsWith("layout-")) {
+            const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
+            const la = snap.layoutActors?.[u.id];
+            if (la) {
+              wx += la.x;
+              wy += la.y;
+              wz += la.z;
+            }
+            g.userData.layoutActorAxialQ = u.q;
+            g.userData.layoutActorAxialR = u.r;
+            g.userData.layoutActorFlyY = flyY;
+          }
+          g.position.set(wx, wy, wz);
         }
       }
       /** 2× no gigante: evita cobrir inimigos no raycast (antes 5×). */
       const furyScale =
         u.isPlayer && (u.furiaGiganteTurns ?? 0) > 0 ? 2 : 1;
-      g.scale.setScalar(furyScale);
+      const layoutActorSc =
+        u.id.startsWith("layout-") &&
+        (this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs()).layoutActors?.[u.id]
+          ?.scale;
+      const layoutSc =
+        typeof layoutActorSc === "number" && Number.isFinite(layoutActorSc)
+          ? THREE.MathUtils.clamp(layoutActorSc, 0.02, 48)
+          : 1;
+      const unitSc =
+        u.id.startsWith("layout-") ? furyScale * layoutSc : furyScale;
+      g.scale.setScalar(unitSc);
       g.userData.unitId = u.id;
       this.ensureUnitBars(g, u);
       const br = g.userData.barRoot as THREE.Group | undefined;
@@ -3527,47 +3572,65 @@ export class GameRenderer {
         root.userData.layoutBunkerBiome = biome;
         root.userData.bunkerAxialQ = b.q;
         root.userData.bunkerAxialR = b.r;
+        root.userData.bunkerDataTier = tier;
+        root.userData.layoutPreviewTier = null;
         const vis = createBunkerVisualGroup(tier);
         root.add(vis);
         root.userData.bunkerVisual = vis;
-        root.userData.bunkerTier = tier;
+        root.userData.bunkerVisualTier = tier;
         this.bunkerRoots.set(k, root);
         this.arenaRoot.add(root);
       } else {
         root.userData.layoutBunkerBiome = biome;
         root.userData.bunkerAxialQ = b.q;
         root.userData.bunkerAxialR = b.r;
-        const curTier = root.userData.bunkerTier as BunkerRenderTier | undefined;
-        if (curTier !== tier) {
+        root.userData.bunkerDataTier = tier;
+        const preview = root.userData.layoutPreviewTier as
+          | BunkerRenderTier
+          | null
+          | undefined;
+        const visualTier =
+          this.arenaLayoutEditActive && preview != null ? preview : tier;
+        if (
+          (root.userData.bunkerVisualTier as BunkerRenderTier | undefined) !==
+          visualTier
+        ) {
           const oldV = root.userData.bunkerVisual as THREE.Group | undefined;
           if (oldV) {
             root.remove(oldV);
             this.disposeObject3D(oldV);
           }
-          const vis = createBunkerVisualGroup(tier);
+          const vis = createBunkerVisualGroup(visualTier);
           root.add(vis);
           root.userData.bunkerVisual = vis;
-          root.userData.bunkerTier = tier;
+          root.userData.bunkerVisualTier = visualTier;
         }
       }
       if (!this.arenaLayoutEditActive || !wasExisting) {
-        const def: BunkerLayoutEntry = { x: 0, y: 0, z: 0, scale: 1 };
-        const raw =
+        const raw: BunkerLayoutEntry =
           biome && snap.bunkerLayout?.[biome]
             ? snap.bunkerLayout[biome]!
-            : def;
+            : { x: 0, z: 0, scale: 1 };
         const off: BunkerLayoutEntry = {
           x: Number.isFinite(raw.x) ? raw.x : 0,
-          y: Number.isFinite(raw.y) ? raw.y : 0,
           z: Number.isFinite(raw.z) ? raw.z : 0,
           scale:
             typeof raw.scale === "number" && Number.isFinite(raw.scale)
               ? THREE.MathUtils.clamp(raw.scale, 0.02, 48)
               : 1,
+          y: raw.y,
+          yByTier: raw.yByTier,
         };
         const base = axialToWorld(b.q, b.r, HEX_SIZE);
         const py = this.playSurfaceYOffset();
-        root.position.set(base.x + off.x, py + off.y, base.z + off.z);
+        const preview = root.userData.layoutPreviewTier as
+          | BunkerRenderTier
+          | null
+          | undefined;
+        const tierForY =
+          this.arenaLayoutEditActive && preview != null ? preview : tier;
+        const yOff = bunkerMountYOffset(off, tierForY);
+        root.position.set(base.x + off.x, py + yOff, base.z + off.z);
         root.scale.setScalar(off.scale);
       }
     }
@@ -4145,6 +4208,7 @@ export class GameRenderer {
       }
     }
     this.applyBunkerMountsPoseFromPrefs();
+    this.applyThroneLayoutPose(this.playSurfaceYOffset());
   }
 
   private applyBunkerMountsPoseFromPrefs(): void {
@@ -4156,14 +4220,22 @@ export class GameRenderer {
       if (!biome || q === undefined || r === undefined) continue;
       const off: BunkerLayoutEntry = snap.bunkerLayout?.[biome] ?? {
         x: 0,
-        y: 0,
         z: 0,
         scale: 1,
       };
       const base = axialToWorld(q, r, HEX_SIZE);
       const py = this.playSurfaceYOffset();
       const sc = THREE.MathUtils.clamp(off.scale, 0.02, 48);
-      root.position.set(base.x + off.x, py + off.y, base.z + off.z);
+      const dataTier = (root.userData.bunkerDataTier ?? 0) as BunkerRenderTier;
+      const preview = root.userData.layoutPreviewTier as BunkerRenderTier | null | undefined;
+      const tierForY =
+        this.arenaLayoutEditActive &&
+        this.layoutSelectedRoot === root &&
+        preview != null
+          ? preview
+          : dataTier;
+      const yOff = bunkerMountYOffset(off, tierForY);
+      root.position.set(base.x + off.x, py + yOff, base.z + off.z);
       root.scale.setScalar(sc);
     }
   }
@@ -4180,11 +4252,55 @@ export class GameRenderer {
       if (q === undefined || r === undefined) continue;
       const baseW = axialToWorld(q, r, HEX_SIZE);
       const py = this.playSurfaceYOffset();
+      const prev = out[biome] ?? { x: 0, z: 0, scale: 1 };
+      const yByTier: Partial<Record<"0" | "1" | "2", number>> = {
+        ...(prev.yByTier ?? {}),
+      };
+      const dataTier = (root.userData.bunkerDataTier ?? 0) as BunkerRenderTier;
+      const preview = root.userData.layoutPreviewTier as BunkerRenderTier | null | undefined;
+      const tt =
+        this.arenaLayoutEditActive &&
+        this.layoutSelectedRoot === root &&
+        preview != null
+          ? preview
+          : dataTier;
+      const tierKey = String(tt) as "0" | "1" | "2";
+      yByTier[tierKey] = root.position.y - py;
       out[biome] = {
         x: root.position.x - baseW.x,
-        y: root.position.y - py,
         z: root.position.z - baseW.z,
         scale: THREE.MathUtils.clamp(root.scale.x, 0.02, 48),
+        yByTier,
+      };
+    }
+    return out;
+  }
+
+  private mergeLayoutActorsFromScene(
+    base: Partial<Record<string, LayoutActorPose>>,
+  ): Partial<Record<string, LayoutActorPose>> {
+    const out: Partial<Record<string, LayoutActorPose>> = { ...base };
+    const py = this.playSurfaceYOffset();
+    const tg = this.throneGroup;
+    out.throne = {
+      x: tg.position.x - THRONE_BASE_X,
+      y: tg.position.y - py,
+      z: tg.position.z - THRONE_BASE_Z,
+      scale: THREE.MathUtils.clamp(tg.scale.x, 0.02, 48),
+    };
+    for (const [id, g] of this.unitMeshes) {
+      if (!id.startsWith("layout-")) continue;
+      const q = g.userData.layoutActorAxialQ as number | undefined;
+      const r = g.userData.layoutActorAxialR as number | undefined;
+      if (q === undefined || r === undefined) continue;
+      const baseW = axialToWorld(q, r, HEX_SIZE);
+      const flyY = Number(g.userData.layoutActorFlyY) || 0;
+      const baseY = py + flyY;
+      out[id] = {
+        x: g.position.x - baseW.x,
+        y: g.position.y - baseY,
+        z: g.position.z - baseW.z,
+        scale: THREE.MathUtils.clamp(g.scale.x, 0.02, 48),
       };
     }
     return out;
@@ -4233,19 +4349,35 @@ export class GameRenderer {
       ...(snap.bunkerLayout ?? {}),
     });
     if (this.arenaLayoutEditActive) {
+      const layoutActors = this.mergeLayoutActorsFromScene({
+        ...(snap.layoutActors ?? {}),
+      });
       return {
         coliseum,
         coliseumScale,
         bunkerLayout,
-        freeCamera: this.layoutEditFrozenFreeCamera,
+        layoutActors,
+        freeCamera: this.cloneFreeCameraPrefsPayload(),
       };
     }
     if (!this.arenaLayoutCameraPersonalized) {
-      return { coliseum, coliseumScale, bunkerLayout, freeCamera: null };
+      return {
+        coliseum,
+        coliseumScale,
+        bunkerLayout,
+        layoutActors: snap.layoutActors ?? {},
+        freeCamera: null,
+      };
     }
     this.syncFreeCameraSnapshotFromOrthoForPrefs();
     const freeCamera = this.cloneFreeCameraPrefsPayload();
-    return { coliseum, coliseumScale, bunkerLayout, freeCamera };
+    return {
+      coliseum,
+      coliseumScale,
+      bunkerLayout,
+      layoutActors: snap.layoutActors ?? {},
+      freeCamera,
+    };
   }
 
   /** Menu principal (só `import.meta.env.DEV`): permite iniciar a sessão de ajuste. */
@@ -4457,6 +4589,29 @@ export class GameRenderer {
       }
     }
 
+    let bestU: THREE.Intersection | null = null;
+    let bestUG: THREE.Group | null = null;
+    for (const [id, g] of this.unitMeshes) {
+      if (!id.startsWith("layout-")) continue;
+      g.updateMatrixWorld(true);
+      for (const h of ray.intersectObject(g, true)) {
+        if (!GameRenderer.layoutPickIsSolid(h.object)) continue;
+        if (!bestU || h.distance < bestU.distance) {
+          bestU = h;
+          bestUG = g;
+        }
+      }
+    }
+    if (bestUG) return bestUG;
+
+    this.throneGroup.updateMatrixWorld(true);
+    let bestT: THREE.Intersection | null = null;
+    for (const h of ray.intersectObject(this.throneGroup, true)) {
+      if (!GameRenderer.layoutPickIsSolid(h.object)) continue;
+      if (!bestT || h.distance < bestT.distance) bestT = h;
+    }
+    if (bestT) return this.throneGroup;
+
     if (!col) return null;
     col.updateMatrixWorld(true);
     let bestC: THREE.Intersection | null = null;
@@ -4491,46 +4646,125 @@ export class GameRenderer {
     return hits.some((h) => GameRenderer.layoutPickIsSolid(h.object));
   }
 
-  private clearLayoutSelectionOutlines(root: THREE.Object3D | null): void {
+  private readonly layoutSelectionEmissiveBackup = new WeakMap<
+    THREE.MeshStandardMaterial,
+    { c: THREE.Color; i: number }
+  >();
+
+  /** Mesmo realce violeta do editor de equipamento (forja). */
+  private clearLayoutSelectionEmissive(root: THREE.Object3D | null): void {
     if (!root) return;
     root.traverse((obj) => {
-      const ln = obj.userData.layoutOutlineLines as
-        | THREE.LineSegments
-        | undefined;
-      if (ln) {
-        obj.remove(ln);
-        ln.geometry.dispose();
-        (ln.material as THREE.Material).dispose();
-        delete obj.userData.layoutOutlineLines;
+      if (!(obj instanceof THREE.Mesh)) return;
+      const mat = obj.material;
+      const restore = (m: THREE.MeshStandardMaterial): void => {
+        const b = this.layoutSelectionEmissiveBackup.get(m);
+        if (b) {
+          m.emissive.copy(b.c);
+          m.emissiveIntensity = b.i;
+          this.layoutSelectionEmissiveBackup.delete(m);
+        }
+      };
+      if (Array.isArray(mat)) {
+        mat.forEach((x) => {
+          if (x instanceof THREE.MeshStandardMaterial) restore(x);
+        });
+      } else if (mat instanceof THREE.MeshStandardMaterial) {
+        restore(mat);
       }
     });
   }
 
-  private addLayoutSelectionOutlines(root: THREE.Object3D): void {
+  private applyLayoutSelectionEmissive(root: THREE.Object3D): void {
     root.traverse((obj) => {
-      if (!(obj instanceof THREE.Mesh) || !obj.geometry) return;
-      if (!obj.geometry.getAttribute("position")) return;
-      if (obj.userData.layoutOutlineLines) return;
-      const edges = new THREE.EdgesGeometry(obj.geometry, 22);
-      const mat = new THREE.LineBasicMaterial({
-        color: 0xff3a3a,
-        transparent: true,
-        opacity: 0.94,
-        depthTest: false,
-      });
-      const lines = new THREE.LineSegments(edges, mat);
-      lines.userData.layoutSelectionOutline = true;
-      lines.renderOrder = 2;
-      obj.add(lines);
-      obj.userData.layoutOutlineLines = lines;
+      if (!(obj instanceof THREE.Mesh)) return;
+      const role = obj.userData?.role as string | undefined;
+      if (
+        role === "bars" ||
+        role === "shieldBubble" ||
+        role === "bunkerPickProxy"
+      ) {
+        return;
+      }
+      const mat = obj.material;
+      const apply = (m: THREE.MeshStandardMaterial): void => {
+        if (!this.layoutSelectionEmissiveBackup.has(m)) {
+          this.layoutSelectionEmissiveBackup.set(m, {
+            c: m.emissive.clone(),
+            i: m.emissiveIntensity,
+          });
+        }
+        m.emissive.setHex(0x442266);
+        m.emissiveIntensity = Math.max(m.emissiveIntensity ?? 0, 0.35);
+      };
+      if (Array.isArray(mat)) {
+        mat.forEach((x) => {
+          if (x instanceof THREE.MeshStandardMaterial) apply(x);
+        });
+      } else if (mat instanceof THREE.MeshStandardMaterial) {
+        apply(mat);
+      }
     });
   }
 
   private setLayoutSelectedRoot(root: THREE.Object3D | null): void {
     if (this.layoutSelectedRoot === root) return;
-    this.clearLayoutSelectionOutlines(this.layoutSelectedRoot);
+    this.clearLayoutSelectionEmissive(this.layoutSelectedRoot);
     this.layoutSelectedRoot = root;
-    if (root) this.addLayoutSelectionOutlines(root);
+    if (root) this.applyLayoutSelectionEmissive(root);
+    this.onArenaLayoutEditUiRefresh?.();
+  }
+
+  getArenaLayoutEditSelectionHint(): string {
+    const s = this.layoutSelectedRoot;
+    if (!s) return "Nada selecionado.";
+    if (s === this.arenaColiseumMount) {
+      return "Coliseu — arrasto no plano, Shift+arrasto altura, [ ] escala.";
+    }
+    if (s === this.throneGroup) {
+      return "Trono — mesmos controlos que o coliseu.";
+    }
+    const uid = s.userData.unitId as string | undefined;
+    if (uid?.startsWith("layout-")) {
+      return `Figura ${uid} — posição/escala (herói ou inimigo de referência).`;
+    }
+    for (const root of this.bunkerRoots.values()) {
+      if (root !== s) continue;
+      const bio = root.userData.layoutBunkerBiome as BiomeId | undefined;
+      const preview = root.userData.layoutPreviewTier as BunkerRenderTier | null | undefined;
+      const pv =
+        preview != null ? `pré-visualização nv. ${preview + 1}` : "nv. jogo";
+      return `Bunker (${bio ?? "?"}) — teclas 1 / 2 / 3 trocam o modelo; altura (X/Z) grava neste nível (${pv}).`;
+    }
+    return "Objeto selecionado.";
+  }
+
+  private setLayoutBunkerPreviewTier(t: BunkerRenderTier): void {
+    const sel = this.layoutSelectedRoot;
+    if (!sel) return;
+    let hit: THREE.Group | null = null;
+    for (const r of this.bunkerRoots.values()) {
+      if (r === sel) {
+        hit = r;
+        break;
+      }
+    }
+    if (!hit) return;
+    hit.userData.layoutPreviewTier = t;
+    const oldV = hit.userData.bunkerVisual as THREE.Group | undefined;
+    if (oldV) {
+      hit.remove(oldV);
+      this.disposeObject3D(oldV);
+    }
+    const vis = createBunkerVisualGroup(t);
+    hit.add(vis);
+    hit.userData.bunkerVisual = vis;
+    hit.userData.bunkerVisualTier = t;
+    this.applyBunkerMountsPoseFromPrefs();
+    this.scheduleArenaLayoutPersist();
+    this.clearLayoutSelectionEmissive(hit);
+    this.applyLayoutSelectionEmissive(hit);
+    this.onArenaLayoutEditUiRefresh?.();
   }
 
   private beginArenaLayoutSession(canvas: HTMLCanvasElement): void {
@@ -4542,18 +4776,6 @@ export class GameRenderer {
     this.editorDragMode = "none";
     this.applyCameraPose();
     const snap = this.sceneLayoutPrefsSnapshot ?? loadSceneLayoutPrefs();
-    this.layoutEditFrozenFreeCamera = snap.freeCamera
-      ? {
-          position: [...snap.freeCamera.position] as [number, number, number],
-          quaternion: [...snap.freeCamera.quaternion] as [
-            number,
-            number,
-            number,
-            number,
-          ],
-          fov: snap.freeCamera.fov,
-        }
-      : null;
     if (snap.freeCamera) {
       const fc = snap.freeCamera;
       this.freeCamera.position.set(
@@ -4605,7 +4827,6 @@ export class GameRenderer {
     const p = this.collectSceneLayoutPrefs();
     saveSceneLayoutPrefs(p);
     this.arenaLayoutEditActive = false;
-    this.layoutEditFrozenFreeCamera = null;
     this.applySceneLayoutPrefs(p);
     this.onArenaLayoutSessionEnd?.();
   }
@@ -4692,6 +4913,23 @@ export class GameRenderer {
         return;
       }
       if (!this.arenaLayoutEditActive) return;
+      if (!e.repeat) {
+        if (e.code === "Digit1") {
+          e.preventDefault();
+          this.setLayoutBunkerPreviewTier(0);
+          return;
+        }
+        if (e.code === "Digit2") {
+          e.preventDefault();
+          this.setLayoutBunkerPreviewTier(1);
+          return;
+        }
+        if (e.code === "Digit3") {
+          e.preventDefault();
+          this.setLayoutBunkerPreviewTier(2);
+          return;
+        }
+      }
       if (layoutKeys.has(e.code)) {
         e.preventDefault();
         this.keysDown.add(e.code);

@@ -7936,7 +7936,7 @@ select.forge-biome-sel option:disabled {
   left: 50%;
   bottom: 1.25rem;
   transform: translateX(-50%);
-  max-width: min(560px, 94vw);
+  max-width: min(640px, 94vw);
   padding: 0.7rem 1.1rem;
   border-radius: 10px;
   background: rgba(12, 10, 18, 0.9);
@@ -7956,6 +7956,14 @@ select.forge-biome-sel option:disabled {
   border-radius: 4px;
   background: rgba(80, 72, 100, 0.55);
   border: 1px solid rgba(200, 185, 160, 0.2);
+}
+
+.arena-layout-edit-hud__dynamic {
+  display: block;
+  margin-top: 0.4rem;
+  color: rgba(200, 185, 240, 0.95);
+  font-size: 0.88em;
+  font-weight: 600;
 }
 
 .arena-layout-edit-hud__cam-row {
