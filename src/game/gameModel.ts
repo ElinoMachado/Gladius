@@ -690,7 +690,7 @@ export class GameModel {
     const used = new Set<string>();
     const out: { biome: BiomeId; q: number; r: number }[] = [];
     for (const bi of COMBAT_BIOMES) {
-      const pos = this.pickBunkerHexForBiome(bi, used);
+      const pos = this.pickBunkerHexForLayoutEditorSynthetic(bi, used);
       if (!pos) continue;
       used.add(axialKey(pos.q, pos.r));
       out.push({ biome: bi, q: pos.q, r: pos.r });
@@ -1585,6 +1585,38 @@ export class GameModel {
 
   /** Distância axial do centro da arena (castelo/hub em 0,0) ao hex do bunker. */
   private static readonly BUNKER_RING_FROM_CENTER = 8;
+
+  /**
+   * Editor de cena (menu): hex por bioma só para pré-visualização.
+   * Ignora `bunkerHasEnemyUsableArea` e distância a bunkers reais — evita biomas estreitos (ex.: pântano)
+   * ficarem sem bunker na lista sintética.
+   */
+  private pickBunkerHexForLayoutEditorSynthetic(
+    biome: BiomeId,
+    used: Set<string>,
+  ): { q: number; r: number } | null {
+    const origin = { q: 0, r: 0 };
+    const target = GameModel.BUNKER_RING_FROM_CENTER;
+    const scored = [...this.grid.values()]
+      .filter((c) => c.biome === biome)
+      .map((c) => ({
+        c,
+        err: Math.abs(hexDistance({ q: c.q, r: c.r }, origin) - target),
+      }));
+    scored.sort(
+      (a, b) => a.err - b.err || a.c.q - b.c.q || a.c.r - b.c.r,
+    );
+    for (const { c } of scored) {
+      const k = axialKey(c.q, c.r);
+      if (used.has(k)) continue;
+      const occ = this.units.some(
+        (u) => u.hp > 0 && u.q === c.q && u.r === c.r,
+      );
+      if (occ) continue;
+      return { q: c.q, r: c.r };
+    }
+    return null;
+  }
 
   /** Melhor hex livre no bioma: preferência anel a 8 do centro; fallback ao mais próximo desse anel. */
   private pickBunkerHexForBiome(

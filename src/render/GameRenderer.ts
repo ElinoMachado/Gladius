@@ -360,8 +360,11 @@ export class GameRenderer {
     | "none"
     | "pan"
     | "fly_look"
+    | "orbit_look"
     | "coliseum_xz"
     | "coliseum_y" = "none";
+  /** Clique esquerdo no vazio: só limpa seleção no up se não houver arrasto (senão vira órbita). */
+  private layoutEmptyLeftPending = false;
   private readonly layoutFlyEulerScratch = new THREE.Euler(0, 0, 0, "YXZ");
   private readonly layoutFlyQuatScratch = new THREE.Quaternion();
   private readonly layoutFlyForward = new THREE.Vector3();
@@ -4531,13 +4534,24 @@ export class GameRenderer {
     this.freeCamera.updateMatrixWorld(true);
   }
 
-  /** No modo voo: roda aproxima/afasta ao longo do olhar. */
-  private dollyLayoutEditFlyAlongView(factor: number): void {
+  /** Roda em modo voo: usa delta em “pixels” (normaliza DOM_DELTA_LINE/PAGE). */
+  private dollyLayoutEditFlyAlongWheel(deltaYPixels: number): void {
     const dir = this.layoutFlyForward;
     this.freeCamera.getWorldDirection(dir);
-    const step = 44 * (1 - factor);
+    const step = -deltaYPixels * 0.11;
     this.freeCamera.position.addScaledVector(dir, step);
     this.freeCamera.updateMatrixWorld(true);
+  }
+
+  private normalizeWheelDeltaY(e: WheelEvent): number {
+    switch (e.deltaMode) {
+      case WheelEvent.DOM_DELTA_LINE:
+        return e.deltaY * 16;
+      case WheelEvent.DOM_DELTA_PAGE:
+        return e.deltaY * Math.max(this.domCanvas?.clientHeight ?? 480, 120);
+      default:
+        return e.deltaY;
+    }
   }
 
   private applyLayoutEditFlyLookDelta(dx: number, dy: number): void {
@@ -4587,6 +4601,24 @@ export class GameRenderer {
       0.07,
       Math.PI - 0.07,
     );
+    off.setFromSpherical(sp);
+    cam.position.copy(target).add(off);
+    cam.up.set(0, 1, 0);
+    cam.lookAt(target);
+    cam.updateMatrixWorld(true);
+  }
+
+  /** Fora do voo: arrasto esquerdo no vazio orbita em torno de `orbitTarget` (inclui ver por baixo). */
+  private applyLayoutEditOrbitLookDelta(dx: number, dy: number): void {
+    const cam = this.freeCamera;
+    const target = this.orbitTarget;
+    const off = this.editorScratchVec3.copy(cam.position).sub(target);
+    if (off.lengthSq() < 1e-6) return;
+    const sp = this.layoutOrbitSphericalScratch;
+    sp.setFromVector3(off);
+    sp.theta -= dx * 0.0052;
+    sp.phi += dy * 0.0052;
+    sp.phi = THREE.MathUtils.clamp(sp.phi, 0.08, Math.PI - 0.08);
     off.setFromSpherical(sp);
     cam.position.copy(target).add(off);
     cam.up.set(0, 1, 0);
@@ -4987,11 +5019,11 @@ export class GameRenderer {
       const tail = s
         ? "Objeto ainda selecionado (sai do voo com Espaço para o mover com WASD)."
         : "Câmara não entra no JSON — só coliseu, bunkers, atores.";
-      return `Voo livre — arrasto esquerdo: olhar · WASD: plano · Q/E: cima/baixo · roda: ao longo do olhar · Espaço: sair. ${tail}`;
+      return `Voo livre — arrasto esquerdo: olhar · WASD: plano · Q/E: cima/baixo · roda: zoom ao longo do olhar · Shift+roda: inclinar · Espaço: sair. ${tail}`;
     }
     const s = this.layoutSelectedRoot;
     if (!s) {
-      return "Nada selecionado — pressiona Espaço para modo voo livre (mover/rodar a câmara).";
+      return "Nada selecionado — arrasto esquerdo no vazio: rodar a câmara em torno do chão (podes ver por baixo) · Espaço: voo livre.";
     }
     const xr = " · X-ray: resto da cena fica transparente.";
     if (s === this.arenaColiseumMount) {
@@ -5050,6 +5082,7 @@ export class GameRenderer {
     this.arenaLayoutEditActive = true;
     this.setLayoutSelectedRoot(null);
     this.layoutEligibleForDragAfterDown = false;
+    this.layoutEmptyLeftPending = false;
     this.layoutEditFlyMode = false;
     this.arenaLayoutCameraPersonalized = this.usePersistentFreeCamera;
     this.editorDragMode = "none";
@@ -5096,6 +5129,7 @@ export class GameRenderer {
     if (!this.arenaLayoutEditActive) return;
     this.editorDragMode = "none";
     this.layoutEligibleForDragAfterDown = false;
+    this.layoutEmptyLeftPending = false;
     this.clearLayoutEditXray();
     this.setLayoutSelectedRoot(null);
     for (const c of [
@@ -5297,11 +5331,12 @@ export class GameRenderer {
             /* ignore */
           }
         } else {
-          this.setLayoutSelectedRoot(null);
+          this.layoutEmptyLeftPending = true;
           this.editorDragMode = "none";
         }
         return;
       }
+      this.layoutEmptyLeftPending = false;
       this.setLayoutSelectedRoot(pickRoot);
       this.layoutEligibleForDragAfterDown = this.rayHitsLayoutRoot(
         pickCam,
@@ -5316,6 +5351,26 @@ export class GameRenderer {
       if (!this.arenaLayoutEditActive) return;
       const ndc = this.clientToNdcForEditor(canvas, e.clientX, e.clientY);
       const pickCam = this.getRenderCamera();
+      if (
+        this.layoutEmptyLeftPending &&
+        !this.layoutEditFlyMode &&
+        (e.buttons & 1) !== 0 &&
+        this.editorDragMode === "none"
+      ) {
+        const dpx = e.clientX - this.layoutPointerDownX;
+        const dpy = e.clientY - this.layoutPointerDownY;
+        if (Math.hypot(dpx, dpy) >= this.layoutDragThresholdPx) {
+          this.layoutEmptyLeftPending = false;
+          this.editorDragMode = "orbit_look";
+          this.editorLastClientX = e.clientX;
+          this.editorLastClientY = e.clientY;
+          try {
+            canvas.setPointerCapture(e.pointerId);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
       if (
         this.layoutEligibleForDragAfterDown &&
         this.layoutSelectedRoot &&
@@ -5374,6 +5429,13 @@ export class GameRenderer {
           );
           break;
         }
+        case "orbit_look": {
+          this.applyLayoutEditOrbitLookDelta(
+            e.clientX - prevX,
+            e.clientY - prevY,
+          );
+          break;
+        }
         case "pan": {
           this.applyLayoutEditCameraPanDeltaFromClientPixels(
             canvas,
@@ -5420,6 +5482,10 @@ export class GameRenderer {
     const onUp = (e: PointerEvent) => {
       if (!this.arenaLayoutEditActive) return;
       if (e.button !== 0 && e.button !== 2) return;
+      if (e.button === 0 && this.layoutEmptyLeftPending) {
+        this.setLayoutSelectedRoot(null);
+        this.layoutEmptyLeftPending = false;
+      }
       this.layoutEligibleForDragAfterDown = false;
       this.editorDragMode = "none";
       try {
@@ -5443,7 +5509,7 @@ export class GameRenderer {
       }
       const factor = Math.exp(-e.deltaY * 0.0018);
       if (this.layoutEditFlyMode) {
-        this.dollyLayoutEditFlyAlongView(factor);
+        this.dollyLayoutEditFlyAlongWheel(this.normalizeWheelDeltaY(e));
       } else {
         this.dollyLayoutEditFreeCamera(factor);
       }
