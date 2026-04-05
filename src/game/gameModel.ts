@@ -421,6 +421,23 @@ function shopArtifactsEq(
 
 const AURA_TITA_SHIELD_PER_STACK = 50;
 
+const SACRIFICIO_RESILIENTE_DEF_PER_STACK = 30;
+const EXPLOSAO_RUBRA_DMG_PER_STACK = 6;
+const SACRIFICIO_EXPLOSAO_MAX_STACKS = 4;
+
+/**
+ * Saves v1: Gota azul / Raiz da vida davam regen por `pickBonusPerStack`; o efeito mudou.
+ */
+function migrateGotaAzulRaizVidaOldPickBonuses(units: Unit[]): void {
+  for (const u of units) {
+    if (!u.isPlayer) continue;
+    const g = u.artifacts["gota_azul"] ?? 0;
+    if (g > 0) u.regenMana = Math.max(0, u.regenMana - g);
+    const r = u.artifacts["raiz_vida"] ?? 0;
+    if (r > 0) u.regenVida = Math.max(0, u.regenVida - r);
+  }
+}
+
 /** Save antigo: `alcance_mistico` → `aura_tita` e reverte alcance do bônus antigo. */
 function migrateAlcanceMisticoToAuraTita(units: Unit[]): void {
   for (const u of units) {
@@ -891,7 +908,7 @@ export class GameModel {
     if (!runPhaseAllowsRunSessionPersistence(this.phase)) return null;
     try {
       const payload = {
-        v: 1 as const,
+        v: 2 as const,
         phase: this.phase,
         meta: JSON.parse(JSON.stringify(this.meta)) as MetaProgress,
         units: JSON.parse(JSON.stringify(this.units)) as Unit[],
@@ -1044,13 +1061,14 @@ export class GameModel {
         runShopRefundUses?: number;
         artifactBannedThisRun?: string[];
       };
-      if (o.v !== 1 || !o.phase || !Array.isArray(o.units) || !o.meta)
+      if ((o.v !== 1 && o.v !== 2) || !o.phase || !Array.isArray(o.units) || !o.meta)
         return false;
       if (!runPhaseAllowsRunSessionPersistence(o.phase)) return false;
 
       this.meta = o.meta;
       this.units = o.units;
       migrateAlcanceMisticoToAuraTita(this.units);
+      if (o.v === 1) migrateGotaAzulRaizVidaOldPickBonuses(this.units);
       this.bunkers = o.bunkers ?? {};
       this.ensureAllBunkerFields();
       this.wave = o.wave ?? 0;
@@ -1586,6 +1604,8 @@ export class GameModel {
       u.skillCd = {};
       u.pistoleiroBonusDanoWave = 0;
       u.curandeiroDanoWave = 0;
+      u.sacrificioResilienteWaveDef = 0;
+      u.heroDeathArtifactsApplied = false;
       u.shieldGGBlue = 0;
       const auraTita = u.artifacts["aura_tita"] ?? 0;
       if (auraTita > 0) {
@@ -2150,6 +2170,7 @@ export class GameModel {
         `${h.name}: Alento da morte — cai ao iniciar o turno; aliados recebem Bravura.`,
       );
       h.hp = 0;
+      this.maybeApplyHeroOnDeathArtifacts(h);
       this.onDeaths();
       if (
         this.phase === "combat" &&
@@ -2619,6 +2640,9 @@ export class GameModel {
       dmgHp = dHit - absorbed;
     }
     u.hp = Math.max(0, u.hp - dmgHp);
+    if (u.isPlayer && volcanicWasAlive && u.hp <= 0) {
+      this.maybeApplyHeroOnDeathArtifacts(u);
+    }
     if (shieldAbsorb > 0) {
       this.pushCombatFloat({
         unitId: u.id,
@@ -2750,6 +2774,7 @@ export class GameModel {
       h.ouroWave = 0;
       h.shieldGGBlue = 0;
       h.escudoResidualTagged = 0;
+      h.sacrificioResilienteWaveDef = 0;
     }
     for (const bi of COMBAT_BIOMES) {
       const b = this.bunkers[bi];
@@ -3596,6 +3621,8 @@ export class GameModel {
       suppressSourceHitSfx?: boolean;
       /** Dano secundário (ex.: Seda vampira): nunca dispara roubo de vida. */
       suppressLifesteal?: boolean;
+      /** Explosão rubra e similares: dano plano na morte, sem escalares de habilidade nem procs de origem. */
+      fromHeroDeathNova?: boolean;
       /** Cometa arcano: não aplica multiplicadores de habilidade nem veneno/Labareda. */
       fromCometaArcano?: boolean;
       /**
@@ -3608,6 +3635,7 @@ export class GameModel {
     if (tgt.hp <= 0) return 0;
     let rawUse = raw;
     if (
+      !opts?.fromHeroDeathNova &&
       !opts?.fromCometaArcano &&
       !fromBasicAttack &&
       src.isPlayer &&
@@ -3629,6 +3657,7 @@ export class GameModel {
       rawUse = Math.max(1, Math.floor(rawUse * 0.5));
     }
     if (
+      !opts?.fromHeroDeathNova &&
       src.isPlayer &&
       forgeSynergyTier(src.forgeLoadout, "montanhoso") >= 2
     ) {
@@ -3656,8 +3685,10 @@ export class GameModel {
     );
     if (tgt.isPlayer && !useBunkerDefense) {
       defStat += this.montanhosoAllyDefBonus(tgt);
+      defStat += tgt.sacrificioResilienteWaveDef ?? 0;
     }
     if (
+      !opts?.fromHeroDeathNova &&
       src.isPlayer &&
       !tgt.isPlayer &&
       defBio === "montanhoso" &&
@@ -3669,7 +3700,7 @@ export class GameModel {
     let mit = computeMitigatedDamage(rawUse, defStat, src.penetracao);
     const ignAtk = unitIgnoresTerrain(src);
     let rochosoCritAdd = 0;
-    if (atkBio === "rochoso" && !ignAtk) {
+    if (!opts?.fromHeroDeathNova && atkBio === "rochoso" && !ignAtk) {
       if (
         src.isPlayer &&
         forgeSynergyTier(src.forgeLoadout, "rochoso") >= 1
@@ -3681,7 +3712,12 @@ export class GameModel {
     }
     let useCrit = crit;
     let critMultExtra = 0;
-    if (!fromBasicAttack && src.isPlayer && src.heroClass) {
+    if (
+      !opts?.fromHeroDeathNova &&
+      !fromBasicAttack &&
+      src.isPlayer &&
+      src.heroClass
+    ) {
       const lm = src.artifacts["lamina_magica"] ?? 0;
       if (lm <= 0) useCrit = false;
       else {
@@ -3690,11 +3726,12 @@ export class GameModel {
       }
     }
     if (opts?.skillCritOut) opts.skillCritOut.value = useCrit;
+    const critMultFromSrc = opts?.fromHeroDeathNova
+      ? 0
+      : critMultExtra + this.rochosoRulerAllyCritMultBonus(src);
     mit = applyCritMultiplier(
       mit,
-      src.danoCritico +
-        critMultExtra +
-        this.rochosoRulerAllyCritMultBonus(src),
+      src.danoCritico + critMultFromSrc,
       useCrit,
       rochosoCritAdd,
     );
@@ -3715,7 +3752,7 @@ export class GameModel {
       this.reduceEscudoResidualTagged(tgt, absorbed);
       dmg -= absorbed;
       const stacks = src.artifacts["escudo_sangue"] ?? 0;
-      if (stacks > 0 && absorbed > 0) {
+      if (!opts?.fromHeroDeathNova && stacks > 0 && absorbed > 0) {
         const ret = Math.floor(absorbed * 0.75 * stacks);
         if (ret > 0) src.hp = Math.max(0, src.hp - ret);
       }
@@ -3765,6 +3802,9 @@ export class GameModel {
     }
     const wasAlive = tgt.hp > 0;
     tgt.hp = Math.max(0, tgt.hp - dmgToHero);
+    if (tgt.isPlayer && wasAlive && tgt.hp <= 0) {
+      this.maybeApplyHeroOnDeathArtifacts(tgt);
+    }
     if (!src.isPlayer && tgt.isPlayer && src.hp > 0) {
       const sp = tgt.artifacts["espinhos_reais"] ?? 0;
       if (sp > 0 && dmgToHero > 0) {
@@ -3864,6 +3904,7 @@ export class GameModel {
       });
     }
     if (
+      !opts?.fromHeroDeathNova &&
       src.isPlayer &&
       src.heroClass &&
       !tgt.isPlayer &&
@@ -4791,6 +4832,7 @@ export class GameModel {
           poisonDot: true,
         });
         u.hp = Math.max(0, u.hp - pdFinal);
+        if (u.isPlayer && u.hp <= 0) this.maybeApplyHeroOnDeathArtifacts(u);
       }
       if (u.poison.instances.length === 0) u.poison = undefined;
     }
@@ -4818,6 +4860,7 @@ export class GameModel {
           burnDot: true,
         });
         u.hp = Math.max(0, u.hp - fdFinal);
+        if (u.isPlayer && u.hp <= 0) this.maybeApplyHeroOnDeathArtifacts(u);
       }
       if (u.burn.instances.length === 0) u.burn = undefined;
     }
@@ -4868,6 +4911,7 @@ export class GameModel {
           floatHex: { q: u.q, r: u.r },
         });
         u.hp = Math.max(0, u.hp - bdFinal);
+        if (u.isPlayer && u.hp <= 0) this.maybeApplyHeroOnDeathArtifacts(u);
       }
       if (u.bleed.instances.length === 0) u.bleed = undefined;
     }
@@ -4957,6 +5001,52 @@ export class GameModel {
           amount: sg,
         });
       }
+    }
+  }
+
+  /**
+   * Artefatos à morte do herói (ex.: Sacrifício resiliente, Explosão rubra).
+   * Vários artefatos no mesmo herói aplicam-se todos; `heroDeathArtifactsApplied` evita duplicar.
+   */
+  private maybeApplyHeroOnDeathArtifacts(u: Unit): void {
+    if (!u.isPlayer || u.hp > 0 || u.heroDeathArtifactsApplied) return;
+    u.heroDeathArtifactsApplied = true;
+
+    const sacStacks = Math.min(
+      SACRIFICIO_EXPLOSAO_MAX_STACKS,
+      u.artifacts["gota_azul"] ?? 0,
+    );
+    if (sacStacks > 0) {
+      const addDef = SACRIFICIO_RESILIENTE_DEF_PER_STACK * sacStacks;
+      for (const ally of this.getParty()) {
+        if (ally.id === u.id || ally.hp <= 0) continue;
+        ally.sacrificioResilienteWaveDef =
+          (ally.sacrificioResilienteWaveDef ?? 0) + addDef;
+      }
+      this.log(
+        `${u.name}: Sacrifício resiliente — aliados vivos ganham +${addDef} defesa até ao fim da wave.`,
+      );
+    }
+
+    const expStacks = Math.min(
+      SACRIFICIO_EXPLOSAO_MAX_STACKS,
+      u.artifacts["raiz_vida"] ?? 0,
+    );
+    if (expStacks > 0) {
+      const dmgEach = EXPLOSAO_RUBRA_DMG_PER_STACK * expStacks;
+      const enemyIds = this.enemies().map((e) => e.id);
+      for (const id of enemyIds) {
+        const e = this.units.find((x) => x.id === id);
+        if (!e || e.hp <= 0) continue;
+        this.dealDamage(u, e, dmgEach, false, false, false, {
+          suppressLifesteal: true,
+          suppressSourceHitSfx: true,
+          fromHeroDeathNova: true,
+        });
+      }
+      this.log(
+        `${u.name}: Explosão rubra — ${dmgEach} de dano a cada inimigo na arena.`,
+      );
     }
   }
 
@@ -5837,6 +5927,7 @@ export class GameModel {
     if (!u?.isPlayer || u.hp <= 0) return;
     u.hp = 0;
     this.log(`[Sandbox] ${u.name} eliminado(a).`);
+    this.maybeApplyHeroOnDeathArtifacts(u);
     this.onDeaths();
     if (!this.units.some((x) => x.isPlayer)) {
       this.phase = "defeat";

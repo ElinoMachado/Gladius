@@ -6177,8 +6177,11 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
   const coreDefHero = effectiveDefenseForBiome(h.defesa, bio, ign, {
     montanhosoForgeSynergyTier1: monT1,
   });
+  const waveSacDef = h.isPlayer ? (h.sacrificioResilienteWaveDef ?? 0) : 0;
   const effDef =
-    coreDefHero + (h.isPlayer ? m.montanhosoAllyDefBonus(h) : 0);
+    coreDefHero +
+    (h.isPlayer ? m.montanhosoAllyDefBonus(h) : 0) +
+    waveSacDef;
   const movPool = m.heroMovementPool(h);
   /** No combate, no turno deste herói: movimento na grelha = restantes / pool (inteiros). */
   const heroMovCombatTurn =

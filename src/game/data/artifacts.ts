@@ -78,10 +78,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "gota_azul",
-    name: "Gota azul",
+    name: "Sacrifício resiliente",
     rarity: "common",
-    description: "+1 de regen de mana por acúmulo.",
-    pickBonusPerStack: { regenMana: 1 },
+    description:
+      "Ao morreres: +30 de defesa a cada herói aliado ainda vivo até ao fim desta wave, por acúmulo (máx. 4). Os efeitos de morte somam se tiveres vários artefatos.",
   },
   {
     id: "fel_simples",
@@ -99,10 +99,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "raiz_vida",
-    name: "Raiz da vida",
+    name: "Explosão rubra",
     rarity: "common",
-    description: "+1 de regen de vida por acúmulo.",
-    pickBonusPerStack: { regenVida: 1 },
+    description:
+      "Ao morreres: causa 6 de dano a cada inimigo na arena por acúmulo (máx. 4). Os efeitos de morte somam se tiveres vários artefatos.",
   },
   {
     id: "seda_vampira",

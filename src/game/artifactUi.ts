@@ -73,6 +73,8 @@ const SPECIAL_MAX: Record<string, number> = {
   seda_vampira: 10,
   fio_cruel: 10,
   crystal_extra: 4,
+  gota_azul: 4,
+  raiz_vida: 4,
   passo_gigante: 3,
   sorte_prata: 3,
   martelo_juiz: 3,
@@ -265,6 +267,10 @@ export function describeArtifactAtStack(
     }
     case "furacao_ouro":
       return `+${5 * n} ouro na bolsa por eliminação.`;
+    case "gota_azul":
+      return `Ao morrer: +${30 * n} defesa a cada aliado vivo até ao fim da wave (efeitos de morte acumulam).`;
+    case "raiz_vida":
+      return `Ao morrer: ${6 * n} de dano a cada inimigo na arena (efeitos de morte acumulam).`;
     case "garra_ferro": {
       const pct = 30 * n;
       return `+${pct}% da defesa convertidos em dano bruto (${Math.floor((u?.defesa ?? 0) * (pct / 100))} com defesa atual).`;
@@ -394,6 +400,8 @@ export function artifactCardFigureSvg(artifactId: string): string {
     furacao_ouro: `<path fill="none" stroke="#f9a825" stroke-width="1.2" d="M24 10 Q38 24 24 38 Q10 24 24 10" opacity="0.7"/><ellipse cx="18" cy="16" rx="6" ry="3.5" fill="#ffc107" stroke="#f57f17"/><ellipse cx="30" cy="20" rx="5" ry="3" fill="#ffca28" stroke="#f9a825" transform="rotate(25 30 20)"/><ellipse cx="20" cy="30" rx="5" ry="3" fill="#ffd54f" stroke="#ff8f00" transform="rotate(-35 20 30)"/><ellipse cx="28" cy="32" rx="4" ry="2.5" fill="#ffe082" stroke="#ffa000"/>`,
     duro_pedra: `<ellipse cx="24" cy="40" rx="11" ry="3.5" fill="#455a64" opacity="0.45"/><path d="M15 18 Q24 12 33 18 L35 34 Q24 38 13 34 Z" fill="#78909c" stroke="#455a64" stroke-width="1"/><circle cx="20" cy="22" r="2.2" fill="#37474f"/><circle cx="28" cy="22" r="2.2" fill="#37474f"/><path d="M19 28h10" stroke="#37474f" stroke-width="1"/><path d="M17 30l3 5M24 30v6M31 30l-3 5" stroke="#607d8b" stroke-width="1.2"/>`,
     anel_penetrante: `<ellipse cx="24" cy="24" rx="15" ry="11" fill="none" stroke="#6a1b9a" stroke-width="3.5"/><ellipse cx="24" cy="24" rx="9" ry="6" fill="none" stroke="#ce93d8" stroke-width="1.8"/><circle cx="24" cy="24" r="4" fill="#4a148c" opacity="0.35"/>`,
+    gota_azul: `<path fill="none" stroke="#1565c0" stroke-width="2" d="M24 8v8"/><path fill="#42a5f5" stroke="#0d47a1" stroke-width="0.8" d="M24 14 C18 22 14 28 14 32 C14 38 18 42 24 42 C30 42 34 38 34 32 C34 28 30 22 24 14"/><path fill="#90caf9" d="M20 30h8v6a4 4 0 0 1-8 0v-6" opacity="0.9"/>`,
+    raiz_vida: `<circle cx="24" cy="24" r="4" fill="#ffcdd2" stroke="#b71c1c" stroke-width="1.2"/><path fill="none" stroke="#c62828" stroke-width="2.2" stroke-linecap="round" d="M24 10v6M24 32v6M10 24h6M32 24h6M14 14l5 5M29 29l5 5M34 14l-5 5M19 29l-5 5"/><path fill="#e53935" d="M24 18l3 6-3 4-3-4z" opacity="0.85"/>`,
     ruler: `<rect x="8" y="10" width="32" height="28" rx="2" fill="#eceff1" stroke="#37474f"/><path fill="none" stroke="#1976d2" stroke-width="2" d="M14 18h20M14 24h16M14 30h20"/><circle cx="24" cy="20" r="3" fill="#ffd54f"/>`,
     braco_forte: `<ellipse cx="24" cy="28" rx="12" ry="8" fill="#d7ccc8"/><path fill="#8d6e63" d="M16 20h16v12H16z"/><path fill="#5d4037" d="M20 14h8v10h-8z"/>`,
     curandeiro_batalha: `<path fill="#43a047" d="M24 8v32M8 24h32" stroke="#2e7d32" stroke-width="4"/><circle cx="24" cy="24" r="10" fill="none" stroke="#66bb6a" stroke-width="2"/>`,

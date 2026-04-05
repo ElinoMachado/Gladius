@@ -145,6 +145,12 @@ export interface Unit extends CoreStats {
   curandeiroDanoWave: number;
   /** Duro como pedra: defesa por imobilidade */
   duroPedraDefStacks: number;
+  /**
+   * Sacrifício resiliente (ex-Gota azul): bónus de defesa na wave atual (soma quando aliados morrem).
+   */
+  sacrificioResilienteWaveDef?: number;
+  /** Evita aplicar efeitos de morte (artefatos) mais do que uma vez por herói. */
+  heroDeathArtifactsApplied?: boolean;
   /** Golpe Relâmpago (motor_morte): próximo básico % */
   motorMorteNextBasicPct: number;
   /** Saiu do bunker neste ciclo: não pode reentrar até ao próprio turno. */
