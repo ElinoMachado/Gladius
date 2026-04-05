@@ -3735,9 +3735,9 @@ function showGoldShop(isInitial: boolean): void {
               ? " shop-viz-turntable-inner--bunker"
               : "";
           const heroGridHidden = goldShopVizFocus === "bunker" ? " hidden" : "";
-          const bunkGridHidden = goldShopVizFocus === "hero" ? " hidden" : "";
+          const bunkMidHidden = goldShopVizFocus === "hero" ? " hidden" : "";
           const heroGridAria = goldShopVizFocus === "bunker" ? ' aria-hidden="true"' : "";
-          const bunkGridAria = goldShopVizFocus === "hero" ? ' aria-hidden="true"' : "";
+          const bunkMidAria = goldShopVizFocus === "hero" ? ' aria-hidden="true"' : "";
           return `<div class="shop-viz-flip-wrap">
         <div class="shop-viz-flip-row">
           <div class="shop-viz-stage">
@@ -3754,17 +3754,13 @@ function showGoldShop(isInitial: boolean): void {
                 <div class="shop-viz-turntable-panel shop-viz-turntable-panel--bunker">
                   <div class="shop-bunker-viz shop-hero-viz" aria-label="Bunker da arena">
                     <p class="shop-viz-flip-entity-title">Bunker da arena</p>
-                    ${goldShopBunkerSectionHtml(
-                      bunkerShop,
-                      h,
-                      `${bunkGridHidden}${bunkGridAria}`,
-                    )}
+                    ${goldShopBunkerSectionHtml(bunkerShop)}
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <button type="button" class="shop-viz-flip-arrow" id="shop-viz-flip-toggle" aria-label="Mostrar bunker — melhorias de ouro no cartão (rolar se necessário)">
+          <button type="button" class="shop-viz-flip-arrow" id="shop-viz-flip-toggle" aria-label="Mostrar bunker — atributos e compras na grelha abaixo">
             <span class="shop-viz-flip-arrow__chevron" aria-hidden="true">→</span>
             <span class="shop-viz-flip-arrow__text">Bunker</span>
           </button>
@@ -3773,6 +3769,13 @@ function showGoldShop(isInitial: boolean): void {
         <div class="shop-mid-row">
           <div class="shop-mid-cell shop-mid-cell--gold">
             <div id="shop-grid-hero-gold" class="shop-grid"${heroGridHidden}${heroGridAria}>${list}</div>
+            <div id="shop-bunker-mid-block" class="shop-bunker-mid-block"${bunkMidHidden}${bunkMidAria}>
+              <p class="shop-hero-stats-head">Atributos do bunker</p>
+              <div id="gold-shop-bunker-stats" class="lol-stats-list gold-shop-hero-stats-grid" aria-label="Atributos do bunker"></div>
+              <p class="shop-hero-stats-head shop-bunker-mid-block__buy-head">Melhorias de ouro</p>
+              <div id="shop-grid-bunker-gold" class="shop-grid shop-grid--bunker-buy">${goldShopBunkerBuyGridHtml(bunkerShop, h)}</div>
+              <p class="shop-bunker-mid-block__hint">Reparação = PV em falta. Evoluções: 300 / 500 ouro. Auto reparo (nv. 2+): 50 ouro/nível. Fortificar (nv. 3): 100 ouro por +100 escudo (até 5× por wave; escudo zera entre waves).</p>
+            </div>
           </div>
         </div>`;
         })()
@@ -4961,7 +4964,7 @@ function applyGoldShopVizFocus(panel: HTMLElement, hasBunker: boolean): void {
   if (!hasBunker) return;
   const carousel = panel.querySelector("#shop-viz-carousel");
   const heroGrid = panel.querySelector("#shop-grid-hero-gold") as HTMLElement | null;
-  const bunkGrid = panel.querySelector("#shop-grid-bunker-gold") as HTMLElement | null;
+  const bunkMid = panel.querySelector("#shop-bunker-mid-block") as HTMLElement | null;
   const toggle = panel.querySelector("#shop-viz-flip-toggle") as HTMLElement | null;
   const chev = toggle?.querySelector(".shop-viz-flip-arrow__chevron");
   const txt = toggle?.querySelector(".shop-viz-flip-arrow__text");
@@ -4972,10 +4975,10 @@ function applyGoldShopVizFocus(panel: HTMLElement, hasBunker: boolean): void {
     if (bunker) heroGrid.setAttribute("aria-hidden", "true");
     else heroGrid.removeAttribute("aria-hidden");
   }
-  if (bunkGrid) {
-    bunkGrid.hidden = !bunker;
-    if (!bunker) bunkGrid.setAttribute("aria-hidden", "true");
-    else bunkGrid.removeAttribute("aria-hidden");
+  if (bunkMid) {
+    bunkMid.hidden = !bunker;
+    if (!bunker) bunkMid.setAttribute("aria-hidden", "true");
+    else bunkMid.removeAttribute("aria-hidden");
   }
   if (chev) chev.textContent = bunker ? "←" : "→";
   if (txt) txt.textContent = bunker ? "Herói" : "Bunker";
@@ -4984,7 +4987,7 @@ function applyGoldShopVizFocus(panel: HTMLElement, hasBunker: boolean): void {
       "aria-label",
       bunker
         ? "Mostrar herói e melhorias do herói"
-        : "Mostrar bunker — melhorias de ouro no cartão do bunker (rolar se necessário)",
+        : "Mostrar bunker — atributos e compras na grelha abaixo",
     );
   }
 }
@@ -5023,11 +5026,8 @@ function mountGoldShopBunkerSkillsRow(
   );
 }
 
-function goldShopBunkerSectionHtml(
-  bunk: BunkerState,
-  h: Unit,
-  bunkerBuyGridAttrs: string,
-): string {
+/** Cartão do bunker no carrossel: só 3D, nível e habilidades (atributos e ouro ficam na grelha de baixo, como o herói). */
+function goldShopBunkerSectionHtml(bunk: BunkerState): string {
   const t = effectiveBunkerTier(bunk);
   const disp = bunkerDisplayLevel(t);
   const nvStr = `${disp}/3`;
@@ -5036,19 +5036,14 @@ function goldShopBunkerSectionHtml(
       <div id="bunker-preview-host" class="gold-shop-hero-3d-host shop-bunker-viz-layout__3d-host" data-bunker-preview-tier="${t}" aria-hidden="true"></div>
     </div>
     <div class="shop-hero-stats-col shop-bunker-viz-layout__col">
-      <p class="shop-hero-stats-head">Atributos do bunker</p>
       <div class="shop-bunker-level-row" role="group" aria-label="Nível do bunker">
         <span class="shop-bunker-level-row__lbl">Nível</span>
         <span class="shop-bunker-level-row__val">${nvStr}</span>
       </div>
-      <div id="gold-shop-bunker-stats" class="lol-stats-list gold-shop-hero-stats-grid" aria-label="PV e defesa do bunker"></div>
       <div class="shop-bunker-skills-block">
         <p class="shop-hero-stats-head shop-bunker-skills-block__head">Habilidades</p>
         <div id="gold-shop-bunker-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do bunker"></div>
       </div>
-      <p class="shop-hero-stats-head shop-bunker-viz-layout__buy-head">Melhorias de ouro</p>
-      <div id="shop-grid-bunker-gold" class="shop-grid shop-grid--bunker-buy shop-grid--bunker-buy--in-card"${bunkerBuyGridAttrs}>${goldShopBunkerBuyGridHtml(bunk, h)}</div>
-      <p class="shop-bunker-viz-layout__hint">Reparação = PV em falta. Evoluções: 300 / 500 ouro. Auto reparo (bunker nv. 2+): 50 ouro por nível, até 10 níveis (+2 PV por ciclo de turnos por nível). Fortificar (bunker nv. 3): 100 ouro por +100 escudo, até 5× por wave (escudo zera entre waves).</p>
     </div>
   </div>`;
 }
