@@ -2846,34 +2846,10 @@ function showWaveSummaryOverlay(): void {
   });
 }
 
-function showCrystalShop(): void {
-  hideGameTooltip();
-  removeEquipmentModal();
-  disposeMenu3dPreviews();
-  crystalShop3d?.dispose();
-  crystalShop3d = null;
+/** Só a grelha de compras; fundo WebGL (`CrystalShop3D`) fica no `.shop-screen__bg`. */
+function mountCrystalShopGrid(grid: HTMLElement): void {
   const m = model.meta;
-  uiRoot.innerHTML = "";
-  const shell = el(`<div class="shop-screen crystal-shop-screen"></div>`);
-  const bgHost = el(`<div class="shop-screen__bg" aria-hidden="true"></div>`);
-  const panel = el(`<div class="shop-screen__panel shop-screen__panel--crystal"></div>`);
-  shell.appendChild(bgHost);
-  shell.appendChild(panel);
-  uiRoot.appendChild(shell);
-  crystalShop3d = new CrystalShop3D(bgHost);
-  crystalShop3d.start();
-  panel.innerHTML = `
-    <div class="crystal-shop-panel-inner">
-      <h1 class="crystal-shop-heading">Loja de cristais</h1>
-      <div class="crystal-shop-crystals" aria-label="Cristais disponíveis">
-        <span class="crystal-shop-crystals__num">${m.crystals}</span>
-        ${metaCrystalIconSvgHtml("crystal-shop-crystals__ico")}
-      </div>
-      <div class="shop-grid crystal-shop-grid" id="meta-grid"></div>
-      <button type="button" class="btn crystal-shop-back-btn" id="btn-back">Voltar</button>
-    </div>`;
-  const s = panel.querySelector(".crystal-shop-panel-inner") as HTMLElement;
-  const grid = s.querySelector("#meta-grid")!;
+  grid.replaceChildren();
   const tracks = [
     ["permDamage", "Dano meta"],
     ["permHp", "Vida meta"],
@@ -2959,6 +2935,53 @@ function showCrystalShop(): void {
       if (model.buyWeaponUpgrade(slot as 0 | 1 | 2)) render();
     });
   }
+}
+
+/** Evita `dispose`+novo `CrystalShop3D` a cada compra (mesmo padrão que setup de heróis). */
+function refreshCrystalShopInPlace(): boolean {
+  if (model.phase !== "crystal_shop") return false;
+  const shell = uiRoot.querySelector(".crystal-shop-screen");
+  if (!shell || !crystalShop3d) return false;
+  const m = model.meta;
+  const numEl = shell.querySelector(".crystal-shop-crystals__num");
+  if (numEl) numEl.textContent = String(m.crystals);
+  const grid = shell.querySelector("#meta-grid");
+  if (!grid) return false;
+  mountCrystalShopGrid(grid as HTMLElement);
+  return true;
+}
+
+function showCrystalShop(): void {
+  hideGameTooltip();
+  removeEquipmentModal();
+  disposeMenu3dPreviews();
+  const m = model.meta;
+  if (refreshCrystalShopInPlace()) return;
+
+  crystalShop3d?.dispose();
+  crystalShop3d = null;
+  uiRoot.innerHTML = "";
+  const shell = el(`<div class="shop-screen crystal-shop-screen"></div>`);
+  const bgHost = el(`<div class="shop-screen__bg" aria-hidden="true"></div>`);
+  const panel = el(`<div class="shop-screen__panel shop-screen__panel--crystal"></div>`);
+  shell.appendChild(bgHost);
+  shell.appendChild(panel);
+  uiRoot.appendChild(shell);
+  crystalShop3d = new CrystalShop3D(bgHost);
+  crystalShop3d.start();
+  panel.innerHTML = `
+    <div class="crystal-shop-panel-inner">
+      <h1 class="crystal-shop-heading">Loja de cristais</h1>
+      <div class="crystal-shop-crystals" aria-label="Cristais disponíveis">
+        <span class="crystal-shop-crystals__num">${m.crystals}</span>
+        ${metaCrystalIconSvgHtml("crystal-shop-crystals__ico")}
+      </div>
+      <div class="shop-grid crystal-shop-grid" id="meta-grid"></div>
+      <button type="button" class="btn crystal-shop-back-btn" id="btn-back">Voltar</button>
+    </div>`;
+  const s = panel.querySelector(".crystal-shop-panel-inner") as HTMLElement;
+  const grid = s.querySelector("#meta-grid") as HTMLElement;
+  mountCrystalShopGrid(grid);
 
   s.querySelector("#btn-back")!.addEventListener("click", () => {
     model.phase = "main_menu";

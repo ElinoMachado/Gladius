@@ -45,3 +45,11 @@ Em `dispose()`, remover o canvas com `domElement.parentNode?.removeChild(domElem
 Quando surgir novo bug (loja, setup, modais, outro preview), documentar aqui o **sintoma → causa → padrão de correção** em 1–3 linhas para cobrir mais casos automaticamente.
 
 - **2026-04 — Setup de heróis escuro/pisca ao escolher classe:** `change` no select chamava `render()` → `showHeroSetup` limpava o `ui-root` inteiro → todos os `HeroPreview3D` eram `dispose` e recriados em cascata. **Correção:** `syncHeroSetupUiAfterSlotChange(slot)` — só `fillHeroSlotCard` nesse slot + atualizar faixa de dificuldade / título / botão; previews indexados por slot `[0,1,2]`.
+- **2026-04 — Loja de cristais escura/pisca após compra:** `render()` na mesma fase `crystal_shop` → `showCrystalShop` fazia `crystalShop3d.dispose()` + `innerHTML` no painel + novo `CrystalShop3D` sempre. **Correção:** `refreshCrystalShopInPlace()` — se o ecrã já existe e `crystalShop3d` está vivo, atualizar só o contador de cristais e refazer `#meta-grid` com `mountCrystalShopGrid`; manter o mesmo `CrystalShop3D` e o markup do painel. Rebuild completo só na primeira montagem ou mudança de fase.
+
+## Outros pontos no projeto (revisão)
+
+- **Forja:** `syncForgeHeroPanel` atualiza só o painel do herói; `paint()` após forjar faz `disposeForgePiecePreviews` antes de `body.innerHTML` — evita canvas órfão; não repetir padrão de `render` completo só por mudar peça sem necessidade.
+- **Compêndio de inimigos:** lista não substitui o host do `EnemyPreview3D`; só troca conteúdo textual — OK.
+- **Loja de ouro:** já recicla o canvas (detach antes de `innerHTML`, reattach) — padrão explícito de não destruir o renderer a cada refresh.
+- **Menus / fases distintas:** `showMainMenu`, `showArtifactCodex`, etc. podem reconstruir o `ui-root` de propósito ao **sair** de uma fase — aí `dispose` global dos previews dessa fase é esperado; o anti-padrão é rebuild total **dentro** da mesma fase por um evento local (compra, select).
