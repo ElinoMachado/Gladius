@@ -1,15 +1,97 @@
 {
   "coliseum": {
-    "x": 0,
-    "y": 0,
-    "z": 0
+    "x": -1.1338999999873447,
+    "y": -41.38649999999999,
+    "z": 2.5516999999936654
   },
-  "coliseumScale": 1,
-  "bunkerLayout": {},
-  "layoutActors": {},
+  "coliseumScale": 2.9828471943689654,
+  "bunkerLayout": {
+    "floresta": {
+      "x": 0,
+      "z": 0,
+      "scale": 1,
+      "yByTier": {
+        "0": 0
+      },
+      "rotY": 0
+    },
+    "pantano": {
+      "x": 0,
+      "z": 0,
+      "scale": 1,
+      "yByTier": {
+        "0": 0
+      },
+      "rotY": 0
+    },
+    "montanhoso": {
+      "x": 0,
+      "z": 0,
+      "scale": 1,
+      "yByTier": {
+        "0": 0
+      },
+      "rotY": 0
+    },
+    "deserto": {
+      "x": 0,
+      "z": 0,
+      "scale": 1,
+      "yByTier": {
+        "0": 0
+      },
+      "rotY": 0
+    },
+    "rochoso": {
+      "x": 0,
+      "z": 0,
+      "scale": 1,
+      "yByTier": {
+        "0": 0
+      },
+      "rotY": 0
+    },
+    "vulcanico": {
+      "x": 0,
+      "z": 0,
+      "scale": 1,
+      "yByTier": {
+        "0": 0
+      },
+      "rotY": 0
+    }
+  },
+  "layoutActors": {
+    "throne": {
+      "x": 24.099199999993743,
+      "y": 20.146699999993675,
+      "z": -28.6314000000191,
+      "scale": 1
+    },
+    "layout-hero-gladiador": {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "scale": 1
+    },
+    "layout-hero-sacerdotisa": {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "scale": 1
+    },
+    "layout-hero-pistoleiro": {
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "scale": 1
+    }
+  },
   "layoutEnemyEditor": {
     "previewArchetypeId": "gladinio",
-    "yByArchetype": {}
+    "yByArchetype": {
+      "gladinio": 0
+    }
   },
   "freeCamera": null
 }
