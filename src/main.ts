@@ -3655,17 +3655,19 @@ function showGoldShop(isInitial: boolean): void {
 
   const renderShop = (): void => {
     hideGameTooltip();
-    goldShopBunker3d?.dispose();
-    goldShopBunker3d = null;
-    goldShopHeroPreview3d?.dispose();
-    goldShopHeroPreview3d = null;
     const party = model.getParty();
     idx = Math.min(Math.max(0, goldShopHeroIndex), Math.max(0, party.length - 1));
     goldShopHeroIndex = idx;
     if (party.length === 0) {
+      goldShopBunker3d?.dispose();
+      goldShopBunker3d = null;
+      goldShopHeroPreview3d?.dispose();
+      goldShopHeroPreview3d = null;
       panel.innerHTML = `<p class="shop-footer-msg" role="alert">Nenhum herói no grupo. Usa o menu de pausa ou recarrega; se guardaste a sessão, no menu principal podes tentar «Continuar run».</p>`;
       return;
     }
+    goldShopBunker3d?.detachCanvasPreserveContext();
+    goldShopHeroPreview3d?.detachCanvasPreserveContext();
     const h = party[idx]!;
     if (goldShopVizLastHeroId !== h.id) {
       goldShopVizFocus = "hero";
@@ -3903,9 +3905,18 @@ function showGoldShop(isInitial: boolean): void {
     });
     const prevHost = panel.querySelector("#bunker-preview-host");
     if (prevHost && bunkerShop) {
-      goldShopBunker3d = new BunkerPreview3D(prevHost as HTMLElement);
-      goldShopBunker3d.setTier(effectiveBunkerTier(bunkerShop));
-      goldShopBunker3d.start();
+      if (goldShopBunker3d) {
+        goldShopBunker3d.reattachToHost(prevHost as HTMLElement);
+        goldShopBunker3d.setTier(effectiveBunkerTier(bunkerShop));
+        goldShopBunker3d.start();
+      } else {
+        goldShopBunker3d = new BunkerPreview3D(prevHost as HTMLElement);
+        goldShopBunker3d.setTier(effectiveBunkerTier(bunkerShop));
+        goldShopBunker3d.start();
+      }
+    } else {
+      goldShopBunker3d?.dispose();
+      goldShopBunker3d = null;
     }
     const hero3dHost = panel.querySelector("#gold-shop-hero-3d") as HTMLElement;
     const heroStatsEl = panel.querySelector(
@@ -3919,30 +3930,40 @@ function showGoldShop(isInitial: boolean): void {
     ) as HTMLElement | null;
     if (h.heroClass) {
       if (skillsWrap) skillsWrap.hidden = false;
-      goldShopHeroPreview3d = bunkerShop
-        ? new HeroPreview3D(
-            hero3dHost,
-            400,
-            300,
-            heroPreviewCameraGoldShopTurntable,
-          )
-        : new HeroPreview3D(
-            hero3dHost,
-            220,
-            260,
-            heroPreviewCameraGoldShopSolo,
-          );
+      const layoutKind = bunkerShop ? "turntable" : "solo";
+      const canRecycleHero =
+        goldShopHeroPreview3d?.matchesGoldShopLayout(layoutKind) ?? false;
+      if (canRecycleHero) {
+        goldShopHeroPreview3d!.reattachToHost(hero3dHost);
+      } else {
+        goldShopHeroPreview3d?.dispose();
+        goldShopHeroPreview3d = bunkerShop
+          ? new HeroPreview3D(
+              hero3dHost,
+              400,
+              300,
+              heroPreviewCameraGoldShopTurntable,
+              "turntable",
+            )
+          : new HeroPreview3D(
+              hero3dHost,
+              220,
+              260,
+              heroPreviewCameraGoldShopSolo,
+              "solo",
+            );
+      }
       const shopForma =
         h.formaFinal && h.ultimateId
           ? { formaFinal: true as const, ultimateId: h.ultimateId }
           : undefined;
-      goldShopHeroPreview3d.setHero(
+      goldShopHeroPreview3d!.setHero(
         h.heroClass,
         h.displayColor,
         h.forgeLoadout,
         shopForma,
       );
-      goldShopHeroPreview3d.start();
+      goldShopHeroPreview3d!.start();
       renderHeroStatsGridWithTabs(
         heroStatsEl,
         heroStatCells(h, model),
@@ -3950,6 +3971,8 @@ function showGoldShop(isInitial: boolean): void {
       );
       if (skillsRow) mountGoldShopHeroSkillsRow(skillsRow, h, model);
     } else {
+      goldShopHeroPreview3d?.dispose();
+      goldShopHeroPreview3d = null;
       if (skillsWrap) {
         skillsWrap.hidden = true;
         if (skillsRow) skillsRow.innerHTML = "";

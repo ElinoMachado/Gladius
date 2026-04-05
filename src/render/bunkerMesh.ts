@@ -98,67 +98,21 @@ export function createBunkerVisualGroup(tier: BunkerRenderTier = 0): THREE.Group
 }
 
 /**
- * `cloneBunkerGlbForTier` faz `material.clone()` mas as **Texture** continuam a ser as mesmas
- * instâncias que o template em cache (`bunkerGlbLoader.templates`). Um `material.dispose()` normal
- * liberta essas texturas na GPU e corrompe todos os bunkers + o próximo clone → perda de contexto WebGL.
- */
-function detachSharedTextureMapsFromStandardLike(
-  mat: THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial,
-): void {
-  const keys = [
-    "map",
-    "normalMap",
-    "roughnessMap",
-    "metalnessMap",
-    "aoMap",
-    "emissiveMap",
-    "alphaMap",
-    "bumpMap",
-    "displacementMap",
-    "lightMap",
-  ] as const;
-  const rec = mat as unknown as Record<string, unknown>;
-  for (const key of keys) {
-    const v = rec[key];
-    if (v instanceof THREE.Texture) rec[key] = null;
-  }
-  if (mat instanceof THREE.MeshPhysicalMaterial) {
-    mat.clearcoatNormalMap = null;
-    mat.clearcoatMap = null;
-    mat.sheenColorMap = null;
-    mat.sheenRoughnessMap = null;
-    mat.iridescenceMap = null;
-    mat.iridescenceThicknessMap = null;
-    mat.thicknessMap = null;
-    mat.anisotropyMap = null;
-    mat.transmissionMap = null;
-  }
-}
-
-/**
  * Liberta um visual devolvido por `createBunkerVisualGroup` (GLB ou procedural).
- * GLB: geometrias próprias do clone + `material.dispose()` **sem** tocar nas texturas partilhadas.
+ *
+ * **GLB:** só `geometry.dispose()`. Os materiais clonados partilham `Texture` com
+ * `bunkerGlbLoader.templates`; **qualquer** `material.dispose()` pode libertar texturas na GPU
+ * ainda usadas pelo cache e por outros renderers → corrupção e `WEBGL_context_lost`.
  */
 export function disposeBunkerVisualRoot(root: THREE.Object3D): void {
   const isGlb = root.userData?.bunkerGlb === true;
   root.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
     obj.geometry?.dispose();
+    if (isGlb) return;
     const m = obj.material;
-    const mats: THREE.Material[] = Array.isArray(m) ? [...m] : m ? [m] : [];
-    if (!isGlb) {
-      for (const mat of mats) mat.dispose();
-      return;
-    }
-    for (const mat of mats) {
-      if (
-        mat instanceof THREE.MeshStandardMaterial ||
-        mat instanceof THREE.MeshPhysicalMaterial
-      ) {
-        detachSharedTextureMapsFromStandardLike(mat);
-        mat.dispose();
-      }
-    }
+    if (Array.isArray(m)) m.forEach((x) => x.dispose());
+    else (m as THREE.Material | undefined)?.dispose();
   });
 }
 

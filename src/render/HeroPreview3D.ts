@@ -40,13 +40,17 @@ export class HeroPreview3D {
   private readonly fallbackW: number;
   private readonly fallbackH: number;
   private resizeObserver: ResizeObserver | null = null;
+  /** Só na loja de ouro: reciclar renderer ao refrescar DOM; limita pixel ratio. */
+  private readonly goldShopLayout: "turntable" | "solo" | null;
 
   constructor(
     host: HTMLElement,
     width: number,
     height: number,
     opts?: HeroPreview3DOptions,
+    goldShopLayout?: "turntable" | "solo",
   ) {
+    this.goldShopLayout = goldShopLayout ?? null;
     this.host = host;
     this.fallbackW = Math.max(1, width);
     this.fallbackH = Math.max(1, height);
@@ -92,7 +96,8 @@ export class HeroPreview3D {
     const ch = this.host.clientHeight;
     const w = Math.max(cw > 0 ? cw : this.fallbackW, 1);
     const h = Math.max(ch > 0 ? ch : this.fallbackH, 1);
-    const pr = Math.min(window.devicePixelRatio, 2);
+    const prCap = this.goldShopLayout ? 1.25 : 2;
+    const pr = Math.min(window.devicePixelRatio, prCap);
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(h, 1);
@@ -143,6 +148,27 @@ export class HeroPreview3D {
     cancelAnimationFrame(this.raf);
   }
 
+  /** Antes de `innerHTML` no antepassado do host — evita destruir o canvas com o DOM. */
+  detachCanvasPreserveContext(): void {
+    this.stop();
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.renderer.domElement.parentNode?.removeChild(this.renderer.domElement);
+  }
+
+  reattachToHost(newHost: HTMLElement): void {
+    this.host = newHost;
+    newHost.appendChild(this.renderer.domElement);
+    this.resizeObserver = new ResizeObserver(() => this.fitViewport());
+    this.resizeObserver.observe(newHost);
+    this.fitViewport();
+    requestAnimationFrame(() => this.fitViewport());
+  }
+
+  matchesGoldShopLayout(kind: "turntable" | "solo"): boolean {
+    return this.goldShopLayout !== null && this.goldShopLayout === kind;
+  }
+
   dispose(): void {
     this.stop();
     window.removeEventListener("resize", this.onWindowResize);
@@ -151,8 +177,6 @@ export class HeroPreview3D {
     disposeObject3D(this.pivot);
     this.pivot.clear();
     this.renderer.dispose();
-    if (this.renderer.domElement.parentNode === this.host) {
-      this.host.removeChild(this.renderer.domElement);
-    }
+    this.renderer.domElement.parentNode?.removeChild(this.renderer.domElement);
   }
 }

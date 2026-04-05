@@ -1,12 +1,15 @@
 ---
-description: Bunkers GLB (Three.js) — nunca libertar texturas partilhadas ao dar dispose de clones
-globs: src/render/bunker*.ts,src/render/BunkerPreview3D.ts,src/render/GameRenderer.ts
+description: Bunkers GLB (Three.js) — nunca libertar texturas partilhadas; loja não destruir canvas com innerHTML
+globs: src/render/bunker*.ts,src/render/BunkerPreview3D.ts,src/render/HeroPreview3D.ts,src/render/GameRenderer.ts,src/main.ts
 ---
 
 # Clones do bunker GLB e `material.dispose()`
 
-- `bunkerGlbLoader.cloneBunkerGlbForTier` clona **geometria** e **materiais**, mas as **instâncias de `THREE.Texture`** nos maps (map, normalMap, roughnessMap, etc.) são **as mesmas** que o template em cache (`templates[]`).
-- Chamar `material.dispose()` num clone **sem** primeiro anular esses maps faz o Three libertar a textura na GPU **para todos** os usos — o template e novos clones ficam inválidos; após vários ciclos (ex.: loja a reconstruir o preview) o browser pode perder o contexto WebGL (ecrã cinzento + ícone triste no Chromium).
-- **Usar sempre** `disposeBunkerVisualRoot` e `disposeBunkerMountGroup` exportados de `src/render/bunkerMesh.ts` para libertar visuals/mounts de bunker. Não substituir por `traverse` genérico que faça `material.dispose()` em meshes GLB.
-- Bunker **procedural** (`userData.bunkerGlb === false`) pode usar dispose completo de materiais (são únicos ao grupo procedural).
-- Ao adicionar novos maps em materiais GLB clonados, atualizar `detachSharedTextureMapsFromStandardLike` (e ramo `MeshPhysicalMaterial` se aplicável).
+- `bunkerGlbLoader.cloneBunkerGlbForTier` clona **geometria** e **materiais**, mas as **instâncias de `THREE.Texture`** nos maps continuam **as mesmas** que o template em cache (`templates[]`).
+- Chamar `material.dispose()` num clone GLB faz o Three libertar texturas na GPU ainda referenciadas pelo cache e por outros renderers → corrupção e `WEBGL_context_lost`.
+- **Usar sempre** `disposeBunkerVisualRoot` e `disposeBunkerMountGroup` em `src/render/bunkerMesh.ts`. Para ramos **GLB** (`userData.bunkerGlb === true`), `disposeBunkerVisualRoot` só faz `geometry.dispose()` — **não** `material.dispose()` nos meshes GLB. Bunker **procedural** mantém dispose completo de materiais.
+
+# Loja de ouro e canvas WebGL
+
+- `renderShop()` reconstrói o painel com `panel.innerHTML = ...`. Se o canvas do `WebGLRenderer` estiver **dentro** desse sub-árvore, o browser **destrói o canvas** e pode perder o contexto.
+- Antes de `innerHTML`, chamar `detachCanvasPreserveContext()` nos previews da loja (`BunkerPreview3D`, `HeroPreview3D` com layout de loja); depois do novo markup, `reattachToHost` + `start()`. Reciclar o **mesmo** renderer durante refreshes da loja; `dispose()` completo ao fechar a loja / sem anfitrião / mudança de layout (turntable vs solo).

@@ -32,7 +32,7 @@ export class BunkerPreview3D {
       antialias: true,
       alpha: true,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     this.renderer.setClearColor(0x000000, 0);
     host.appendChild(this.renderer.domElement);
 
@@ -93,7 +93,7 @@ export class BunkerPreview3D {
   private fit(): void {
     const w = Math.max(this.host.clientWidth, 160);
     const h = Math.max(this.host.clientHeight, 140);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(h, 1);
     this.camera.updateProjectionMatrix();
@@ -119,6 +119,26 @@ export class BunkerPreview3D {
     cancelAnimationFrame(this.raf);
   }
 
+  /**
+   * Antes de `innerHTML` no painel que continha o host: tira o canvas do DOM sem `renderer.dispose()`.
+   * Se o canvas for destruído com o nó pai, o browser pode perder o contexto WebGL.
+   */
+  detachCanvasPreserveContext(): void {
+    this.stop();
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.renderer.domElement.parentNode?.removeChild(this.renderer.domElement);
+  }
+
+  reattachToHost(newHost: HTMLElement): void {
+    this.host = newHost;
+    newHost.appendChild(this.renderer.domElement);
+    this.resizeObserver = new ResizeObserver(() => this.fit());
+    this.resizeObserver.observe(newHost);
+    this.fit();
+    requestAnimationFrame(() => this.fit());
+  }
+
   dispose(): void {
     window.removeEventListener("resize", this.onResize);
     this.resizeObserver?.disconnect();
@@ -128,8 +148,6 @@ export class BunkerPreview3D {
     this.root.clear();
     this.scene.clear();
     this.renderer.dispose();
-    if (this.renderer.domElement.parentNode === this.host) {
-      this.host.removeChild(this.renderer.domElement);
-    }
+    this.renderer.domElement.parentNode?.removeChild(this.renderer.domElement);
   }
 }
