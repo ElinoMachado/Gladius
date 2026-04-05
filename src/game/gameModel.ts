@@ -1542,15 +1542,7 @@ export class GameModel {
       u.shieldGGBlue = 0;
       u.escudoResidualTagged = 0;
       if ((u.furiaGiganteTurns ?? 0) > 0 || u.furiaExtraMaxHp) {
-        const extra = u.furiaExtraMaxHp ?? 0;
-        if (extra > 0) {
-          u.maxHp -= extra;
-          u.hp = Math.min(u.hp, u.maxHp);
-        }
-        if (u.furiaSavedDano != null) u.dano = u.furiaSavedDano;
-        u.furiaGiganteTurns = undefined;
-        u.furiaExtraMaxHp = undefined;
-        u.furiaSavedDano = undefined;
+        this.revertFuriaGiganteStats(u);
       }
       if (u.ultimateId === "fada_cura") {
         u.flying = true;
@@ -2621,6 +2613,7 @@ export class GameModel {
     this.duel = null;
     this.duelNextIsGladiatorStrike = true;
     this.blockEnemyPhaseForWaveIntro = false;
+    this.clearEndOfWaveUltimateCombatState();
     this.log(`Wave ${this.wave} vencida!`);
     this.liquidateWaveGoldToShop();
     if (this.wave >= FINAL_VICTORY_WAVE) {
@@ -4539,16 +4532,41 @@ export class GameModel {
     return true;
   }
 
-  private endFuriaGigante(h: Unit): void {
-    const extra = h.furiaExtraMaxHp ?? 0;
+  /** Reverte PV máx./dano da Fúria do gigante (sem log; uso no fim da wave ou início da próxima). */
+  private revertFuriaGiganteStats(u: Unit): void {
+    const extra = u.furiaExtraMaxHp ?? 0;
     if (extra > 0) {
-      h.maxHp -= extra;
-      h.hp = Math.min(h.hp, h.maxHp);
+      u.maxHp -= extra;
+      u.hp = Math.min(u.hp, u.maxHp);
     }
-    if (h.furiaSavedDano != null) h.dano = h.furiaSavedDano;
-    h.furiaGiganteTurns = undefined;
-    h.furiaExtraMaxHp = undefined;
-    h.furiaSavedDano = undefined;
+    if (u.furiaSavedDano != null) u.dano = u.furiaSavedDano;
+    u.furiaGiganteTurns = undefined;
+    u.furiaExtraMaxHp = undefined;
+    u.furiaSavedDano = undefined;
+  }
+
+  /**
+   * Entre waves: UI (loja / resumo) não deve mostrar estado de combate da ultimate
+   * (ex.: slot “Pisotear” por Fúria ativa). Limpa efeitos temporários em todo o party.
+   */
+  private clearEndOfWaveUltimateCombatState(): void {
+    for (const u of this.getParty()) {
+      if (u.hp <= 0) continue;
+      if ((u.furiaGiganteTurns ?? 0) > 0 || u.furiaExtraMaxHp) {
+        this.revertFuriaGiganteStats(u);
+        delete u.skillCd["pisotear"];
+      }
+      u.paraisoRegenBonus = undefined;
+      if (u.heroClass === "pistoleiro" && u.ultimateId === "arauto_caos") {
+        u.tiroDestruidorCharges = 0;
+        u.tiroDestruidorUsedThisTurn = false;
+      }
+      this.resetWeaponUltCharge(u);
+    }
+  }
+
+  private endFuriaGigante(h: Unit): void {
+    this.revertFuriaGiganteStats(h);
     h.skillCd["pisotear"] = 0;
     this.log(`${h.name}: Fúria do gigante termina.`);
     this.emit();
