@@ -380,6 +380,8 @@ type ShopBunkerSnapshot = {
   occupantId: string | null;
   autoRepairRank: number;
   fortifyShield: number;
+  /** Ausente em snapshots antigos: infere-se de `fortifyShield`. */
+  fortifyShieldCap?: number;
   fortifyBuysThisWave: number;
 };
 
@@ -390,6 +392,15 @@ type ShopRestoreSnapshot = {
 
 function shopNumEq(a: number, b: number): boolean {
   return Math.abs(a - b) < 1e-5;
+}
+
+function shopSnapFortifyCap(sb: ShopBunkerSnapshot): number {
+  if (
+    typeof sb.fortifyShieldCap === "number" &&
+    Number.isFinite(sb.fortifyShieldCap)
+  )
+    return Math.max(0, sb.fortifyShieldCap);
+  return Math.max(0, sb.fortifyShield ?? 0);
 }
 
 function shopArtifactsEq(
@@ -1569,6 +1580,12 @@ export class GameModel {
     this.placePartyOnChosenBiomeFirstHexes();
     this.spawnEnemiesForWave();
     this.ensureBunkersPlaced();
+    for (const bi of COMBAT_BIOMES) {
+      const bk = this.bunkers[bi];
+      if (!bk) continue;
+      const cap = Math.max(0, bk.fortifyShieldCap);
+      bk.fortifyShield = cap;
+    }
     this.currentHeroIndex = 0;
     /** Fase inimiga só após o overlay da wave (ver `releaseEnemyPhaseAfterWaveIntro`). */
     this.blockEnemyPhaseForWaveIntro = true;
@@ -2215,6 +2232,17 @@ export class GameModel {
       if (typeof b.fortifyShield !== "number" || !Number.isFinite(b.fortifyShield))
         b.fortifyShield = 0;
       if (
+        typeof b.fortifyShieldCap !== "number" ||
+        !Number.isFinite(b.fortifyShieldCap)
+      ) {
+        // Saves antigos: só existia `fortifyShield` (sem teto persistente).
+        b.fortifyShieldCap = Math.max(0, b.fortifyShield);
+      }
+      b.fortifyShield = Math.min(
+        Math.max(0, b.fortifyShield),
+        Math.max(0, b.fortifyShieldCap),
+      );
+      if (
         typeof b.fortifyBuysThisWave !== "number" ||
         !Number.isFinite(b.fortifyBuysThisWave)
       )
@@ -2697,7 +2725,6 @@ export class GameModel {
     for (const bi of COMBAT_BIOMES) {
       const b = this.bunkers[bi];
       if (!b) continue;
-      b.fortifyShield = 0;
       b.fortifyBuysThisWave = 0;
     }
     const essences: { id: ForgeEssenceId; n: number }[] = [];
@@ -5894,10 +5921,11 @@ export class GameModel {
     if (u.ultimateId === "estrategista_nato") cost = Math.ceil(cost * 0.5);
     if (u.ouro < cost) return false;
     u.ouro -= cost;
-    b.fortifyShield += BUNKER_FORTIFY_SHIELD;
+    b.fortifyShieldCap = Math.max(0, b.fortifyShieldCap) + BUNKER_FORTIFY_SHIELD;
+    b.fortifyShield = b.fortifyShieldCap;
     b.fortifyBuysThisWave++;
     this.log(
-      `Fortificar (bunker ${BIOME_LABELS[biome]}): +${BUNKER_FORTIFY_SHIELD} escudo (${b.fortifyBuysThisWave}/${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE} nesta wave).`,
+      `Fortificar (bunker ${BIOME_LABELS[biome]}): +${BUNKER_FORTIFY_SHIELD} escudo (máx. ${b.fortifyShieldCap}; ${b.fortifyBuysThisWave}/${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE} nesta visita à loja).`,
     );
     this.emit();
     return true;
@@ -6007,6 +6035,7 @@ export class GameModel {
         x.occupantId !== y.occupantId ||
         (x.autoRepairRank ?? 0) !== (y.autoRepairRank ?? 0) ||
         (x.fortifyShield ?? 0) !== (y.fortifyShield ?? 0) ||
+        shopSnapFortifyCap(x) !== shopSnapFortifyCap(y) ||
         (x.fortifyBuysThisWave ?? 0) !== (y.fortifyBuysThisWave ?? 0)
       )
         return true;
@@ -6074,6 +6103,7 @@ export class GameModel {
         occupantId: b.occupantId,
         autoRepairRank: b.autoRepairRank,
         fortifyShield: b.fortifyShield,
+        fortifyShieldCap: b.fortifyShieldCap,
         fortifyBuysThisWave: b.fortifyBuysThisWave,
       });
     }
@@ -6110,6 +6140,14 @@ export class GameModel {
       u.artifacts = { ...sh.artifacts };
     }
     for (const sb of snap.bunkers) {
+      const fortifyCap =
+        typeof sb.fortifyShieldCap === "number" && Number.isFinite(sb.fortifyShieldCap)
+          ? Math.max(0, sb.fortifyShieldCap)
+          : Math.max(0, sb.fortifyShield ?? 0);
+      const fortifyCurRaw =
+        typeof sb.fortifyShield === "number" && Number.isFinite(sb.fortifyShield)
+          ? sb.fortifyShield
+          : 0;
       this.bunkers[sb.biome] = {
         q: sb.q,
         r: sb.r,
@@ -6119,7 +6157,8 @@ export class GameModel {
         tier: sb.tier,
         occupantId: sb.occupantId,
         autoRepairRank: sb.autoRepairRank ?? 0,
-        fortifyShield: sb.fortifyShield ?? 0,
+        fortifyShieldCap: fortifyCap,
+        fortifyShield: Math.min(Math.max(0, fortifyCurRaw), fortifyCap),
         fortifyBuysThisWave: sb.fortifyBuysThisWave ?? 0,
       };
     }

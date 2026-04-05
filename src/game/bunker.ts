@@ -14,9 +14,13 @@ export interface BunkerState {
    * PV do bunker após cada ciclo de turnos dos heróis (antes da fase inimiga).
    */
   autoRepairRank: number;
-  /** Escudo extra do bunker (Fortificar); zera entre waves. */
+  /**
+   * Escudo atual do Fortificar (gasto no combate). No início de cada wave repõe-se até `fortifyShieldCap`.
+   */
   fortifyShield: number;
-  /** Quantas vezes se comprou Fortificar nesta wave (máx. `BUNKER_FORTIFY_MAX_BUYS_PER_WAVE`). */
+  /** Teto de escudo comprado com Fortificar (persiste entre waves; renova o valor atual cada wave). */
+  fortifyShieldCap: number;
+  /** Quantas vezes se comprou Fortificar nesta visita à loja da wave (máx. `BUNKER_FORTIFY_MAX_BUYS_PER_WAVE`). */
   fortifyBuysThisWave: number;
 }
 
@@ -114,6 +118,7 @@ export function createInitialBunkerState(q: number, r: number): BunkerState {
     occupantId: null,
     autoRepairRank: 0,
     fortifyShield: 0,
+    fortifyShieldCap: 0,
     fortifyBuysThisWave: 0,
   };
 }

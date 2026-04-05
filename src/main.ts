@@ -4790,7 +4790,9 @@ function bunkerAutoReparoShopTooltipHtml(bunk: BunkerState): string {
 }
 
 function bunkerFortificarShopTooltipHtml(bunk: BunkerState): string {
-  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--bunker-shop"><div class="game-ui-tooltip-title">Fortificar</div><p class="game-ui-tooltip-passive">Desbloqueado no <strong>bunker nv. ${bunkerDisplayLevel(BUNKER_FORTIFY_MIN_TIER)}</strong>.</p><p class="game-ui-tooltip-body">Compra <strong>+${BUNKER_FORTIFY_SHIELD} escudo</strong> no bunker por <strong>${BUNKER_FORTIFY_GOLD} ouro</strong>, até ${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE} vezes por wave. O escudo absorve dano antes dos PV do bunker e <strong>zera entre waves</strong> (Estrategista nato: metade do ouro).</p><p class="game-ui-tooltip-passive game-ui-tooltip-passive--tight-top">Escudo: ${tipInt(bunk.fortifyShield)} · Compras nesta wave: ${bunk.fortifyBuysThisWave}/${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE}</p></div>`;
+  const cap = Math.max(0, bunk.fortifyShieldCap);
+  const cur = Math.min(Math.max(0, bunk.fortifyShield), cap);
+  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--bunker-shop"><div class="game-ui-tooltip-title">Fortificar</div><p class="game-ui-tooltip-passive">Desbloqueado no <strong>bunker nv. ${bunkerDisplayLevel(BUNKER_FORTIFY_MIN_TIER)}</strong>.</p><p class="game-ui-tooltip-body">Compra <strong>+${BUNKER_FORTIFY_SHIELD} escudo</strong> no bunker por <strong>${BUNKER_FORTIFY_GOLD} ouro</strong>, até ${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE} vezes por visita à loja da wave. O escudo absorve dano antes dos PV do bunker e <strong>reabastece no início de cada wave</strong> até ao máximo comprado (Estrategista nato: metade do ouro).</p><p class="game-ui-tooltip-passive game-ui-tooltip-passive--tight-top">Escudo: ${tipInt(cur)} / ${tipInt(cap)} · Compras nesta visita: ${bunk.fortifyBuysThisWave}/${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE}</p></div>`;
 }
 
 /** Loja: mesmo formato do HUD de combate, com stats ao nível atual e ao próximo do bunker. */
@@ -4938,7 +4940,7 @@ function goldShopBunkerBuyGridHtml(bunk: BunkerState, h: Unit): string {
     const canFo = !foFull && h.ouro >= foCost;
     const foDisabled = foFull || !canFo;
     const foLabel = foFull
-      ? "Fortificar: limite de compras nesta wave"
+      ? "Fortificar: limite de compras nesta visita à loja"
       : canFo
         ? `Fortificar por ${formatOuroDisplay(foCost)} ouro (+${BUNKER_FORTIFY_SHIELD} escudo)`
         : `Fortificar: ouro insuficiente (${formatOuroDisplay(foCost)} necessário)`;
@@ -4946,7 +4948,7 @@ function goldShopBunkerBuyGridHtml(bunk: BunkerState, h: Unit): string {
         <span class="shop-item__ico">${skillButtonIconHtml("bunker_fortificar")}</span>
         <span class="shop-item__meta">
           <span class="shop-item__label">Fortificar</span>
-          <span class="shop-item__cost">${foFull ? "Limite wave" : `${foCost} ouro`}</span>
+          <span class="shop-item__cost">${foFull ? "Limite loja" : `${foCost} ouro`}</span>
         </span>
       </span>`;
     rows.push(
@@ -5045,7 +5047,7 @@ function goldShopBunkerSectionHtml(bunk: BunkerState): string {
         <p class="shop-hero-stats-head shop-bunker-skills-block__head">Habilidades</p>
         <div id="gold-shop-bunker-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do bunker"></div>
       </div>
-      <p class="shop-bunker-viz-layout__hint">Reparação = PV em falta. Evoluções: 300 / 500 ouro. Auto reparo (bunker nv. 2+): 50 ouro/nível. Fortificar (bunker nv. 3): 100 ouro por +100 escudo (até 5× por wave; escudo zera entre waves). As compras ficam na grelha por baixo.</p>
+      <p class="shop-bunker-viz-layout__hint">Reparação = PV em falta. Evoluções: 300 / 500 ouro. Auto reparo (bunker nv. 2+): 50 ouro/nível. Fortificar (bunker nv. 3): 100 ouro por +100 escudo (até 5× por visita à loja; o escudo repõe-se no início de cada wave até ao máximo comprado). As compras ficam na grelha por baixo.</p>
     </div>
   </div>`;
 }
@@ -5103,7 +5105,9 @@ function bunkerShopStatCells(bunk: BunkerState): HeroStatCell[] {
     });
   }
   if (tierShop >= BUNKER_FORTIFY_MIN_TIER) {
-    const foDisp = `${tipInt(bunk.fortifyShield)} · ${bunk.fortifyBuysThisWave}/${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE}`;
+    const capF = Math.max(0, bunk.fortifyShieldCap);
+    const curF = Math.min(Math.max(0, bunk.fortifyShield), capF);
+    const foDisp = `${tipInt(curF)}/${tipInt(capF)} · ${bunk.fortifyBuysThisWave}/${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE}`;
     cells.push({
       icon: "pen_escudo",
       label: "Fortificar",
@@ -6932,7 +6936,7 @@ function showCombatHUD(): void {
                     <div class="lol-bar-track-mid">
                       <div class="lol-bar-fill lol-bar-fill--shield" id="lol-shield-fill"></div>
                       <span class="lol-bar-label lol-bar-label--shield-inline" id="lol-shield-lbl">
-                        <span class="lol-bar-resource-name">Escudo</span>
+                        <span class="lol-bar-resource-name" id="lol-shield-resource-name">Escudo</span>
                         <span id="lol-shield-txt">0</span>
                       </span>
                     </div>
@@ -7011,6 +7015,9 @@ function showCombatHUD(): void {
   const lolBiomePill = bottom.querySelector("#lol-biome-pill") as HTMLElement;
   const lolShieldFill = bottom.querySelector("#lol-shield-fill") as HTMLElement;
   const lolShieldTxt = bottom.querySelector("#lol-shield-txt") as HTMLElement;
+  const lolShieldResourceName = bottom.querySelector(
+    "#lol-shield-resource-name",
+  ) as HTMLElement | null;
   const lolHpSingleWrap = bottom.querySelector("#lol-hp-single-wrap") as HTMLElement;
   const lolHpDualWrap = bottom.querySelector("#lol-hp-dual-wrap") as HTMLElement;
   const lolHpDualStack = bottom.querySelector("#lol-hp-dual-stack") as HTMLElement;
@@ -7559,6 +7566,7 @@ function showCombatHUD(): void {
       lolLevel.textContent = "—";
       lolShieldFill.style.transform = "scaleX(0)";
       lolShieldTxt.textContent = "";
+      if (lolShieldResourceName) lolShieldResourceName.textContent = "Escudo";
       lolHpSingleWrap.hidden = false;
       lolHpDualWrap.hidden = true;
       lolHpFill.style.transform = "scaleX(0)";
@@ -7608,13 +7616,28 @@ function showCombatHUD(): void {
     bindGameTooltip(lolBiomePill, () =>
       tooltipPassiveHtml(BIOME_LABELS[bio], BIOME_DESCRIPTIONS[bio]),
     );
-    const shR =
-      h.maxHp > 0
-        ? Math.max(0, Math.min(1, h.shieldGGBlue / Math.max(1, h.maxHp)))
-        : 0;
-    lolShieldFill.style.transform = `scaleX(${shR})`;
-    lolShieldTxt.textContent =
-      h.shieldGGBlue > 0 ? formatTooltipNumber(h.shieldGGBlue) : "0";
+    if (bunkHud && bunkHere) {
+      if (lolShieldResourceName)
+        lolShieldResourceName.textContent = "Escudo do bunker";
+      const capS = Math.max(0, bunkHere.fortifyShieldCap);
+      const curS = Math.min(Math.max(0, bunkHere.fortifyShield), capS);
+      const shR =
+        capS > 0 ? Math.max(0, Math.min(1, curS / capS)) : 0;
+      lolShieldFill.style.transform = `scaleX(${shR})`;
+      lolShieldTxt.textContent =
+        capS > 0
+          ? `${formatTooltipNumber(curS)} / ${formatTooltipNumber(capS)}`
+          : "0";
+    } else {
+      if (lolShieldResourceName) lolShieldResourceName.textContent = "Escudo";
+      const shR =
+        h.maxHp > 0
+          ? Math.max(0, Math.min(1, h.shieldGGBlue / Math.max(1, h.maxHp)))
+          : 0;
+      lolShieldFill.style.transform = `scaleX(${shR})`;
+      lolShieldTxt.textContent =
+        h.shieldGGBlue > 0 ? formatTooltipNumber(h.shieldGGBlue) : "0";
+    }
     if (bunkHud && bunkHere && lolHpFillHero && lolHpTxtHero && lolHpFillBunker && lolHpTxtBunker) {
       const B = bunkHere;
       lolHpSingleWrap.hidden = true;
