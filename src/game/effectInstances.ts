@@ -50,3 +50,43 @@ export function addDeslumbroInstances(u: Unit, delta: number): void {
     u.effectInstances.deslumbro = next;
   }
 }
+
+export function congelamentoInstancesCount(u: Unit): number {
+  if (u.isPlayer) return 0;
+  return u.effectInstances?.congelamento ?? 0;
+}
+
+export function addCongelamentoInstances(u: Unit, delta: number): void {
+  if (u.isPlayer) return;
+  const cur = congelamentoInstancesCount(u);
+  const next = cur + delta;
+  if (next <= 0) {
+    if (u.effectInstances) {
+      delete u.effectInstances.congelamento;
+      if (Object.keys(u.effectInstances).length === 0) delete u.effectInstances;
+    }
+  } else {
+    if (!u.effectInstances) u.effectInstances = {};
+    u.effectInstances.congelamento = next;
+  }
+}
+
+export function choqueInstancesCount(u: Unit): number {
+  if (u.isPlayer) return 0;
+  return u.effectInstances?.choque ?? 0;
+}
+
+export function addChoqueInstances(u: Unit, delta: number): void {
+  if (u.isPlayer) return;
+  const cur = choqueInstancesCount(u);
+  const next = cur + delta;
+  if (next <= 0) {
+    if (u.effectInstances) {
+      delete u.effectInstances.choque;
+      if (Object.keys(u.effectInstances).length === 0) delete u.effectInstances;
+    }
+  } else {
+    if (!u.effectInstances) u.effectInstances = {};
+    u.effectInstances.choque = next;
+  }
+}

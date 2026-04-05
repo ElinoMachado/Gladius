@@ -127,9 +127,13 @@ import { GOLD_SHOP } from "./data/shops";
 import { computePartyBonus } from "./colorSynergy";
 import {
   addBravuraInstances,
+  addChoqueInstances,
+  addCongelamentoInstances,
   addDeslumbroInstances,
   bravuraInstancesCount,
+  choqueInstancesCount,
   clearBravuraInstances,
+  congelamentoInstancesCount,
   deslumbroInstancesCount,
 } from "./effectInstances";
 import {
@@ -428,6 +432,28 @@ const SACRIFICIO_EXPLOSAO_MAX_STACKS = 4;
 /**
  * Saves v1: Gota azul / Raiz da vida davam regen por `pickBonusPerStack`; o efeito mudou.
  */
+/** Saves antes de v3: reverte bónus de stats dos artefatos cujo efeito mudou. */
+function migrateArtifactStatRebalanceV3(units: Unit[]): void {
+  for (const u of units) {
+    if (!u.isPlayer) continue;
+    const p = u.artifacts["passo_gigante"] ?? 0;
+    if (p > 0) u.movimento = Math.max(1, u.movimento - Math.min(3, p));
+    const t = u.artifacts["torrente_menor"] ?? 0;
+    if (t > 0) {
+      u.regenMana = Math.max(0, u.regenMana - 2 * t);
+      u.regenVida = Math.max(0, u.regenVida - t);
+    }
+    const s = u.artifacts["sol_interior"] ?? 0;
+    if (s > 0) u.regenVida = Math.max(0, u.regenVida - 4 * s);
+    const c = u.artifacts["carne_eterna"] ?? 0;
+    if (c > 0) {
+      u.maxHp = Math.max(1, u.maxHp - 20 * c);
+      u.hp = Math.max(0, Math.min(u.maxHp, u.hp - 20 * c));
+      u.dano = Math.max(0, u.dano - 3 * c);
+    }
+  }
+}
+
 function migrateGotaAzulRaizVidaOldPickBonuses(units: Unit[]): void {
   for (const u of units) {
     if (!u.isPlayer) continue;
@@ -908,7 +934,7 @@ export class GameModel {
     if (!runPhaseAllowsRunSessionPersistence(this.phase)) return null;
     try {
       const payload = {
-        v: 2 as const,
+        v: 3 as const,
         phase: this.phase,
         meta: JSON.parse(JSON.stringify(this.meta)) as MetaProgress,
         units: JSON.parse(JSON.stringify(this.units)) as Unit[],
@@ -1061,7 +1087,7 @@ export class GameModel {
         runShopRefundUses?: number;
         artifactBannedThisRun?: string[];
       };
-      if ((o.v !== 1 && o.v !== 2) || !o.phase || !Array.isArray(o.units) || !o.meta)
+      if ((o.v !== 1 && o.v !== 2 && o.v !== 3) || !o.phase || !Array.isArray(o.units) || !o.meta)
         return false;
       if (!runPhaseAllowsRunSessionPersistence(o.phase)) return false;
 
@@ -1069,6 +1095,7 @@ export class GameModel {
       this.units = o.units;
       migrateAlcanceMisticoToAuraTita(this.units);
       if (o.v === 1) migrateGotaAzulRaizVidaOldPickBonuses(this.units);
+      if (o.v < 3) migrateArtifactStatRebalanceV3(this.units);
       this.bunkers = o.bunkers ?? {};
       this.ensureAllBunkerFields();
       this.wave = o.wave ?? 0;
@@ -1386,8 +1413,9 @@ export class GameModel {
     }
     for (const u of this.units) {
       if (u.isPlayer || u.hp <= 0) continue;
-      if (deslumbroInstancesCount(u) <= 0) continue;
-      addDeslumbroInstances(u, -1);
+      if (deslumbroInstancesCount(u) > 0) addDeslumbroInstances(u, -1);
+      if (congelamentoInstancesCount(u) > 0) addCongelamentoInstances(u, -1);
+      if (choqueInstancesCount(u) > 0) addChoqueInstances(u, -1);
     }
   }
 
@@ -2425,10 +2453,15 @@ export class GameModel {
     }
     this.pendingSentencaPartyHeal = null;
     const { heal, priestBio } = pending;
+    const milagre = priest.artifacts["carne_eterna"] ?? 0;
     for (const ally of this.getParty()) {
-      if (ally.hp <= 0) continue;
+      if (
+        ally.hp <= 0 &&
+        (milagre <= 0 || ally.id === priest.id)
+      )
+        continue;
       this.healUnit(ally, heal, priest, {
-        overflowToShieldHalf: true,
+        overflowToShieldHalf: ally.hp > 0,
         overflowShieldRatio: sentencaShieldOverflowRatio(priest.weaponLevel),
         effectiveHealIncludesPotencial: true,
       });
@@ -3035,7 +3068,7 @@ export class GameModel {
 
   /** Ataques básicos permitidos por turno (base 1 + braço forte + helmo rochoso + loja de cristais). */
   maxBasicAttacksForHero(h: Unit): number {
-    let cap = 1 + (h.artifacts["braco_forte"] ?? 0);
+    let cap = 1 + Math.min(3, h.artifacts["braco_forte"] ?? 0);
     cap += this.meta.crystalExtraBasic ?? 0;
     const rh = getForgeLevel(h.forgeLoadout, "helmo", "rochoso");
     if (rh === 1 || rh === 2 || rh === 3) cap += rh;
@@ -3623,6 +3656,8 @@ export class GameModel {
       suppressLifesteal?: boolean;
       /** Explosão rubra e similares: dano plano na morte, sem escalares de habilidade nem procs de origem. */
       fromHeroDeathNova?: boolean;
+      /** Dano extra encadeado (Golpe gélido / Sobrecarga): não volta a aplicar estes artefatos. */
+      suppressOnHitArtifacts?: boolean;
       /** Cometa arcano: não aplica multiplicadores de habilidade nem veneno/Labareda. */
       fromCometaArcano?: boolean;
       /**
@@ -3634,6 +3669,20 @@ export class GameModel {
   ): number {
     if (tgt.hp <= 0) return 0;
     let rawUse = raw;
+    if (
+      !opts?.fromHeroDeathNova &&
+      !opts?.suppressOnHitArtifacts &&
+      src.isPlayer &&
+      !tgt.isPlayer
+    ) {
+      const ira = Math.min(5, src.artifacts["passo_gigante"] ?? 0);
+      if (ira > 0) {
+        const tier = enemyTierFromId(tgt.enemyArchetypeId);
+        if (tier === "elite" || tier === "boss" || tier === "emperor") {
+          rawUse = Math.floor(rawUse * (1 + 0.2 * ira));
+        }
+      }
+    }
     if (
       !opts?.fromHeroDeathNova &&
       !opts?.fromCometaArcano &&
@@ -3905,6 +3954,7 @@ export class GameModel {
     }
     if (
       !opts?.fromHeroDeathNova &&
+      !opts?.suppressOnHitArtifacts &&
       src.isPlayer &&
       src.heroClass &&
       !tgt.isPlayer &&
@@ -3916,6 +3966,9 @@ export class GameModel {
       if (!opts?.fromCometaArcano) {
         this.applyLabareda(src, tgt);
       }
+      this.applyGolpeGelidoEChoqueOnHit(src, tgt, canProc, {
+        fromCometaArcano: opts?.fromCometaArcano,
+      });
     }
     if (tgt === src) {
       this.onDeaths();
@@ -4415,6 +4468,40 @@ export class GameModel {
     return Math.max(1, Math.floor(u.dotConsumePerTick ?? 1));
   }
 
+  /** Golpe gélido (torrente_menor) e Sobrecarga (sol_interior): instâncias + dano bruto extra. */
+  private applyGolpeGelidoEChoqueOnHit(
+    src: Unit,
+    tgt: Unit,
+    canProc: boolean,
+    o?: { fromCometaArcano?: boolean },
+  ): void {
+    if (o?.fromCometaArcano || !src.isPlayer || tgt.isPlayer || tgt.hp <= 0) return;
+
+    const gel = Math.min(6, src.artifacts["torrente_menor"] ?? 0);
+    if (gel > 0) {
+      addCongelamentoInstances(tgt, 2 * gel);
+      const bonus = Math.floor(tgt.movimento * 0.5) * gel;
+      if (bonus > 0) {
+        this.dealDamage(src, tgt, bonus, false, canProc, false, {
+          suppressLifesteal: true,
+          suppressOnHitArtifacts: true,
+        });
+      }
+    }
+
+    const ch = Math.min(6, src.artifacts["sol_interior"] ?? 0);
+    if (ch > 0 && tgt.hp > 0) {
+      addChoqueInstances(tgt, 2 * ch);
+      const bonus = Math.max(0, Math.floor(tgt.alcance)) * ch;
+      if (bonus > 0) {
+        this.dealDamage(src, tgt, bonus, false, canProc, false, {
+          suppressLifesteal: true,
+          suppressOnHitArtifacts: true,
+        });
+      }
+    }
+  }
+
   /** Mãos venenosas: instâncias de veneno (3×acúmulos); +extra do Amplicador de onda. */
   private applyPoison(att: Unit, tgt: Unit): void {
     const s = att.artifacts["maos_venenosas"] ?? 0;
@@ -4508,7 +4595,33 @@ export class GameModel {
       effectiveHealIncludesPotencial?: boolean;
     },
   ): void {
-    if (target.hp <= 0) return;
+    const milagre = src.artifacts["carne_eterna"] ?? 0;
+    if (target.hp <= 0) {
+      if (
+        !target.isPlayer ||
+        milagre <= 0 ||
+        target.id === src.id
+      )
+        return;
+      const pct = 1 + src.potencialCuraEscudo / 100;
+      const amt = opts?.effectiveHealIncludesPotencial
+        ? roundToCombatDecimals(base)
+        : roundToCombatDecimals(base * pct);
+      const revived = Math.min(
+        target.maxHp,
+        Math.max(1, Math.floor(amt)),
+      );
+      target.hp = revived;
+      this.pushCombatFloat({
+        unitId: target.id,
+        kind: "heal",
+        amount: revived,
+      });
+      this.addWeaponUltHealCharge(src, revived, opts?.skipWeaponUltMeter);
+      this.applyCurandeiroBatalhaFromHeal(src);
+      this.log(`${target.name} ressuscitou (Milagre da vida).`);
+      return;
+    }
     const pct = 1 + src.potencialCuraEscudo / 100;
     const amt = opts?.effectiveHealIncludesPotencial
       ? roundToCombatDecimals(base)
@@ -5183,7 +5296,7 @@ export class GameModel {
     const tgt = this.pickEnemyHeroTarget(e);
     if (!tgt) return 0;
     const cells: { q: number; r: number }[] = [{ q: e.q, r: e.r }];
-    let steps = e.movimento;
+    let steps = this.effectiveEnemyMovimento(e);
     while (steps > 0) {
       const bypassFly = this.isBunkerOccupant(tgt);
       const distNow = hexDistance(
@@ -6395,7 +6508,7 @@ export class GameModel {
     const reach = reachableHexes(
       this.grid,
       { q: e.q, r: e.r },
-      e.movimento,
+      this.effectiveEnemyMovimento(e),
       e.flying,
       unitIgnoresTerrain(e),
       blocked,
@@ -6437,16 +6550,27 @@ export class GameModel {
     return total;
   }
 
+  private effectiveEnemyMovimento(e: Unit): number {
+    if (e.isPlayer) return e.movimento;
+    const m = e.movimento;
+    if (congelamentoInstancesCount(e) <= 0) return m;
+    return Math.max(1, Math.floor(m * 0.5));
+  }
+
   private effectiveAlcanceForEnemy(e: Unit): number {
     const bio = biomeAt(this.grid, e.q, e.r) as BiomeId;
     const suppressForest =
       bio === "floresta" && this.anyHeroSuppressesEnemyForestRange();
-    return effectiveAlcanceForBiome(
+    let alc = effectiveAlcanceForBiome(
       e.alcance,
       bio,
       unitIgnoresTerrain(e),
       { suppressForestEnemyBonus: suppressForest },
     );
+    if (!e.isPlayer && choqueInstancesCount(e) > 0) {
+      alc = Math.max(1, Math.floor(alc * 0.5));
+    }
+    return alc;
   }
 
   /** Hexes com distância axial [minD, maxD] do centro (inclusive). */

@@ -179,6 +179,10 @@ export interface Unit extends CoreStats {
      * Cada instância = +1 ataque básico (consumo visual pelo `basicLeft`); o contador zera no fim do turno.
      */
     bravura?: number;
+    /** Congelamento (Golpe gélido): −1 por fase inimiga; com instâncias > 0, movimento efetivo ×50%. */
+    congelamento?: number;
+    /** Choque (Sobrecarga): −1 por fase inimiga; com instâncias > 0, alcance efetivo ×50%. */
+    choque?: number;
   };
   /** Nível da arma principal (loja de cristais); escala skills e ultimate da arma. */
   weaponLevel: WeaponLevel;

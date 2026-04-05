@@ -161,10 +161,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "torrente_menor",
-    name: "Torrente menor",
+    name: "Golpe gélido",
     rarity: "uncommon",
-    description: "+2 regen de mana e +1 regen de vida por acúmulo.",
-    pickBonusPerStack: { regenMana: 2, regenVida: 1 },
+    description:
+      "Ao causar dano: aplica 2 instâncias de congelamento por acúmulo (máx. 6). Inimigos congelados têm metade do movimento. Causa dano bruto extra igual à metade do movimento base do alvo × acúmulos.",
   },
   {
     id: "vendaval_arcana",
@@ -174,7 +174,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "fio_cruel",
-    name: "Fio cruel",
+    name: "Multi Cristais",
     rarity: "uncommon",
     description:
       "+3% de chance de dropar um cristal ao eliminar inimigos por acúmulo (máx. 10).",
@@ -214,7 +214,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Braço forte",
     rarity: "rare",
     description:
-      "+1 uso extra de ataque básico por turno por acúmulo (até 3 stacks com efeito).",
+      "+1 uso extra de ataque básico por turno por acúmulo (máx. 3 acúmulos).",
   },
   {
     id: "escudo_sangue",
@@ -224,11 +224,11 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
       "Com escudo ativo ao receber dano: devolve 75% desse dano ao atacante por acúmulo.",
   },
   {
-    id: "crystal_extra",
-    name: "Cristal extra",
+    id: "sol_interior",
+    name: "Sobrecarga",
     rarity: "rare",
     description:
-      "Sempre que um cristal cair por eliminação, recebe +1 cristal adicional por acúmulo (máx. 4).",
+      "Ao causar dano: aplica 2 instâncias de choque por acúmulo (máx. 6). Inimigos em choque têm metade do alcance. Causa dano bruto extra igual ao alcance base do alvo × acúmulos.",
   },
   {
     id: "muralha_verdade",
@@ -253,10 +253,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "passo_gigante",
-    name: "Passo de gigante",
+    name: "Ira do sobrevivente",
     rarity: "rare",
-    description: "+1 movimento por acúmulo (máx. 3 com efeito).",
-    pickBonusPerStack: { movimento: 1 },
+    description:
+      "+20% de dano contra elites e chefes por acúmulo (máx. 5).",
   },
   {
     id: "sorte_prata",
@@ -296,11 +296,11 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     pickBonusPerStack: { danoCritico: 0.12 },
   },
   {
-    id: "sol_interior",
-    name: "Sol interior",
+    id: "crystal_extra",
+    name: "Cristal extra",
     rarity: "legendary",
-    description: "+4 de regen de vida por acúmulo.",
-    pickBonusPerStack: { regenVida: 4 },
+    description:
+      "Sempre que um cristal cair por eliminação, recebe +1 cristal adicional por acúmulo (máx. 4).",
   },
   {
     id: "lua_benta",
@@ -334,11 +334,11 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "carne_eterna",
-    name: "Carne eterna",
+    name: "Milagre da vida",
     rarity: "mythic",
     description:
-      "+20 de vida máxima e vida atual e +3 de dano por acúmulo (máx. 3).",
-    pickBonusPerStack: { maxHp: 20, hp: 20, dano: 3 },
+      "As tuas curas podem ressuscitar aliados caídos (PV conforme a cura e o potencial). +50% de potencial de cura e escudo por acúmulo (máx. 3).",
+    pickBonusPerStack: { potencialCuraEscudo: 50 },
   },
   {
     id: "ceu_partido",

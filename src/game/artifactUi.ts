@@ -75,7 +75,10 @@ const SPECIAL_MAX: Record<string, number> = {
   crystal_extra: 4,
   gota_azul: 4,
   raiz_vida: 4,
-  passo_gigante: 3,
+  braco_forte: 3,
+  passo_gigante: 5,
+  torrente_menor: 6,
+  sol_interior: 6,
   sorte_prata: 3,
   martelo_juiz: 3,
   muralha_verdade: 3,
@@ -237,10 +240,8 @@ export function describeArtifactAtStack(
       return `Sem mover no turno: +${5 * n} defesa; +${2 * n}% dano crítico ao receber exatamente 1 de dano.`;
     case "ruler":
       return `Ignore os efeitos dos biomas e receba + ${n} de movimento.`;
-    case "braco_forte": {
-      const eff = Math.min(n, 3);
-      return `+${eff} uso(s) extra de básico por turno (máx. 3 com efeito).`;
-    }
+    case "braco_forte":
+      return `+${n} uso(s) extra de básico por turno (máx. 3).`;
     case "curandeiro_batalha":
       return `Ao curar: +${2 * n} dano durante a wave.`;
     case "sylfid":
@@ -298,10 +299,18 @@ export function describeArtifactAtStack(
       return `+${3 * n}% chance de cristal ao eliminar inimigos.`;
     case "crystal_extra":
       return `+${n} cristal(is) extra(s) sempre que um cristal cair por kill.`;
-    case "passo_gigante": {
-      const eff = Math.min(n, 3);
-      return `+${eff} movimento (máx. 3 com efeito).`;
+    case "passo_gigante":
+      return `+${20 * n}% de dano contra elites e chefes (máx. 5 acúmulos).`;
+    case "torrente_menor": {
+      const inst = 2 * n;
+      return `Ao causar dano: +${inst} instância(s) de congelamento; inimigos congelados têm metade do movimento; dano bruto extra = ⌊½ movimento base do inimigo⌋ × ${n}.`;
     }
+    case "sol_interior": {
+      const inst = 2 * n;
+      return `Ao causar dano: +${inst} instância(s) de choque; inimigos em choque têm metade do alcance; dano bruto extra = alcance base do inimigo × ${n}.`;
+    }
+    case "carne_eterna":
+      return `Curas ressuscitam aliados caídos; +${50 * n}% potencial de cura e escudo.`;
     case "sorte_prata": {
       const need = 2 + n;
       return `Embosca: precisas de ${need} ou mais inimigos adjacentes no chão para o movimento ser bloqueado (+${n} face ao mínimo de 2).`;
@@ -402,6 +411,12 @@ export function artifactCardFigureSvg(artifactId: string): string {
     anel_penetrante: `<ellipse cx="24" cy="24" rx="15" ry="11" fill="none" stroke="#6a1b9a" stroke-width="3.5"/><ellipse cx="24" cy="24" rx="9" ry="6" fill="none" stroke="#ce93d8" stroke-width="1.8"/><circle cx="24" cy="24" r="4" fill="#4a148c" opacity="0.35"/>`,
     gota_azul: `<path fill="none" stroke="#1565c0" stroke-width="2" d="M24 8v8"/><path fill="#42a5f5" stroke="#0d47a1" stroke-width="0.8" d="M24 14 C18 22 14 28 14 32 C14 38 18 42 24 42 C30 42 34 38 34 32 C34 28 30 22 24 14"/><path fill="#90caf9" d="M20 30h8v6a4 4 0 0 1-8 0v-6" opacity="0.9"/>`,
     raiz_vida: `<circle cx="24" cy="24" r="4" fill="#ffcdd2" stroke="#b71c1c" stroke-width="1.2"/><path fill="none" stroke="#c62828" stroke-width="2.2" stroke-linecap="round" d="M24 10v6M24 32v6M10 24h6M32 24h6M14 14l5 5M29 29l5 5M34 14l-5 5M19 29l-5 5"/><path fill="#e53935" d="M24 18l3 6-3 4-3-4z" opacity="0.85"/>`,
+    fel_simples: `<path fill="#558b2f" d="M6 38c4-2 8-1 10 2 2-4 6-6 10-4 2-3 7-4 10-1 1-4-2-7-6-6-3 3-8 8-8 12-3-2-8 0-10 3-4-1-8 1-10 4z"/><path fill="#7cb342" d="M8 36c6-8 14-10 22-6-2 4-8 6-14 6-4 4-10 3-8 0z"/><path fill="#aed581" d="M14 32 Q18 28 22 30 Q20 34 16 34z" opacity="0.9"/>`,
+    carne_eterna: `<ellipse cx="24" cy="36" rx="14" ry="5" fill="#e1bee7" opacity="0.5"/><path fill="#fffde7" d="M24 8 L32 14 L30 28 L24 34 L18 28 L16 14 Z" stroke="#fbc02d" stroke-width="0.8"/><circle cx="24" cy="18" r="5" fill="#fff9c4"/><path fill="none" stroke="#fbc02d" stroke-width="1.2" d="M19 16c2 2 8 2 10 0"/><path fill="#7e57c2" d="M12 22 Q24 12 36 22 L34 30 Q24 24 14 30 Z" opacity="0.85"/>`,
+    crystal_extra: `<path fill="#b388ff" stroke="#4527a0" stroke-width="1.2" d="M24 6 L38 22 L24 42 L10 22 Z"/><path fill="#e1bee7" d="M24 12 L32 22 L24 34 L16 22 Z"/><path fill="#ede7f6" d="M24 18 L28 22 L24 28 L20 22 Z"/>`,
+    passo_gigante: `<path fill="#ffd54f" stroke="#f57f17" stroke-width="1" d="M12 20 L24 8 L36 20 L32 36 L16 36 Z"/><circle cx="24" cy="22" r="5" fill="#ffecb3"/><path fill="none" stroke="#e65100" stroke-width="1.4" d="M18 18 L22 22 L18 26 M26 18 L30 22 L26 26"/><ellipse cx="24" cy="14" rx="10" ry="4" fill="#ffc107" opacity="0.9"/>`,
+    torrente_menor: `<path fill="#81d4fa" d="M28 8 L34 18 L30 38 L18 38 L14 18 L20 8 Z" stroke="#0277bd" stroke-width="1"/><path fill="#e1f5fe" d="M26 14 L30 20 L28 32 L20 32 L16 20 Z"/><path fill="#fff" d="M22 20h4v8h-4z" opacity="0.7"/><path fill="none" stroke="#4fc3f7" stroke-width="1" d="M10 26 Q24 18 38 26"/>`,
+    sol_interior: `<path fill="none" stroke="#ffeb3b" stroke-width="2.5" stroke-linecap="round" d="M24 6v8M24 34v8M8 24h8M32 24h8M12 12l6 6M30 30l6 6M36 12l-6 6M18 30l-6 6"/><circle cx="24" cy="24" r="8" fill="#fff59d" stroke="#f9a825" stroke-width="1.2"/><path fill="#fbc02d" d="M24 20 L26 24 L24 28 L22 24 Z"/>`,
     ruler: `<rect x="8" y="10" width="32" height="28" rx="2" fill="#eceff1" stroke="#37474f"/><path fill="none" stroke="#1976d2" stroke-width="2" d="M14 18h20M14 24h16M14 30h20"/><circle cx="24" cy="20" r="3" fill="#ffd54f"/>`,
     braco_forte: `<ellipse cx="24" cy="28" rx="12" ry="8" fill="#d7ccc8"/><path fill="#8d6e63" d="M16 20h16v12H16z"/><path fill="#5d4037" d="M20 14h8v10h-8z"/>`,
     curandeiro_batalha: `<path fill="#43a047" d="M24 8v32M8 24h32" stroke="#2e7d32" stroke-width="4"/><circle cx="24" cy="24" r="10" fill="none" stroke="#66bb6a" stroke-width="2"/>`,
