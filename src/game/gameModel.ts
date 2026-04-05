@@ -4306,7 +4306,7 @@ export class GameModel {
     if (this.phase !== "combat" || this.duel) return;
     const stacks = Math.min(3, h.artifacts["espada_fogo_eterno"] ?? 0);
     if (stacks <= 0 || h.hp <= 0) return;
-    // Só VFX: não exige inimigo (ex.: level-up logo após último kill da wave).
+    if (!this.farthestEnemyToInHeroBiome(h)) return;
     const strikes = Math.max(1, this.maxBasicAttacksForHero(h));
     h.espadaFogoOrbitVisualCount = strikes;
   }
