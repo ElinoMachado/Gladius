@@ -383,11 +383,14 @@ const setup: Setup = {
   colors: ["azul", "verde", "vermelho"],
 };
 
-let heroSetupPreviewInstances: HeroPreview3D[] = [];
+/** Um preview por slot (0–2); `render()` no select apagava o `ui-root` inteiro → flash / preview escuro. */
+const heroSetupPreviewBySlot: (HeroPreview3D | null)[] = [null, null, null];
 
 function disposeHeroSetupPreviews(): void {
-  for (const p of heroSetupPreviewInstances) p.dispose();
-  heroSetupPreviewInstances = [];
+  for (let si = 0; si < 3; si++) {
+    heroSetupPreviewBySlot[si]?.dispose();
+    heroSetupPreviewBySlot[si] = null;
+  }
 }
 
 let biomePickerInstance: BiomePicker3D | null = null;
@@ -687,6 +690,96 @@ function heroSetupDifficultyBannerHtml(heroCount: number): string {
     <div class="hero-setup-difficulty__title"><strong>${title}</strong></div>
     ${enemyAttrBlockHtml(mult)}
   </div>`;
+}
+
+function fillHeroSlotCard(card: HTMLElement, i: 0 | 1 | 2): void {
+  heroSetupPreviewBySlot[i]?.dispose();
+  heroSetupPreviewBySlot[i] = null;
+  const hid = setup.slots[i];
+  if (hid) {
+    card.classList.remove("hero-slot-card--placeholder");
+    const wl = model.meta.weaponLevelByHeroSlot[i];
+    const baseD = HEROES[hid].dano;
+    const className = escapeHtml(HEROES[hid].name);
+    const headHtml = `<div class="hero-slot-card__head">
+        <span class="hero-slot-card__class hero-slot-card__class--${hid}">${className}</span>
+      </div>`;
+    card.innerHTML = `${headHtml}${templateStatsStripHtml(hid)}
+        <div class="hero-slot-weapon-row" tabindex="0" role="img" aria-label="Arma principal nível ${wl} de 5. Paira para ver skill e ultimate da arma.">
+          <span class="hero-slot-weapon-row__lbl">Arma principal</span>
+          <span class="hero-slot-weapon-row__nv">nv <strong>${wl}</strong>/5</span>
+          <span class="hero-slot-weapon-row__hint" aria-hidden="true">paira · skill e ultimate</span>
+        </div>
+        <div class="hero-slot-model-host" data-slot-model="${i}"></div><div class="hero-slot-passive-wrap"><div class="hero-slot-passive__title">Passiva</div><p class="hero-slot-passive">${escapeHtml(HEROES[hid].passiveDescription)}</p></div>`;
+    bindSetupStatCells(card, hid);
+    const weaponRow = card.querySelector(".hero-slot-weapon-row") as HTMLElement;
+    bindGameTooltip(weaponRow, () =>
+      heroSetupWeaponAbilitiesTooltipHtml(hid, wl, baseD),
+    );
+    const host = card.querySelector(`[data-slot-model="${i}"]`) as HTMLElement;
+    const forgeL = resolveEquippedForgeLoadoutForMeta(model.meta, i);
+    const prev = new HeroPreview3D(host, 220, 300, heroPreviewCameraSetupSlotCard);
+    prev.setHero(
+      hid,
+      colorHintToDisplayColor(HEROES[hid].colorHint),
+      forgeL,
+    );
+    prev.start();
+    heroSetupPreviewBySlot[i] = prev;
+  } else {
+    card.classList.add("hero-slot-card--placeholder");
+    const headHtml = `<div class="hero-slot-card__head">
+        <span class="hero-slot-card__class hero-slot-card__class--empty-slot">—</span>
+      </div>`;
+    card.innerHTML = `${headHtml}
+        <div class="hero-slot-placeholder">
+          <div class="hero-slot-model-host hero-slot-model-host--placeholder"></div>
+          <p class="hero-slot-placeholder__txt">Selecione um herói para este slot</p>
+        </div>
+      `;
+  }
+}
+
+/** Atualiza só uma coluna + cabeçalhos; evita `innerHTML` em todo o `ui-root` ao mudar o select. */
+function syncHeroSetupUiAfterSlotChange(slotIndex: 0 | 1 | 2): void {
+  if (model.phase !== "setup_heroes") {
+    render();
+    return;
+  }
+  const screen = document.querySelector(".screen--hero-setup");
+  if (!screen) {
+    render();
+    return;
+  }
+  const wrap = screen.querySelector(
+    `.hero-slot[data-slot="${slotIndex}"]`,
+  ) as HTMLElement | null;
+  if (!wrap) {
+    render();
+    return;
+  }
+  const card = wrap.querySelector(".hero-slot-card") as HTMLElement | null;
+  if (!card) {
+    render();
+    return;
+  }
+  fillHeroSlotCard(card, slotIndex);
+
+  const dw = document.getElementById("hero-setup-difficulty-wrap");
+  if (dw) dw.innerHTML = heroSetupDifficultyBannerHtml(selectedHeroes().length);
+
+  const title = document.getElementById("hero-setup-main-title");
+  if (title)
+    title.textContent = `Escolha até 3 heróis (${selectedHeroes().length}/3)`;
+
+  const btn = document.getElementById(
+    "hero-setup-btn-next",
+  ) as HTMLButtonElement | null;
+  if (btn) btn.disabled = selectedHeroes().length < 1;
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => heroSetupPreviewBySlot[slotIndex]?.refit());
+  });
 }
 
 function colorHintToDisplayColor(hint: string): number {
@@ -2875,7 +2968,6 @@ function showCrystalShop(): void {
 
 function showHeroSetup(): void {
   disposeHeroSetupPreviews();
-  heroSetupPreviewInstances = [];
   hideGameTooltip();
   removeEquipmentModal();
   disposeMenu3dPreviews();
@@ -2885,12 +2977,12 @@ function showHeroSetup(): void {
   const s = el(`
     <div class="screen screen--new-run-setup screen--hero-setup">
       <div class="hero-setup-screen">
-        ${heroSetupDifficultyBannerHtml(heroes.length)}
-        <h1 class="hero-setup-main-title">Escolha até 3 heróis (${heroes.length}/${max})</h1>
+        <div id="hero-setup-difficulty-wrap">${heroSetupDifficultyBannerHtml(heroes.length)}</div>
+        <h1 id="hero-setup-main-title" class="hero-setup-main-title">Escolha até 3 heróis (${heroes.length}/${max})</h1>
         <div class="hero-slots-grid" id="hero-slots"></div>
         <div class="hero-setup-actions new-run-setup-actions">
           <button type="button" class="btn" id="btn-back">Voltar ao menu</button>
-          <button type="button" class="btn btn-primary" id="btn-next" ${heroes.length < 1 ? "disabled" : ""}>Selecionar</button>
+          <button type="button" class="btn btn-primary" id="hero-setup-btn-next" ${heroes.length < 1 ? "disabled" : ""}>Selecionar</button>
         </div>
       </div>
     </div>
@@ -2919,10 +3011,11 @@ function showHeroSetup(): void {
     }
     const cur = setup.slots[i];
     sel.value = cur ?? "";
+    const slotI = i as 0 | 1 | 2;
     sel.addEventListener("change", () => {
       const v = sel.value as HeroClassId | "";
-      setup.slots[i] = v === "" ? null : v;
-      render();
+      setup.slots[slotI] = v === "" ? null : v;
+      syncHeroSetupUiAfterSlotChange(slotI);
     });
     const card = el(`<div class="hero-slot-card"></div>`);
     wrap.appendChild(label);
@@ -2945,55 +3038,15 @@ function showHeroSetup(): void {
       });
     wrap.appendChild(card);
     slotsRoot.appendChild(wrap);
-    const hid = setup.slots[i];
-    if (hid) {
-      const wl = model.meta.weaponLevelByHeroSlot[i as 0 | 1 | 2];
-      const baseD = HEROES[hid].dano;
-      const className = escapeHtml(HEROES[hid].name);
-      const headHtml = `<div class="hero-slot-card__head">
-        <span class="hero-slot-card__class hero-slot-card__class--${hid}">${className}</span>
-      </div>`;
-      card.innerHTML = `${headHtml}${templateStatsStripHtml(hid)}
-        <div class="hero-slot-weapon-row" tabindex="0" role="img" aria-label="Arma principal nível ${wl} de 5. Paira para ver skill e ultimate da arma.">
-          <span class="hero-slot-weapon-row__lbl">Arma principal</span>
-          <span class="hero-slot-weapon-row__nv">nv <strong>${wl}</strong>/5</span>
-          <span class="hero-slot-weapon-row__hint" aria-hidden="true">paira · skill e ultimate</span>
-        </div>
-        <div class="hero-slot-model-host" data-slot-model="${i}"></div><div class="hero-slot-passive-wrap"><div class="hero-slot-passive__title">Passiva</div><p class="hero-slot-passive">${escapeHtml(HEROES[hid].passiveDescription)}</p></div>`;
-      bindSetupStatCells(card, hid);
-      const weaponRow = card.querySelector(".hero-slot-weapon-row") as HTMLElement;
-      bindGameTooltip(weaponRow, () =>
-        heroSetupWeaponAbilitiesTooltipHtml(hid, wl, baseD),
-      );
-      const host = card.querySelector(`[data-slot-model="${i}"]`) as HTMLElement;
-      const prev = new HeroPreview3D(host, 220, 300, heroPreviewCameraSetupSlotCard);
-      prev.setHero(
-        hid,
-        colorHintToDisplayColor(HEROES[hid].colorHint),
-        forgeL,
-      );
-      prev.start();
-      heroSetupPreviewInstances.push(prev);
-    } else {
-      card.classList.add("hero-slot-card--placeholder");
-      const headHtml = `<div class="hero-slot-card__head">
-        <span class="hero-slot-card__class hero-slot-card__class--empty-slot">—</span>
-      </div>`;
-      card.innerHTML = `${headHtml}
-        <div class="hero-slot-placeholder">
-          <div class="hero-slot-model-host hero-slot-model-host--placeholder"></div>
-          <p class="hero-slot-placeholder__txt">Selecione um herói para este slot</p>
-        </div>
-      `;
-    }
+    fillHeroSlotCard(card, slotI);
   }
   /* Host `.hero-slot-model-host` pode medir 0 no 1.º frame (flex); 2.º rAF alinha buffer + redraw. */
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      for (const p of heroSetupPreviewInstances) p.refit();
+      for (let si = 0; si < 3; si++) heroSetupPreviewBySlot[si]?.refit();
     });
   });
-  s.querySelector("#btn-next")!.addEventListener("click", () => {
+  s.querySelector("#hero-setup-btn-next")!.addEventListener("click", () => {
     if (selectedHeroes().length < 1) return;
     setup.biomes = [];
     model.phase = "setup_biomes";

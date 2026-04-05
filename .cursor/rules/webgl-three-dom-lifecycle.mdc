@@ -20,7 +20,8 @@ Sintomas: área do canvas **permanentemente escura** (só se vê o fundo CSS do 
 - **Sem frame antes do loop:** Se `resize` / `fit` só chamam `renderer.render` quando `requestAnimationFrame` do jogo já está a correr, entre `setHero`/`setMesh` e o **primeiro** `start()` o buffer pode estar vazio; com `alpha: true` vê-se só o fundo escuro do cartão → parece “buraco preto”.
 - **Correção:** Depois de popular a cena, fazer **pelo menos um** `render` síncrono (ex.: no fim de `setHero` ou em `fitViewport` quando `scene` já tem conteúdo), não apenas quando `running === true`.
 - **Host com largura/altura 0:** Em flex/grid o `clientWidth`/`clientHeight` do anfitrião pode ser **0** no primeiro frame; `setSize` fica mínimo e o modelo “desaparece” ou escala mal. Usar `requestAnimationFrame` (às vezes **dois** em cascata) após montar o DOM e voltar a medir + `setSize` + `render`.
-- **“Piscar” ao trocar estado:** Reconstruir o DOM inteiro + novo renderer a cada mudança de `<select>` causa dispose/create repetidos; preferir reciclar renderer (detach/reattach) ou um único render inicial estável para reduzir flashes.
+- **“Piscar” / escuro ao mudar `<select>` ou filtro:** Disparar `render()` que faz `uiRoot.innerHTML = ""` em **todo** o ecrã só porque uma coluna mudou → destrói **todos** os canvas WebGL e dropdowns montados, recria 2–3 `WebGLRenderer` de seguida e um frame sem UI → flash e previews pretos. **Preferir:** atualizar só o ramo DOM afetado (ex.: um cartão + título/contador) e **um** preview por slot com `dispose` só desse slot; manter o resto do markup estável.
+- **Reciclar renderer:** Para refreshes frequentes do mesmo painel, detach/reattach do canvas (como na loja de ouro) ou patch parcial do DOM, em vez de `innerHTML` na raiz do overlay.
 
 ## `dispose()` e recursos partilhados
 
@@ -35,9 +36,12 @@ Sintomas: área do canvas **permanentemente escura** (só se vê o fundo CSS do 
 3. Há texturas ou materiais partilhados entre clones e cache?
 4. Transições de fase limpam **todos** os renderers que viviam no `uiRoot` (ou equivalente)?
 5. O preview faz **um render** após ter geometria, **antes** do loop contínuo? O host já tem tamanho estável (rAF extra se flex)?
+6. Mudanças locais (select, tab) disparam **rebuild total** do `ui-root`? Se sim, considerar patch parcial.
 
 Em `dispose()`, remover o canvas com `domElement.parentNode?.removeChild(domElement)` em vez de exigir `parentNode === host` original (o canvas pode ter sido destacado antes).
 
 ## Evolução desta regra
 
 Quando surgir novo bug (loja, setup, modais, outro preview), documentar aqui o **sintoma → causa → padrão de correção** em 1–3 linhas para cobrir mais casos automaticamente.
+
+- **2026-04 — Setup de heróis escuro/pisca ao escolher classe:** `change` no select chamava `render()` → `showHeroSetup` limpava o `ui-root` inteiro → todos os `HeroPreview3D` eram `dispose` e recriados em cascata. **Correção:** `syncHeroSetupUiAfterSlotChange(slot)` — só `fillHeroSlotCard` nesse slot + atualizar faixa de dificuldade / título / botão; previews indexados por slot `[0,1,2]`.
