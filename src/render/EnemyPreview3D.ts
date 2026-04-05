@@ -18,12 +18,10 @@ export class EnemyPreview3D {
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
   private pivot = new THREE.Group();
-  private host: HTMLElement;
   private raf = 0;
   private running = false;
 
   constructor(host: HTMLElement, width: number, height: number) {
-    this.host = host;
     this.renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
@@ -90,8 +88,6 @@ export class EnemyPreview3D {
     disposeObject3D(this.pivot);
     this.pivot.clear();
     this.renderer.dispose();
-    if (this.renderer.domElement.parentNode === this.host) {
-      this.host.removeChild(this.renderer.domElement);
-    }
+    this.renderer.domElement.parentNode?.removeChild(this.renderer.domElement);
   }
 }

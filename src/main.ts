@@ -1243,6 +1243,7 @@ function clampEnemyInspectPosition(
 }
 
 function mountEnemyInspectPanelShell(panel: HTMLElement): void {
+  disposeEnemyInspectPreview();
   panel.innerHTML = `<div class="enemy-inspect-header" title="Arrastar para mover"><span class="enemy-inspect-grip" aria-hidden="true">≡</span><span class="enemy-inspect-title" id="enemy-inspect-title"></span></div>
 <div id="enemy-inspect-preview-host" class="enemy-inspect-preview"></div>
 <div id="enemy-inspect-status" class="enemy-inspect-status" aria-label="Efeitos de estado"></div>
@@ -8913,6 +8914,11 @@ function render(): void {
     model.applyDevSandboxBuffs();
   }
   syncPauseMenuWithGamePhase();
+  /** Canvas WebGL dentro de `uiRoot` — evitar `innerHTML` noutra fase sem `dispose` (context lost). */
+  if (model.phase !== "setup_biomes") {
+    disposeBiomePicker();
+    disposeBioHeroPreview();
+  }
   if (model.phase !== "shop_wave" && model.phase !== "shop_initial") {
     refreshGoldShop = null;
   }
@@ -8946,6 +8952,7 @@ function render(): void {
     removeEquipmentModal();
   }
   if (model.phase !== "combat") {
+    disposeEnemyInspectPreview();
     refreshCombatHud = null;
     combatCornerResizeObserver?.disconnect();
     combatCornerResizeObserver = null;

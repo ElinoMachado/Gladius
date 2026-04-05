@@ -13,3 +13,11 @@ globs: src/render/bunker*.ts,src/render/BunkerPreview3D.ts,src/render/HeroPrevie
 
 - `renderShop()` reconstrói o painel com `panel.innerHTML = ...`. Se o canvas do `WebGLRenderer` estiver **dentro** desse sub-árvore, o browser **destrói o canvas** e pode perder o contexto.
 - Antes de `innerHTML`, chamar `detachCanvasPreserveContext()` nos previews da loja (`BunkerPreview3D`, `HeroPreview3D` com layout de loja); depois do novo markup, `reattachToHost` + `start()`. Reciclar o **mesmo** renderer durante refreshes da loja; `dispose()` completo ao fechar a loja / sem anfitrião / mudança de layout (turntable vs solo).
+
+# Mudança de fase em `render()` (`main.ts`)
+
+- Qualquer `WebGLRenderer` cujo canvas viva **dentro de `uiRoot`** deve ser libertado **antes** de outro ecrã fazer `uiRoot.innerHTML`.
+- Em `render()`: se `phase !== "combat"` → `disposeEnemyInspectPreview()` (painel de inspeção de inimigo no HUD).
+- Se `phase !== "setup_biomes"` → `disposeBiomePicker()` + `disposeBioHeroPreview()` (evita ir para `setup_colors` ou outra fase com canvas do passo de biomas ainda no DOM).
+- `mountEnemyInspectPanelShell`: chamar `disposeEnemyInspectPreview()` no início (defesa se o painel for remontado).
+- Em `dispose()` dos mini-renderers, remover o canvas com `domElement.parentNode?.removeChild(...)` (não exigir `parentNode === host` — o canvas pode ter sido destacado antes de um `innerHTML`).

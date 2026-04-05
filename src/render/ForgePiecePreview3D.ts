@@ -231,8 +231,6 @@ export class ForgePiecePreview3D {
     this.pivot.clear();
     this.scene.clear();
     this.renderer.dispose();
-    if (this.renderer.domElement.parentNode === this.host) {
-      this.host.removeChild(this.renderer.domElement);
-    }
+    this.renderer.domElement.parentNode?.removeChild(this.renderer.domElement);
   }
 }

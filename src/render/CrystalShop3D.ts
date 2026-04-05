@@ -280,8 +280,6 @@ export class CrystalShop3D {
     this.root.clear();
     this.scene.fog = null;
     this.renderer.dispose();
-    if (this.renderer.domElement.parentNode === this.host) {
-      this.host.removeChild(this.renderer.domElement);
-    }
+    this.renderer.domElement.parentNode?.removeChild(this.renderer.domElement);
   }
 }
