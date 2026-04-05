@@ -123,7 +123,7 @@ export function createHeroUnit(
     penetracaoEscudo: 0,
     regenVida: t.regenVida,
     regenMana: t.regenMana,
-    alcance: t.alcance,
+    alcance: t.alcance + (meta.crystalAlcance ?? 0),
     lifesteal: 0,
     potencialCuraEscudo: mb.potencialCuraEscudo,
     sorte: baseSorte,

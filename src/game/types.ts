@@ -271,10 +271,19 @@ export interface MetaProgress {
   forgeByHeroSlot: [ForgeHeroLoadout, ForgeHeroLoadout, ForgeHeroLoadout];
   /** Nível da arma principal por slot de party (1–5). */
   weaponLevelByHeroSlot: [WeaponLevel, WeaponLevel, WeaponLevel];
+  /** 0–2: +N ataques básicos extra por turno (loja de cristais). */
+  crystalExtraBasic: number;
+  /** 0–2: +N alcance base (loja de cristais). */
+  crystalAlcance: number;
 }
 
 /** Nível máximo por trilho de meta na loja de cristais (dano, vida, etc.). */
 export const META_TRACK_MAX_LEVEL = 10;
+
+export const CRYSTAL_SHOP_EXTRA_BASIC_COST = 25;
+export const CRYSTAL_SHOP_EXTRA_BASIC_MAX = 2;
+export const CRYSTAL_SHOP_ALCANCE_COST = 50;
+export const CRYSTAL_SHOP_ALCANCE_MAX = 2;
 
 export const INITIAL_CARD_COSTS = [2, 5, 9] as const;
 

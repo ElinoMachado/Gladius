@@ -35,6 +35,10 @@ import {
   loadForgeEquipmentLayoutPrefs,
 } from "./render/forgeEquipmentLayoutPrefs";
 import {
+  CRYSTAL_SHOP_ALCANCE_COST,
+  CRYSTAL_SHOP_ALCANCE_MAX,
+  CRYSTAL_SHOP_EXTRA_BASIC_COST,
+  CRYSTAL_SHOP_EXTRA_BASIC_MAX,
   META_TRACK_MAX_LEVEL,
   type GamePhase,
   type HeroClassId,
@@ -2907,6 +2911,41 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
       if (model.buyMetaTrack(key)) render();
     });
   }
+
+  const exB = m.crystalExtraBasic ?? 0;
+  const exBCost =
+    exB < CRYSTAL_SHOP_EXTRA_BASIC_MAX ? CRYSTAL_SHOP_EXTRA_BASIC_COST : null;
+  const exBCanBuy = exBCost != null && m.crystals >= exBCost;
+  const exBBtn = exBCost != null ? `${exBCost} 💎` : "—";
+  const exBAria =
+    exBCost != null
+      ? `Comprar ataques extra por ${exBCost} cristais`
+      : "Número máximo de compras";
+  const exBDiv = el(
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Ataques extra: +1 · ${exB}/${CRYSTAL_SHOP_EXTRA_BASIC_MAX} compras${exBCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-crystal-extra-basic" ${!exBCanBuy ? "disabled" : ""} aria-label="${escapeHtml(exBAria)}">${exBBtn}</button></div>`,
+  );
+  grid.appendChild(exBDiv);
+  exBDiv.querySelector("#btn-crystal-extra-basic")!.addEventListener("click", () => {
+    if (model.buyCrystalShopExtraBasic()) render();
+  });
+
+  const alcN = m.crystalAlcance ?? 0;
+  const alcCost =
+    alcN < CRYSTAL_SHOP_ALCANCE_MAX ? CRYSTAL_SHOP_ALCANCE_COST : null;
+  const alcCanBuy = alcCost != null && m.crystals >= alcCost;
+  const alcBtn = alcCost != null ? `${alcCost} 💎` : "—";
+  const alcAria =
+    alcCost != null
+      ? `Comprar alcance por ${alcCost} cristais`
+      : "Número máximo de compras";
+  const alcDiv = el(
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Alcance: +1 · ${alcN}/${CRYSTAL_SHOP_ALCANCE_MAX} compras${alcCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-crystal-alcance" ${!alcCanBuy ? "disabled" : ""} aria-label="${escapeHtml(alcAria)}">${alcBtn}</button></div>`,
+  );
+  grid.appendChild(alcDiv);
+  alcDiv.querySelector("#btn-crystal-alcance")!.addEventListener("click", () => {
+    if (model.buyCrystalShopAlcance()) render();
+  });
+
   const ic = m.initialCards;
   const icCost = nextInitialCardCost(ic);
   const icCanBuy = icCost != null && m.crystals >= icCost;

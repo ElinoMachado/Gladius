@@ -6,7 +6,12 @@ import type {
   WeaponLevel,
 } from "./types";
 import { normalizeWeaponLevel } from "./weaponData";
-import { INITIAL_CARD_COSTS, META_TRACK_MAX_LEVEL } from "./types";
+import {
+  CRYSTAL_SHOP_ALCANCE_MAX,
+  CRYSTAL_SHOP_EXTRA_BASIC_MAX,
+  INITIAL_CARD_COSTS,
+  META_TRACK_MAX_LEVEL,
+} from "./types";
 import { COMBAT_BIOMES } from "./data/biomes";
 import {
   normalizeForgeMeta,
@@ -155,6 +160,8 @@ export const defaultMeta = (): MetaProgress => ({
   forgeGlobalProgress: {},
   forgeByHeroSlot: [emptyForgeSlot(), emptyForgeSlot(), emptyForgeSlot()],
   weaponLevelByHeroSlot: [1, 1, 1],
+  crystalExtraBasic: 0,
+  crystalAlcance: 0,
 });
 
 function applyTestForgeEssences(
@@ -191,6 +198,17 @@ function clampPermTrackLevel(n: unknown): number {
   return Math.max(0, Math.min(META_TRACK_MAX_LEVEL, Math.floor(x)));
 }
 
+function clampCrystalShopPair(n: unknown, max: number): number {
+  const x =
+    typeof n === "number"
+      ? n
+      : typeof n === "string"
+        ? Number(n)
+        : NaN;
+  if (!Number.isFinite(x)) return 0;
+  return Math.max(0, Math.min(max, Math.floor(x)));
+}
+
 function buildMetaFromMainBlob(raw: string): MetaProgress {
   const o = JSON.parse(raw) as MetaProgress;
   const d = defaultMeta();
@@ -204,6 +222,14 @@ function buildMetaFromMainBlob(raw: string): MetaProgress {
     permXp: clampPermTrackLevel(o.permXp),
     permGold: clampPermTrackLevel(o.permGold),
     permCrystalDrop: clampPermTrackLevel(o.permCrystalDrop),
+    crystalExtraBasic: clampCrystalShopPair(
+      o.crystalExtraBasic,
+      CRYSTAL_SHOP_EXTRA_BASIC_MAX,
+    ),
+    crystalAlcance: clampCrystalShopPair(
+      o.crystalAlcance,
+      CRYSTAL_SHOP_ALCANCE_MAX,
+    ),
     artifactRerollBonus: clampMeta03(o.artifactRerollBonus),
     artifactBanBonus: clampMeta03(o.artifactBanBonus),
     essences: mergeEssencesFromSave(o.essences, d.essences),

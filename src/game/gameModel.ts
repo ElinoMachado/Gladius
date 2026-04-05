@@ -14,6 +14,10 @@ import {
   ARTIFACT_PICK_PAID_CHARGES_MAX,
   ARTIFACT_PICK_PAID_CRYSTAL_COST,
   ARTIFACT_REROLL_BONUS_COSTS,
+  CRYSTAL_SHOP_ALCANCE_COST,
+  CRYSTAL_SHOP_ALCANCE_MAX,
+  CRYSTAL_SHOP_EXTRA_BASIC_COST,
+  CRYSTAL_SHOP_EXTRA_BASIC_MAX,
   META_TRACK_MAX_LEVEL,
 } from "./types";
 import {
@@ -2980,9 +2984,10 @@ export class GameModel {
     );
   }
 
-  /** Ataques básicos permitidos por turno (base 1 + braço forte + helmo rochoso). */
+  /** Ataques básicos permitidos por turno (base 1 + braço forte + helmo rochoso + loja de cristais). */
   maxBasicAttacksForHero(h: Unit): number {
     let cap = 1 + (h.artifacts["braco_forte"] ?? 0);
+    cap += this.meta.crystalExtraBasic ?? 0;
     const rh = getForgeLevel(h.forgeLoadout, "helmo", "rochoso");
     if (rh === 1 || rh === 2 || rh === 3) cap += rh;
     cap += bravuraInstancesCount(h);
@@ -6183,6 +6188,26 @@ export class GameModel {
     if (this.meta.crystals < cost) return false;
     this.meta.crystals -= cost;
     this.meta[track]++;
+    this.saveMeta();
+    return true;
+  }
+
+  buyCrystalShopExtraBasic(): boolean {
+    const cur = this.meta.crystalExtraBasic ?? 0;
+    if (cur >= CRYSTAL_SHOP_EXTRA_BASIC_MAX) return false;
+    if (this.meta.crystals < CRYSTAL_SHOP_EXTRA_BASIC_COST) return false;
+    this.meta.crystals -= CRYSTAL_SHOP_EXTRA_BASIC_COST;
+    this.meta.crystalExtraBasic = cur + 1;
+    this.saveMeta();
+    return true;
+  }
+
+  buyCrystalShopAlcance(): boolean {
+    const cur = this.meta.crystalAlcance ?? 0;
+    if (cur >= CRYSTAL_SHOP_ALCANCE_MAX) return false;
+    if (this.meta.crystals < CRYSTAL_SHOP_ALCANCE_COST) return false;
+    this.meta.crystals -= CRYSTAL_SHOP_ALCANCE_COST;
+    this.meta.crystalAlcance = cur + 1;
     this.saveMeta();
     return true;
   }
