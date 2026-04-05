@@ -38,6 +38,8 @@ import {
 import { heroHitReactClipName, heroRunClipName } from "../game/heroCombatAnimMs";
 import {
   createBunkerVisualGroup,
+  disposeBunkerMountGroup,
+  disposeBunkerVisualRoot,
   type BunkerRenderTier,
 } from "./bunkerMesh";
 import {
@@ -3774,7 +3776,7 @@ export class GameRenderer {
     if (!show || !bunkers || bunkers.length === 0) {
       for (const root of this.bunkerRoots.values()) {
         this.arenaRoot.remove(root);
-        this.disposeObject3D(root);
+        disposeBunkerMountGroup(root);
       }
       this.bunkerRoots.clear();
       this.bunkerHitFlashUntil.clear();
@@ -3787,7 +3789,7 @@ export class GameRenderer {
     for (const [k, root] of this.bunkerRoots) {
       if (!want.has(k)) {
         this.arenaRoot.remove(root);
-        this.disposeObject3D(root);
+        disposeBunkerMountGroup(root);
         this.bunkerRoots.delete(k);
         this.bunkerHitFlashUntil.delete(k);
       }
@@ -3832,7 +3834,7 @@ export class GameRenderer {
           const oldV = root.userData.bunkerVisual as THREE.Group | undefined;
           if (oldV) {
             root.remove(oldV);
-            this.disposeObject3D(oldV);
+            disposeBunkerVisualRoot(oldV);
           }
           const vis = createBunkerVisualGroup(visualTier);
           root.add(vis);
@@ -5210,7 +5212,7 @@ export class GameRenderer {
     const oldV = hit.userData.bunkerVisual as THREE.Group | undefined;
     if (oldV) {
       hit.remove(oldV);
-      this.disposeObject3D(oldV);
+      disposeBunkerVisualRoot(oldV);
     }
     const vis = createBunkerVisualGroup(t);
     hit.add(vis);

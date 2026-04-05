@@ -1,16 +1,9 @@
 import * as THREE from "three";
-import { createBunkerVisualGroup, type BunkerRenderTier } from "./bunkerMesh";
-
-function disposeObject3D(o: THREE.Object3D): void {
-  o.traverse((obj) => {
-    if (obj instanceof THREE.Mesh) {
-      obj.geometry.dispose();
-      const m = obj.material;
-      if (Array.isArray(m)) m.forEach((x) => x.dispose());
-      else m.dispose();
-    }
-  });
-}
+import {
+  createBunkerVisualGroup,
+  disposeBunkerVisualRoot,
+  type BunkerRenderTier,
+} from "./bunkerMesh";
 
 /** Pivot da rotação Y — sobe o conjunto no canvas da loja. */
 const BUNKER_PREVIEW_ROOT_Y = 0.42;
@@ -68,7 +61,7 @@ export class BunkerPreview3D {
   setTier(tier: BunkerRenderTier): void {
     if (this.previewTier !== tier) {
       this.root.remove(this.bunkerModel);
-      disposeObject3D(this.bunkerModel);
+      disposeBunkerVisualRoot(this.bunkerModel);
       this.bunkerModel = createBunkerVisualGroup(tier);
       this.root.add(this.bunkerModel);
       this.previewTier = tier;
@@ -131,7 +124,7 @@ export class BunkerPreview3D {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.stop();
-    disposeObject3D(this.root);
+    disposeBunkerVisualRoot(this.bunkerModel);
     this.root.clear();
     this.scene.clear();
     this.renderer.dispose();

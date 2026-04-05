@@ -96,3 +96,87 @@ export function createBunkerVisualGroup(tier: BunkerRenderTier = 0): THREE.Group
   p.userData.bunkerGlb = false;
   return p;
 }
+
+/**
+ * `cloneBunkerGlbForTier` faz `material.clone()` mas as **Texture** continuam a ser as mesmas
+ * instâncias que o template em cache (`bunkerGlbLoader.templates`). Um `material.dispose()` normal
+ * liberta essas texturas na GPU e corrompe todos os bunkers + o próximo clone → perda de contexto WebGL.
+ */
+function detachSharedTextureMapsFromStandardLike(
+  mat: THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial,
+): void {
+  const keys = [
+    "map",
+    "normalMap",
+    "roughnessMap",
+    "metalnessMap",
+    "aoMap",
+    "emissiveMap",
+    "alphaMap",
+    "bumpMap",
+    "displacementMap",
+    "lightMap",
+  ] as const;
+  const rec = mat as unknown as Record<string, unknown>;
+  for (const key of keys) {
+    const v = rec[key];
+    if (v instanceof THREE.Texture) rec[key] = null;
+  }
+  if (mat instanceof THREE.MeshPhysicalMaterial) {
+    mat.clearcoatNormalMap = null;
+    mat.clearcoatMap = null;
+    mat.sheenColorMap = null;
+    mat.sheenRoughnessMap = null;
+    mat.iridescenceMap = null;
+    mat.iridescenceThicknessMap = null;
+    mat.thicknessMap = null;
+    mat.anisotropyMap = null;
+    mat.transmissionMap = null;
+  }
+}
+
+/**
+ * Liberta um visual devolvido por `createBunkerVisualGroup` (GLB ou procedural).
+ * GLB: geometrias próprias do clone + `material.dispose()` **sem** tocar nas texturas partilhadas.
+ */
+export function disposeBunkerVisualRoot(root: THREE.Object3D): void {
+  const isGlb = root.userData?.bunkerGlb === true;
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    obj.geometry?.dispose();
+    const m = obj.material;
+    const mats: THREE.Material[] = Array.isArray(m) ? [...m] : m ? [m] : [];
+    if (!isGlb) {
+      for (const mat of mats) mat.dispose();
+      return;
+    }
+    for (const mat of mats) {
+      if (
+        mat instanceof THREE.MeshStandardMaterial ||
+        mat instanceof THREE.MeshPhysicalMaterial
+      ) {
+        detachSharedTextureMapsFromStandardLike(mat);
+        mat.dispose();
+      }
+    }
+  });
+}
+
+/** Grupo de montagem da arena: mesh GLB + cilindro de raycast invisível. */
+export function disposeBunkerMountGroup(mount: THREE.Group): void {
+  const vis = mount.userData?.bunkerVisual as THREE.Group | undefined;
+  if (vis) {
+    disposeBunkerVisualRoot(vis);
+    mount.remove(vis);
+    mount.userData.bunkerVisual = undefined;
+  }
+  const pick = mount.userData?.bunkerRayPick as THREE.Mesh | undefined;
+  if (pick) {
+    pick.geometry?.dispose();
+    const pm = pick.material;
+    if (Array.isArray(pm)) pm.forEach((x) => x.dispose());
+    else (pm as THREE.Material | undefined)?.dispose();
+    mount.remove(pick);
+    mount.userData.bunkerRayPick = undefined;
+  }
+}
