@@ -2920,9 +2920,9 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
   const exBAria =
     exBCost != null
       ? `Comprar ataques extra por ${exBCost} cristais`
-      : "Número máximo de compras";
+      : "Limite máximo";
   const exBDiv = el(
-    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Ataques extra: +1 · ${exB}/${CRYSTAL_SHOP_EXTRA_BASIC_MAX} compras${exBCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-crystal-extra-basic" ${!exBCanBuy ? "disabled" : ""} aria-label="${escapeHtml(exBAria)}">${exBBtn}</button></div>`,
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Ataques extra: +1 · ${exB}/${CRYSTAL_SHOP_EXTRA_BASIC_MAX}${exBCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-crystal-extra-basic" ${!exBCanBuy ? "disabled" : ""} aria-label="${escapeHtml(exBAria)}">${exBBtn}</button></div>`,
   );
   grid.appendChild(exBDiv);
   exBDiv.querySelector("#btn-crystal-extra-basic")!.addEventListener("click", () => {
@@ -2937,9 +2937,9 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
   const alcAria =
     alcCost != null
       ? `Comprar alcance por ${alcCost} cristais`
-      : "Número máximo de compras";
+      : "Limite máximo";
   const alcDiv = el(
-    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Alcance: +1 · ${alcN}/${CRYSTAL_SHOP_ALCANCE_MAX} compras${alcCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-crystal-alcance" ${!alcCanBuy ? "disabled" : ""} aria-label="${escapeHtml(alcAria)}">${alcBtn}</button></div>`,
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Alcance: +1 · ${alcN}/${CRYSTAL_SHOP_ALCANCE_MAX}${alcCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-crystal-alcance" ${!alcCanBuy ? "disabled" : ""} aria-label="${escapeHtml(alcAria)}">${alcBtn}</button></div>`,
   );
   grid.appendChild(alcDiv);
   alcDiv.querySelector("#btn-crystal-alcance")!.addEventListener("click", () => {
@@ -2953,8 +2953,8 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
   const icAria =
     icCost != null
       ? `Comprar por ${icCost} cristais`
-      : "Número máximo de compras";
-  const icDiv = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Escolha de artefatos: +1 · ${ic}/3 compras${icCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-ic" ${!icCanBuy ? "disabled" : ""} aria-label="${escapeHtml(icAria)}">${icBtnLabel}</button></div>`);
+      : "Limite máximo";
+  const icDiv = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Escolha de artefatos: +1 · ${ic}/3${icCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-ic" ${!icCanBuy ? "disabled" : ""} aria-label="${escapeHtml(icAria)}">${icBtnLabel}</button></div>`);
   grid.appendChild(icDiv);
   icDiv.querySelector("#btn-ic")!.addEventListener("click", () => {
     if (model.buyInitialCards()) render();
@@ -2967,9 +2967,9 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
   const rrBonusAria =
     rrBonusCost != null
       ? `Comprar reroll extra por ${rrBonusCost} cristais`
-      : "Número máximo de compras";
+      : "Limite máximo";
   const rrDiv = el(
-    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Reroll: +1 · ${rrBonus}/3 compras${rrBonusCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-artifact-rr-bonus" ${!rrBonusCanBuy ? "disabled" : ""} aria-label="${escapeHtml(rrBonusAria)}">${rrBonusBtn}</button></div>`,
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Reroll: +1 · ${rrBonus}/3${rrBonusCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-artifact-rr-bonus" ${!rrBonusCanBuy ? "disabled" : ""} aria-label="${escapeHtml(rrBonusAria)}">${rrBonusBtn}</button></div>`,
   );
   grid.appendChild(rrDiv);
   rrDiv.querySelector("#btn-artifact-rr-bonus")!.addEventListener("click", () => {
@@ -2983,9 +2983,9 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
   const banBonusAria =
     banBonusCost != null
       ? `Comprar banimento extra por ${banBonusCost} cristais`
-      : "Número máximo de compras";
+      : "Limite máximo";
   const banDiv = el(
-    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Banimentos: +1 · ${banBonus}/3 compras${banBonusCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-artifact-ban-bonus" ${!banBonusCanBuy ? "disabled" : ""} aria-label="${escapeHtml(banBonusAria)}">${banBonusBtn}</button></div>`,
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Banimentos: +1 · ${banBonus}/3${banBonusCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-artifact-ban-bonus" ${!banBonusCanBuy ? "disabled" : ""} aria-label="${escapeHtml(banBonusAria)}">${banBonusBtn}</button></div>`,
   );
   grid.appendChild(banDiv);
   banDiv.querySelector("#btn-artifact-ban-bonus")!.addEventListener("click", () => {
