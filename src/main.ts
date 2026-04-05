@@ -919,6 +919,37 @@ let combatSandboxPanelVisible =
   typeof sessionStorage !== "undefined" &&
   sessionStorage.getItem(SANDBOX_PANEL_VISIBLE_KEY) !== "0";
 
+/** Filtro da grelha de artefatos no painel sandbox (combate); persiste entre re-renders. */
+let combatSandboxArtifactSearchQuery = "";
+
+function stripDiacriticsForSearch(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function normalizeArtifactSearchKey(s: string): string {
+  return stripDiacriticsForSearch(s.trim().toLowerCase())
+    .replace(/[^a-z0-9]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function artifactSandboxSearchBlob(name: string, id: string): string {
+  return normalizeArtifactSearchKey(`${name} ${id.replace(/_/g, " ")}`);
+}
+
+function applyCombatSandboxArtifactFilter(
+  panel: HTMLElement,
+  rawQuery: string,
+): void {
+  const q = normalizeArtifactSearchKey(rawQuery);
+  panel.querySelectorAll("[data-sandbox-artifact]").forEach((node) => {
+    const btn = node as HTMLElement;
+    const blob = btn.dataset.artifactSearchBlob ?? "";
+    (btn as HTMLButtonElement).hidden =
+      q.length > 0 && !blob.includes(q);
+  });
+}
+
 function applyCombatSandboxPanelVisibility(): void {
   document
     .getElementById("combat-sandbox-panel")
@@ -3283,7 +3314,8 @@ function sandboxArtifactTilesHtml(h: Unit): string {
       const n = h.artifacts[a.id] ?? 0;
       const cap = getArtifactMaxStacks(a.id);
       const on = n > 0 ? " shop-sandbox-artifact--on" : "";
-      return `<button type="button" class="shop-sandbox-artifact ${artifactRarityClass(a.rarity)}${on}" data-sandbox-artifact="${escapeHtml(a.id)}" aria-label="${escapeHtml(`${a.name}, ${n} de ${cap} acúmulos. Esquerdo +1, direito −1. Paira para efeitos.`)}">
+      const blob = artifactSandboxSearchBlob(a.name, a.id);
+      return `<button type="button" class="shop-sandbox-artifact ${artifactRarityClass(a.rarity)}${on}" data-sandbox-artifact="${escapeHtml(a.id)}" data-artifact-search-blob="${escapeHtml(blob)}" aria-label="${escapeHtml(`${a.name}, ${n} de ${cap} acúmulos. Esquerdo +1, direito −1. Paira para efeitos.`)}">
       <span class="shop-sandbox-artifact__name">${escapeHtml(a.name)}</span>
       <span class="shop-sandbox-artifact__stack" aria-hidden="true">${n}/${cap}</span>
     </button>`;
@@ -3345,10 +3377,11 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     </section>
     <section class="shop-sandbox-artifacts combat-sandbox-artifacts" aria-label="Artefatos sandbox">
       <h3 class="shop-sandbox-artifacts__title">Artefatos</h3>
-      <p class="shop-sandbox-artifacts__hint">Esquerdo +1 · direito −1 · pairar para níveis.</p>
+      <p class="shop-sandbox-artifacts__hint">Esquerdo +1 · direito −1 · pairar para níveis. Pesquisa filtra a lista.</p>
       ${
         hero
-          ? `<div class="shop-sandbox-artifacts__grid combat-sandbox-artifacts__grid" role="group">${gridInner}</div>`
+          ? `<input type="search" id="combat-sandbox-artifact-search" class="combat-sandbox-artifact-search" placeholder="Pesquisar artefatos…" autocomplete="off" enterkeyhint="search" aria-label="Pesquisar artefatos por nome ou id" />
+      <div class="shop-sandbox-artifacts__grid combat-sandbox-artifacts__grid" role="group">${gridInner}</div>`
           : `<p class="combat-sandbox-panel__muted">Sem herói vivo.</p>`
       }
     </section>
@@ -3508,6 +3541,20 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     );
   }
   if (hero) {
+    const searchInp = panel.querySelector(
+      "#combat-sandbox-artifact-search",
+    ) as HTMLInputElement | null;
+    if (searchInp) {
+      searchInp.value = combatSandboxArtifactSearchQuery;
+      searchInp.addEventListener(
+        "input",
+        () => {
+          combatSandboxArtifactSearchQuery = searchInp.value;
+          applyCombatSandboxArtifactFilter(panel, combatSandboxArtifactSearchQuery);
+        },
+        { signal },
+      );
+    }
     panel.querySelectorAll("[data-sandbox-artifact]").forEach((node) => {
       const btn = node as HTMLElement;
       const artId = btn.dataset.sandboxArtifact;
@@ -3540,6 +3587,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
         return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--wide-artifact">${state}${flavor}${artifactCodexAllTiersHtml(artId, hNow ?? hero)}</div>`;
       });
     });
+    applyCombatSandboxArtifactFilter(panel, combatSandboxArtifactSearchQuery);
   }
 }
 

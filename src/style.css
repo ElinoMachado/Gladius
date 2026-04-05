@@ -9449,6 +9449,29 @@ select.forge-biome-sel option:disabled {
   flex-direction: column;
 }
 
+.combat-sandbox-artifact-search {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 0.35rem;
+  font: inherit;
+  font-size: 0.76rem;
+  padding: 0.28rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid rgba(120, 170, 220, 0.45);
+  background: rgba(16, 28, 44, 0.98);
+  color: #e8f4ff;
+}
+
+.combat-sandbox-artifact-search::placeholder {
+  color: rgba(180, 200, 230, 0.55);
+}
+
+.combat-sandbox-artifact-search:focus {
+  outline: none;
+  border-color: rgba(180, 210, 255, 0.75);
+  box-shadow: 0 0 0 1px rgba(120, 170, 255, 0.35);
+}
+
 .combat-sandbox-panel .combat-sandbox-artifacts__grid,
 .combat-sandbox-panel .shop-sandbox-artifacts__grid {
   max-height: min(52vh, 420px);
