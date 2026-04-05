@@ -2236,7 +2236,7 @@ export class GameModel {
     this.movementLeft = mov;
     this.basicAttacksSpentThisTurn = 0;
     this.syncBasicLeftFromSpent(h);
-    this.applyEspadaFogoEternoTurnStart(h);
+    this.prepareEspadaFogoEternoOrbitVisual(h);
     h.immobileThisTurn = true;
     if (h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos") {
       h.tiroDestruidorUsedThisTurn = false;
@@ -2259,6 +2259,7 @@ export class GameModel {
   endHeroTurn(): void {
     const h = this.currentHero();
     if (h) {
+      this.scheduleEspadaFogoEternoVolleyOnTurnEnd(h);
       delete h.espadaFogoOrbitVisualCount;
       clearBravuraInstances(h);
       if (!this.sandboxNoCdUltEnabled()) {
@@ -4297,11 +4298,28 @@ export class GameModel {
     return this.farthestEnemyMatching(hero, () => true);
   }
 
-  private applyEspadaFogoEternoTurnStart(h: Unit): void {
+  /**
+   * Início do turno: só VFX (lâminas a orbitar). O dano dispara em `scheduleEspadaFogoEternoVolleyOnTurnEnd`
+   * ao encerrar o turno — evita confusão com “nada acontece” e alinha ao fecho do turno do jogador.
+   */
+  private prepareEspadaFogoEternoOrbitVisual(h: Unit): void {
     if (this.phase !== "combat" || this.duel) return;
     const stacks = Math.min(3, h.artifacts["espada_fogo_eterno"] ?? 0);
     if (stacks <= 0 || h.hp <= 0) return;
-    const strikes = Math.max(1, this.maxBasicAttacksForHero(h) - 1);
+    if (!this.farthestEnemyToInHeroBiome(h)) return;
+    const strikes = Math.max(1, this.maxBasicAttacksForHero(h));
+    h.espadaFogoOrbitVisualCount = strikes;
+  }
+
+  /**
+   * Fim do turno do herói: rajada (1 lâmina por ataque básico permitido no turno, mín. 1).
+   * Corre antes de limpar Bravura para o número de golpes coincidir com o teto de básicos do turno.
+   */
+  private scheduleEspadaFogoEternoVolleyOnTurnEnd(h: Unit): void {
+    if (this.phase !== "combat" || this.duel) return;
+    const stacks = Math.min(3, h.artifacts["espada_fogo_eterno"] ?? 0);
+    if (stacks <= 0 || h.hp <= 0) return;
+    const strikes = Math.max(1, this.maxBasicAttacksForHero(h));
     const flat = 25 * stacks;
     const pct = 10 + 10 * stacks;
     const baseDano = heroDanoPlusRoninOverflow(h);
@@ -4309,7 +4327,6 @@ export class GameModel {
     if (raw <= 0) return;
     if (!this.farthestEnemyToInHeroBiome(h)) return;
 
-    h.espadaFogoOrbitVisualCount = strikes;
     this.log(
       `${h.name}: Espada do fogo eterno (${strikes} golpe(s), ${flat}+${pct}% dano base).`,
     );
@@ -6059,7 +6076,7 @@ export class GameModel {
         !this.inEnemyPhase &&
         !this.duel
       ) {
-        this.applyEspadaFogoEternoTurnStart(u);
+        this.prepareEspadaFogoEternoOrbitVisual(u);
       }
     }
     this.emit();

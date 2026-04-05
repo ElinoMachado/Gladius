@@ -264,7 +264,7 @@ export function describeArtifactAtStack(
     case "espada_fogo_eterno": {
       const flat = 25 * n;
       const pct = 10 + 10 * n;
-      return `No início do teu turno: ${flat}+${pct}% do teu dano base a cada golpe no inimigo mais distante no teu bioma (hub = todos). Golpes = ataques básicos extra (mín. 1).`;
+      return `Lâminas no início do turno; ao encerrares o turno: ${flat}+${pct}% do teu dano base por golpe no inimigo mais distante no teu bioma (hub = todos). Golpes = básicos permitidos no turno (mín. 1).`;
     }
     case "guerra_total": {
       const flat = [50, 120, 210][n - 1] ?? 210;
