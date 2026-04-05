@@ -164,6 +164,7 @@ import {
   SENTENCA_FIRST_DAMAGE_MS,
   SENTENCA_HEAL_AFTER_LAST_HIT_MS,
   SENTENCA_STAGGER_MS,
+  ESPADA_FOGO_STAGGER_MS,
   UNIT_MOVE_SEGMENT_MS,
 } from "./combatTiming";
 import {
@@ -249,6 +250,11 @@ export type CombatVfxHint =
       heroId: string;
       targetId: string;
       delayMs: number;
+    }
+  | {
+      kind: "espada_fogo_strike";
+      heroId: string;
+      targetId: string;
     };
 
 /** Id sintético para números flutuantes de dano no bunker (HUD / canvas). */
@@ -2219,6 +2225,7 @@ export class GameModel {
     this.movementLeft = mov;
     this.basicAttacksSpentThisTurn = 0;
     this.syncBasicLeftFromSpent(h);
+    this.applyEspadaFogoEternoTurnStart(h);
     h.immobileThisTurn = true;
     if (h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos") {
       h.tiroDestruidorUsedThisTurn = false;
@@ -2241,6 +2248,7 @@ export class GameModel {
   endHeroTurn(): void {
     const h = this.currentHero();
     if (h) {
+      delete h.espadaFogoOrbitVisualCount;
       clearBravuraInstances(h);
       if (!this.sandboxNoCdUltEnabled()) {
         for (const k of Object.keys(h.skillCd)) {
@@ -4238,6 +4246,69 @@ export class GameModel {
       }
     }
     return best;
+  }
+
+  /**
+   * Espada do fogo eterno: inimigo mais distante no bioma do hex do herói (hub = todos).
+   */
+  private farthestEnemyToInHeroBiome(hero: Unit): Unit | null {
+    const heroBio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
+    let best: Unit | null = null;
+    let d = -1;
+    for (const e of this.enemies()) {
+      if (e.hp <= 0) continue;
+      if (heroBio !== "hub") {
+        const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
+        if (eb !== heroBio) continue;
+      }
+      const dist = hexDistance({ q: hero.q, r: hero.r }, { q: e.q, r: e.r });
+      if (dist > d) {
+        d = dist;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  private applyEspadaFogoEternoTurnStart(h: Unit): void {
+    if (this.phase !== "combat" || this.duel) return;
+    const stacks = Math.min(3, h.artifacts["espada_fogo_eterno"] ?? 0);
+    if (stacks <= 0 || h.hp <= 0) return;
+    const strikes = Math.max(1, this.maxBasicAttacksForHero(h) - 1);
+    const flat = 25 * stacks;
+    const pct = 10 + 10 * stacks;
+    const baseDano = heroDanoPlusRoninOverflow(h);
+    const raw = roundToCombatDecimals(flat + baseDano * (pct / 100));
+    if (raw <= 0) return;
+    if (!this.farthestEnemyToInHeroBiome(h)) return;
+
+    h.espadaFogoOrbitVisualCount = strikes;
+    this.log(
+      `${h.name}: Espada do fogo eterno (${strikes} golpe(s), ${flat}+${pct}% dano base).`,
+    );
+
+    for (let i = 0; i < strikes; i++) {
+      this.queueCombat(i * ESPADA_FOGO_STAGGER_MS, () => {
+        const att = this.units.find((u) => u.id === h.id);
+        if (!att || att.hp <= 0 || this.phase !== "combat" || this.duel) return;
+        const tgt = this.farthestEnemyToInHeroBiome(att);
+        if (!tgt || tgt.hp <= 0) return;
+        att.espadaFogoOrbitVisualCount = Math.max(0, strikes - i - 1);
+        this.pendingCombatVfxQueue.push({
+          kind: "espada_fogo_strike",
+          heroId: att.id,
+          targetId: tgt.id,
+        });
+        this.dealDamage(att, tgt, raw, false, true, false, {
+          suppressOnHitArtifacts: true,
+        });
+        this.flushCombatLevelUp(att);
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
+      });
+    }
   }
 
   /**
