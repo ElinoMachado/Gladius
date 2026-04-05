@@ -482,7 +482,7 @@ export class GameModel {
   private skipDeslumbroDecayAfterCometaOnce = false;
   /** Mensagem única (ex.: reentrada no bunker) consumida pela UI. */
   pendingBunkerHint: { text: string; q: number; r: number } | null = null;
-  /** Mensagem única de movimento bloqueado (2+ inimigos adjacentes), consumida pela UI. */
+  /** Mensagem única de movimento bloqueado (embosca: N+ inimigos adjacentes no chão), consumida pela UI. */
   private pendingMoveBlockedHint: { text: string; unitId: string } | null = null;
   /** Último inimigo que agiu (foco de câmera / HUD). */
   lastEnemyActedId: string | null = null;
@@ -2783,10 +2783,11 @@ export class GameModel {
         adjEnemy++;
       }
     }
-    /* No chão: cerco por 2+ adjacentes impede sair; em voo isso não aplica. */
-    if (!h.flying && adjEnemy >= 2) {
+    /* No chão: embosca — N+ adjacentes bloqueiam movimento (N = 2 + acúmulos de Esguio); em voo não aplica. */
+    const ambushNeed = 2 + (h.artifacts["sorte_prata"] ?? 0);
+    if (!h.flying && adjEnemy >= ambushNeed) {
       this.pendingMoveBlockedHint = {
-        text: "2 ou mais inimigos me bloqueiam! Preciso me livrar deles!",
+        text: `${ambushNeed} ou mais inimigos adjacentes me bloqueiam (embosca)! Preciso me livrar deles!`,
         unitId: h.id,
       };
       this.emit();

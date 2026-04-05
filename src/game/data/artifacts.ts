@@ -260,10 +260,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "sorte_prata",
-    name: "Sorte de prata",
+    name: "Esguio",
     rarity: "rare",
-    description: "+6 de sorte por acúmulo.",
-    pickBonusPerStack: { sorte: 6 },
+    description:
+      "Embosca: no chão, com 2 ou mais inimigos adjacentes o movimento fica bloqueado. Cada acúmulo exige +1 inimigo adjacente para isso (máx. 3 acúmulos).",
   },
 
   /* ——— Lendários (8) ——— */

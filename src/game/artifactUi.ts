@@ -74,6 +74,7 @@ const SPECIAL_MAX: Record<string, number> = {
   fio_cruel: 10,
   crystal_extra: 4,
   passo_gigante: 3,
+  sorte_prata: 3,
   martelo_juiz: 3,
   muralha_verdade: 3,
   manto_espectral: 5,
@@ -289,6 +290,10 @@ export function describeArtifactAtStack(
     case "passo_gigante": {
       const eff = Math.min(n, 3);
       return `+${eff} movimento (máx. 3 com efeito).`;
+    }
+    case "sorte_prata": {
+      const need = 2 + n;
+      return `Embosca: precisas de ${need} ou mais inimigos adjacentes no chão para o movimento ser bloqueado (+${n} face ao mínimo de 2).`;
     }
     case "_pick_gold":
       return "+50 ouro na bolsa.";
