@@ -2987,6 +2987,12 @@ function showHeroSetup(): void {
       `;
     }
   }
+  /* Host `.hero-slot-model-host` pode medir 0 no 1.º frame (flex); 2.º rAF alinha buffer + redraw. */
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      for (const p of heroSetupPreviewInstances) p.refit();
+    });
+  });
   s.querySelector("#btn-next")!.addEventListener("click", () => {
     if (selectedHeroes().length < 1) return;
     setup.biomes = [];
@@ -3065,6 +3071,9 @@ function showBiomeSetup(): void {
     forgeBio,
   );
   bioHeroPreview.start();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => bioHeroPreview?.refit());
+  });
 
   const canvas = s.querySelector("#biome-picker-canvas") as HTMLCanvasElement;
   const descTitle = s.querySelector("#bio-desc-title") as HTMLElement;

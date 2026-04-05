@@ -102,7 +102,12 @@ export class HeroPreview3D {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(h, 1);
     this.camera.updateProjectionMatrix();
-    if (this.running) this.renderer.render(this.scene, this.camera);
+    /* Com `running === false` (antes de `start()`), não havia nenhum frame —
+     * no setup de heróis o host tem fundo escuro → quadro “preto” até o RAF do loop.
+     * Renderizar sempre que já houver modelo no pivot evita flash e cartão permanentemente escuro. */
+    if (this.running || this.pivot.children.length > 0) {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
   setHero(
@@ -120,6 +125,12 @@ export class HeroPreview3D {
     this.previewBody = body;
     this.pivot.add(body);
     this.pivot.rotation.y = 0.35;
+    this.fitViewport();
+  }
+
+  /** Após layout (flex/grid): host pode ter tamanho 0 no 1.º frame; chamar no próximo rAF. */
+  refit(): void {
+    this.fitViewport();
   }
 
   start(): void {

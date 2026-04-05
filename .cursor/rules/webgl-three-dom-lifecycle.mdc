@@ -1,5 +1,5 @@
 ---
-description: WebGL/Three.js — ciclo de vida, innerHTML e partilha de recursos GPU (evitar context lost)
+description: WebGL/Three.js — ciclo de vida, innerHTML, previews em UI e partilha GPU (evitar context lost / flash)
 alwaysApply: true
 ---
 
@@ -13,6 +13,15 @@ Ao adicionar ou alterar ecrãs com `WebGLRenderer` (Three.js, R3F com canvas pr�
 - **Antes** de limpar o DOM: `renderer.dispose()` **ou** (para reciclar o mesmo renderer) **desanexar** o canvas do pai (`removeChild` / `remove()`) **sem** `dispose`, reconstruir o HTML, voltar a `appendChild` no novo host e `setSize` / retomar o loop.
 - Em **mudanças de rota/fase** (SPA, máquina de estados do jogo): garantir dispose/detach nos pontos centrais de transição, não só nos botões “Fechar”, para não ficar canvas vivo quando outro ecrã faz `uiRoot.innerHTML = ""`.
 
+## Previews dentro de cartões / lista (ex.: escolha de herói)
+
+Sintomas: área do canvas **permanentemente escura** (só se vê o fundo CSS do container) ou **piscar** ao mudar opção / re-render.
+
+- **Sem frame antes do loop:** Se `resize` / `fit` só chamam `renderer.render` quando `requestAnimationFrame` do jogo já está a correr, entre `setHero`/`setMesh` e o **primeiro** `start()` o buffer pode estar vazio; com `alpha: true` vê-se só o fundo escuro do cartão → parece “buraco preto”.
+- **Correção:** Depois de popular a cena, fazer **pelo menos um** `render` síncrono (ex.: no fim de `setHero` ou em `fitViewport` quando `scene` já tem conteúdo), não apenas quando `running === true`.
+- **Host com largura/altura 0:** Em flex/grid o `clientWidth`/`clientHeight` do anfitrião pode ser **0** no primeiro frame; `setSize` fica mínimo e o modelo “desaparece” ou escala mal. Usar `requestAnimationFrame` (às vezes **dois** em cascata) após montar o DOM e voltar a medir + `setSize` + `render`.
+- **“Piscar” ao trocar estado:** Reconstruir o DOM inteiro + novo renderer a cada mudança de `<select>` causa dispose/create repetidos; preferir reciclar renderer (detach/reattach) ou um único render inicial estável para reduzir flashes.
+
 ## `dispose()` e recursos partilhados
 
 - Clones de GLB com `material.clone()` podem **partilhar as mesmas `Texture`** que o modelo em cache. `material.dispose()` num clone pode libertar texturas ainda usadas por outros meshes → corrupção e context lost.
@@ -25,5 +34,10 @@ Ao adicionar ou alterar ecrãs com `WebGLRenderer` (Three.js, R3F com canvas pr�
 2. Onde a instância é criada e onde deve morrer (dispose / detach)?
 3. Há texturas ou materiais partilhados entre clones e cache?
 4. Transições de fase limpam **todos** os renderers que viviam no `uiRoot` (ou equivalente)?
+5. O preview faz **um render** após ter geometria, **antes** do loop contínuo? O host já tem tamanho estável (rAF extra se flex)?
 
 Em `dispose()`, remover o canvas com `domElement.parentNode?.removeChild(domElement)` em vez de exigir `parentNode === host` original (o canvas pode ter sido destacado antes).
+
+## Evolução desta regra
+
+Quando surgir novo bug (loja, setup, modais, outro preview), documentar aqui o **sintoma → causa → padrão de correção** em 1–3 linhas para cobrir mais casos automaticamente.
