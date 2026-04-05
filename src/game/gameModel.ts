@@ -168,6 +168,7 @@ import {
   BUNKER_FORTIFY_MIN_TIER,
   BUNKER_FORTIFY_SHIELD,
   type BunkerState,
+  effectiveBunkerTier,
   bunkerMinasCooldownWaves,
   bunkerMinasDamageMult,
   bunkerMinasMaxRing,
@@ -5865,7 +5866,7 @@ export class GameModel {
     if (biome === "hub") return false;
     const b = this.bunkers[biome];
     if (!b) return false;
-    if (b.tier < BUNKER_AUTO_REPAIR_MIN_TIER) return false;
+    if (effectiveBunkerTier(b) < BUNKER_AUTO_REPAIR_MIN_TIER) return false;
     if (b.autoRepairRank >= BUNKER_AUTO_REPAIR_MAX_RANK) return false;
     let cost = BUNKER_AUTO_REPAIR_GOLD;
     if (u.ultimateId === "estrategista_nato") cost = Math.ceil(cost * 0.5);
@@ -5886,7 +5887,7 @@ export class GameModel {
     if (biome === "hub") return false;
     const b = this.bunkers[biome];
     if (!b) return false;
-    if (b.tier < BUNKER_FORTIFY_MIN_TIER) return false;
+    if (effectiveBunkerTier(b) < BUNKER_FORTIFY_MIN_TIER) return false;
     if (b.fortifyBuysThisWave >= BUNKER_FORTIFY_MAX_BUYS_PER_WAVE)
       return false;
     let cost = BUNKER_FORTIFY_GOLD;
@@ -5909,7 +5910,7 @@ export class GameModel {
     if (biome === "hub") return false;
     const b = this.bunkers[biome];
     if (!b) return false;
-    const t = b.tier;
+    const t = effectiveBunkerTier(b);
     if (t >= 2) return false;
     const cost = BUNKER_EVOLVE_COSTS[t as 0 | 1];
     let c = cost;

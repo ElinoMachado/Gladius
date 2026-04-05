@@ -224,6 +224,7 @@ import {
   bunkerMinasMaxRing,
   bunkerStatsForTier,
   bunkerTiroCooldownWaves,
+  effectiveBunkerTier,
 } from "./game/bunker";
 import type { BunkerState } from "./game/bunker";
 import {
@@ -3753,13 +3754,17 @@ function showGoldShop(isInitial: boolean): void {
                 <div class="shop-viz-turntable-panel shop-viz-turntable-panel--bunker">
                   <div class="shop-bunker-viz shop-hero-viz" aria-label="Bunker da arena">
                     <p class="shop-viz-flip-entity-title">Bunker da arena</p>
-                    ${goldShopBunkerSectionHtml(bunkerShop)}
+                    ${goldShopBunkerSectionHtml(
+                      bunkerShop,
+                      h,
+                      `${bunkGridHidden}${bunkGridAria}`,
+                    )}
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <button type="button" class="shop-viz-flip-arrow" id="shop-viz-flip-toggle" aria-label="Mostrar bunker — reparar e evoluir na grelha abaixo">
+          <button type="button" class="shop-viz-flip-arrow" id="shop-viz-flip-toggle" aria-label="Mostrar bunker — melhorias de ouro no cartão (rolar se necessário)">
             <span class="shop-viz-flip-arrow__chevron" aria-hidden="true">→</span>
             <span class="shop-viz-flip-arrow__text">Bunker</span>
           </button>
@@ -3768,7 +3773,6 @@ function showGoldShop(isInitial: boolean): void {
         <div class="shop-mid-row">
           <div class="shop-mid-cell shop-mid-cell--gold">
             <div id="shop-grid-hero-gold" class="shop-grid"${heroGridHidden}${heroGridAria}>${list}</div>
-            <div id="shop-grid-bunker-gold" class="shop-grid shop-grid--bunker-buy"${bunkGridHidden}${bunkGridAria}>${goldShopBunkerBuyGridHtml(bunkerShop, h)}</div>
           </div>
         </div>`;
         })()
@@ -3849,19 +3853,21 @@ function showGoldShop(isInitial: boolean): void {
       });
     });
     const bEv = panel.querySelector("#gold-shop-bunk-evolve") as HTMLElement | null;
-    if (bEv && bunkerShop && bunkerShop.tier < 2) {
-      bindGameTooltip(bEv, () => bunkerEvolveTooltipHtml(bunkerShop.tier));
+    const bunkTierUi =
+      bunkerShop != null ? effectiveBunkerTier(bunkerShop) : 0;
+    if (bEv && bunkerShop && bunkTierUi < 2) {
+      bindGameTooltip(bEv, () => bunkerEvolveTooltipHtml(bunkTierUi));
     }
     const bAr = panel.querySelector(
       "#gold-shop-bunk-auto-reparo",
     ) as HTMLElement | null;
-    if (bAr && bunkerShop && bunkerShop.tier >= BUNKER_AUTO_REPAIR_MIN_TIER) {
+    if (bAr && bunkerShop && bunkTierUi >= BUNKER_AUTO_REPAIR_MIN_TIER) {
       bindGameTooltip(bAr, () => bunkerAutoReparoShopTooltipHtml(bunkerShop));
     }
     const bFo = panel.querySelector(
       "#gold-shop-bunk-fortificar",
     ) as HTMLElement | null;
-    if (bFo && bunkerShop && bunkerShop.tier >= BUNKER_FORTIFY_MIN_TIER) {
+    if (bFo && bunkerShop && bunkTierUi >= BUNKER_FORTIFY_MIN_TIER) {
       bindGameTooltip(bFo, () => bunkerFortificarShopTooltipHtml(bunkerShop));
     }
     panel.querySelectorAll(".shop-hero-gold-bag").forEach((node) => {
@@ -3887,7 +3893,7 @@ function showGoldShop(isInitial: boolean): void {
     const prevHost = panel.querySelector("#bunker-preview-host");
     if (prevHost && bunkerShop) {
       goldShopBunker3d = new BunkerPreview3D(prevHost as HTMLElement);
-      goldShopBunker3d.setTier(bunkerShop.tier);
+      goldShopBunker3d.setTier(effectiveBunkerTier(bunkerShop));
       goldShopBunker3d.start();
     }
     const hero3dHost = panel.querySelector("#gold-shop-hero-3d") as HTMLElement;
@@ -4857,7 +4863,7 @@ function goldShopBunkerBuyGridHtml(bunk: BunkerState, h: Unit): string {
   const missing = bunk.maxHp - bunk.hp;
   const repairCost = Math.ceil(missing);
   const canRepair = missing > 0 && h.ouro >= repairCost;
-  const t = bunk.tier;
+  const t = effectiveBunkerTier(bunk);
   const rawEv = t >= 2 ? 0 : BUNKER_EVOLVE_COSTS[t as 0 | 1] ?? 0;
   let evCost = rawEv;
   if (t < 2 && h.ultimateId === "estrategista_nato") {
@@ -4904,7 +4910,7 @@ function goldShopBunkerBuyGridHtml(bunk: BunkerState, h: Unit): string {
     `<button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-repair" data-gold-bunker-buy="repair" ${missing <= 0 || !canRepair ? "disabled" : ""} aria-label="${escapeHtml(repairLabel)}">${repairInner}</button>`,
     `<button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-evolve" data-gold-bunker-buy="evolve" ${evolveDisabled ? "disabled" : ""} aria-label="${escapeHtml(evolveLabel)}">${evolveInner}</button>`,
   ];
-  if (bunk.tier >= BUNKER_AUTO_REPAIR_MIN_TIER) {
+  if (t >= BUNKER_AUTO_REPAIR_MIN_TIER) {
     let arCost = BUNKER_AUTO_REPAIR_GOLD;
     if (h.ultimateId === "estrategista_nato") arCost = Math.ceil(arCost * 0.5);
     const arFull = bunk.autoRepairRank >= BUNKER_AUTO_REPAIR_MAX_RANK;
@@ -4926,7 +4932,7 @@ function goldShopBunkerBuyGridHtml(bunk: BunkerState, h: Unit): string {
       `<button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-auto-reparo" data-gold-bunker-buy="auto_reparo" ${arDisabled ? "disabled" : ""} aria-label="${escapeHtml(arLabel)}">${arInner}</button>`,
     );
   }
-  if (bunk.tier >= BUNKER_FORTIFY_MIN_TIER) {
+  if (t >= BUNKER_FORTIFY_MIN_TIER) {
     let foCost = BUNKER_FORTIFY_GOLD;
     if (h.ultimateId === "estrategista_nato") foCost = Math.ceil(foCost * 0.5);
     const foFull = bunk.fortifyBuysThisWave >= BUNKER_FORTIFY_MAX_BUYS_PER_WAVE;
@@ -4978,7 +4984,7 @@ function applyGoldShopVizFocus(panel: HTMLElement, hasBunker: boolean): void {
       "aria-label",
       bunker
         ? "Mostrar herói e melhorias do herói"
-        : "Mostrar bunker — melhorias na grelha abaixo",
+        : "Mostrar bunker — melhorias de ouro no cartão do bunker (rolar se necessário)",
     );
   }
 }
@@ -4990,7 +4996,7 @@ function mountGoldShopBunkerSkillsRow(
   m: GameModel,
 ): void {
   row.innerHTML = "";
-  const t = bunk.tier;
+  const t = effectiveBunkerTier(bunk);
   const tiroOk = t >= BUNKER_TIRO_MIN_TIER;
   const append = (html: string, tip: () => string): void => {
     const b = el(html);
@@ -5017,8 +5023,12 @@ function mountGoldShopBunkerSkillsRow(
   );
 }
 
-function goldShopBunkerSectionHtml(bunk: BunkerState): string {
-  const t = bunk.tier;
+function goldShopBunkerSectionHtml(
+  bunk: BunkerState,
+  h: Unit,
+  bunkerBuyGridAttrs: string,
+): string {
+  const t = effectiveBunkerTier(bunk);
   const disp = bunkerDisplayLevel(t);
   const nvStr = `${disp}/3`;
   return `<div class="shop-bunker-viz-layout">
@@ -5036,7 +5046,9 @@ function goldShopBunkerSectionHtml(bunk: BunkerState): string {
         <p class="shop-hero-stats-head shop-bunker-skills-block__head">Habilidades</p>
         <div id="gold-shop-bunker-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do bunker"></div>
       </div>
-      <p class="shop-bunker-viz-layout__hint">Reparar, evoluir, Auto reparo e Fortificar: grelha de compras com o bunker em primeiro plano (seta). Reparação = PV em falta. Evoluções: 300 / 500 ouro. Auto reparo (bunker nv. 2+): 50 ouro por nível, até 10 níveis (+2 PV por ciclo de turnos por nível). Fortificar (bunker nv. 3): 100 ouro por +100 escudo, até 5× por wave (escudo zera entre waves).</p>
+      <p class="shop-hero-stats-head shop-bunker-viz-layout__buy-head">Melhorias de ouro</p>
+      <div id="shop-grid-bunker-gold" class="shop-grid shop-grid--bunker-buy shop-grid--bunker-buy--in-card"${bunkerBuyGridAttrs}>${goldShopBunkerBuyGridHtml(bunk, h)}</div>
+      <p class="shop-bunker-viz-layout__hint">Reparação = PV em falta. Evoluções: 300 / 500 ouro. Auto reparo (bunker nv. 2+): 50 ouro por nível, até 10 níveis (+2 PV por ciclo de turnos por nível). Fortificar (bunker nv. 3): 100 ouro por +100 escudo, até 5× por wave (escudo zera entre waves).</p>
     </div>
   </div>`;
 }
@@ -5056,6 +5068,7 @@ interface HeroStatCell {
 }
 
 function bunkerShopStatCells(bunk: BunkerState): HeroStatCell[] {
+  const tierShop = effectiveBunkerTier(bunk);
   const hpDisp = `${tipInt(bunk.hp)}/${tipInt(bunk.maxHp)}`;
   const defDisp = tipInt(bunk.defesa);
   const cells: HeroStatCell[] = [
@@ -5080,7 +5093,7 @@ function bunkerShopStatCells(bunk: BunkerState): HeroStatCell[] {
       }),
     },
   ];
-  if (bunk.tier >= BUNKER_AUTO_REPAIR_MIN_TIER) {
+  if (tierShop >= BUNKER_AUTO_REPAIR_MIN_TIER) {
     const r = bunk.autoRepairRank;
     const perCiclo = r * BUNKER_AUTO_REPAIR_HP_PER_RANK;
     const arDisp = `${r}/${BUNKER_AUTO_REPAIR_MAX_RANK} · +${perCiclo}/ciclo`;
@@ -5092,7 +5105,7 @@ function bunkerShopStatCells(bunk: BunkerState): HeroStatCell[] {
       tooltipHtml: bunkerAutoReparoShopTooltipHtml(bunk),
     });
   }
-  if (bunk.tier >= BUNKER_FORTIFY_MIN_TIER) {
+  if (tierShop >= BUNKER_FORTIFY_MIN_TIER) {
     const foDisp = `${tipInt(bunk.fortifyShield)} · ${bunk.fortifyBuysThisWave}/${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE}`;
     cells.push({
       icon: "pen_escudo",

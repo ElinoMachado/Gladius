@@ -55,6 +55,20 @@ export function bunkerStatsForTier(tier: 0 | 1 | 2): { maxHp: number; defesa: nu
   return { maxHp: 140, defesa: 75 };
 }
 
+/**
+ * Nível usado em loja/regras quando `tier` está ausente ou incoerente com `maxHp`
+ * (ex.: dados antigos); infere pelo PV máximo esperado por nível.
+ */
+export function effectiveBunkerTier(b: BunkerState): 0 | 1 | 2 {
+  const raw = b.tier;
+  if (raw === 0 || raw === 1 || raw === 2) return raw;
+  const st2 = bunkerStatsForTier(2).maxHp;
+  const st1 = bunkerStatsForTier(1).maxHp;
+  if (b.maxHp >= st2 - 2) return 2;
+  if (b.maxHp >= st1 - 2) return 1;
+  return 0;
+}
+
 /** Multiplicador de dano do herói nas minas. */
 export function bunkerMinasDamageMult(tier: 0 | 1 | 2): number {
   if (tier >= 2) return 5;

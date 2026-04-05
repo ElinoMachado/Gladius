@@ -5910,6 +5910,16 @@ body.enemy-inspect--dragging-body {
   margin-bottom: 0.35rem;
 }
 
+.shop-bunker-viz-layout__buy-head {
+  margin-top: 0.55rem;
+  margin-bottom: 0.22rem;
+}
+
+.shop-grid.shop-grid--bunker-buy--in-card {
+  margin-top: 0;
+  margin-bottom: 0.4rem;
+}
+
 .shop-screen__panel--gold .gold-shop-bunker-skill--locked {
   opacity: 0.5;
   filter: grayscale(0.2);
