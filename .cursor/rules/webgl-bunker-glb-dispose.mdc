@@ -1,5 +1,6 @@
 ---
 description: Bunkers GLB (Three.js) — nunca libertar texturas partilhadas; loja não destruir canvas com innerHTML
+alwaysApply: true
 globs: src/render/bunker*.ts,src/render/BunkerPreview3D.ts,src/render/HeroPreview3D.ts,src/render/GameRenderer.ts,src/main.ts
 ---
 
