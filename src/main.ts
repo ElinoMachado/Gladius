@@ -1046,7 +1046,8 @@ function heroHasAnyEnabledCombatAction(m: GameModel, h: Unit): boolean {
       const cdT = sandboxCd ? 0 : (h.skillCd["bunker_tiro_preciso"] ?? 0);
       if (cdT <= 0) return true;
     }
-    return false;
+    if (h.heroClass !== "pistoleiro" && h.heroClass !== "sacerdotisa")
+      return false;
   }
 
   if (h.heroClass === "gladiador") {
@@ -4132,7 +4133,8 @@ function mountGoldShopHeroSkillsRow(
         );
       }
     }
-  } else {
+  }
+  if (!(inBunker && bunk)) {
     if (h.heroClass === "gladiador") {
       const inFuria = (h.furiaGiganteTurns ?? 0) > 0;
       if (inFuria) {
@@ -4213,45 +4215,93 @@ function mountGoldShopHeroSkillsRow(
         );
       }
     }
-
-    if (
-      h.heroClass === "sacerdotisa" ||
-      h.heroClass === "pistoleiro" ||
-      h.heroClass === "gladiador"
-    ) {
-      const cls = h.heroClass!;
-      const ready = m.sandboxNoCdUltEnabled() || h.weaponUltMeter >= 1;
-      const pct = Math.round(
-        m.sandboxNoCdUltEnabled() ? 100 : h.weaponUltMeter * 100,
-      );
-      const wname = weaponUltNamePt(cls);
-      const wid = weaponUltIconId(cls);
+  } else if (
+    h.heroClass === "pistoleiro" ||
+    h.heroClass === "sacerdotisa"
+  ) {
+    for (const sk of tmpl.skills) {
+      if (sk.id === "sentenca") {
+        const sm = sentencaManaCost(h.weaponLevel);
+        const cdS = cdEff(h.skillCd[sk.id] ?? 0);
+        append(
+          goldShopSkillChipHtml({
+            iconHtml: skillButtonIconHtml(sk.id),
+            manaBadge: manaCostBadgeText(sm),
+            ariaLabel: ariaSkillLabel(sk.name, cdS),
+            cdTurns: cdS > 0 ? cdS : undefined,
+          }),
+          () => tooltipSkillById(h, m, sk),
+        );
+        continue;
+      }
+      if (
+        sk.id === "atirar_todo_lado" &&
+        h.heroClass === "pistoleiro" &&
+        h.ultimateId === "arauto_caos"
+      ) {
+        const tiroSk = pistoleiroTiroDestruidorSkillDef();
+        const cdT = cdEff(h.skillCd["tiro_destruidor"] ?? 0);
+        append(
+          goldShopSkillChipHtml({
+            iconHtml: skillButtonIconHtml("tiro_destruidor"),
+            manaBadge: manaCostBadgeText(tiroSk.manaCost ?? 0),
+            ariaLabel: ariaSkillLabel(tiroSk.name, cdT),
+            cdTurns: cdT > 0 ? cdT : undefined,
+          }),
+          () => tooltipSkillById(h, m, tiroSk),
+        );
+        continue;
+      }
+      const cd = cdEff(h.skillCd[sk.id] ?? 0);
       append(
         goldShopSkillChipHtml({
-          iconHtml: skillButtonIconHtml(wid),
-          manaBadge: manaCostBadgeText(0),
-          ariaLabel: wname,
-          extraClass: `lol-skill-btn--weapon-ult ${ready ? "lol-skill-btn--weapon-ult--ready" : ""}`,
-          extraStyle: `--weapon-ult-pct:${pct}`,
-          ultFill: true,
+          iconHtml: skillButtonIconHtml(sk.id),
+          manaBadge: manaCostBadgeText(sk.manaCost ?? 0),
+          ariaLabel: ariaSkillLabel(sk.name, cd),
+          cdTurns: cd > 0 ? cd : undefined,
         }),
-        () => tooltipWeaponUltimate(h),
+        () => tooltipSkillById(h, m, sk),
       );
     }
+  }
 
-    if (h.ultimateId === "especialista_destruicao") {
-      const ult = HEROES.pistoleiro.ultimates.find(
-        (u) => u.id === "especialista_destruicao",
-      )!;
-      append(
-        goldShopSkillChipHtml({
-          iconHtml: skillButtonIconHtml("especialista_destruicao"),
-          manaBadge: manaCostBadgeText(0),
-          ariaLabel: ult.name,
-        }),
-        () => tooltipEspecialista(h, m),
-      );
-    }
+  if (
+    h.heroClass === "sacerdotisa" ||
+    h.heroClass === "pistoleiro" ||
+    h.heroClass === "gladiador"
+  ) {
+    const cls = h.heroClass!;
+    const ready = m.sandboxNoCdUltEnabled() || h.weaponUltMeter >= 1;
+    const pct = Math.round(
+      m.sandboxNoCdUltEnabled() ? 100 : h.weaponUltMeter * 100,
+    );
+    const wname = weaponUltNamePt(cls);
+    const wid = weaponUltIconId(cls);
+    append(
+      goldShopSkillChipHtml({
+        iconHtml: skillButtonIconHtml(wid),
+        manaBadge: manaCostBadgeText(0),
+        ariaLabel: wname,
+        extraClass: `lol-skill-btn--weapon-ult ${ready ? "lol-skill-btn--weapon-ult--ready" : ""}`,
+        extraStyle: `--weapon-ult-pct:${pct}`,
+        ultFill: true,
+      }),
+      () => tooltipWeaponUltimate(h),
+    );
+  }
+
+  if (h.ultimateId === "especialista_destruicao") {
+    const ult = HEROES.pistoleiro.ultimates.find(
+      (u) => u.id === "especialista_destruicao",
+    )!;
+    append(
+      goldShopSkillChipHtml({
+        iconHtml: skillButtonIconHtml("especialista_destruicao"),
+        manaBadge: manaCostBadgeText(0),
+        ariaLabel: ult.name,
+      }),
+      () => tooltipEspecialista(h, m),
+    );
   }
 }
 
@@ -7749,7 +7799,8 @@ function showCombatHUD(): void {
         });
         actionRow.appendChild(bTiro);
       }
-    } else {
+    }
+    if (!(inBunker && bunk)) {
       if (h.heroClass === "gladiador") {
         const inFuria = (h.furiaGiganteTurns ?? 0) > 0;
         if (inFuria) {
@@ -7867,80 +7918,143 @@ function showCombatHUD(): void {
           addSkillBtn(sk.id, sk.name, h.skillCd[sk.id] ?? 0, noMana, sk);
         }
       }
-
-      if (
-        h.heroClass === "sacerdotisa" ||
-        h.heroClass === "pistoleiro" ||
-        h.heroClass === "gladiador"
-      ) {
-        const cls = h.heroClass!;
-        const ready =
-          model.sandboxNoCdUltEnabled() || h.weaponUltMeter >= 1;
-        const pct = Math.round(
-          model.sandboxNoCdUltEnabled() ? 100 : h.weaponUltMeter * 100,
-        );
-        const keyU = hotkeys[hotkeyIdx++] ?? "T";
-        const wname = weaponUltNamePt(cls);
-        const wid = weaponUltIconId(cls);
-        const bWU = el(
-          combatSquareSkillHtml({
-            disabled: !isViewingActive || !ready,
-            iconHtml: skillButtonIconHtml(wid),
-            hotkey: keyU,
-            combatHotkey:
-              keyU.length === 1 && keyU !== "?" ? keyU.toLowerCase() : undefined,
-            manaBadge: manaCostBadgeText(0),
-            ariaLabel: wname,
-            extraClass: `lol-skill-btn--weapon-ult ${ready ? "lol-skill-btn--weapon-ult--ready" : ""}`,
-            extraStyle: `--weapon-ult-pct:${pct}`,
-            ultFill: true,
-          }),
-        );
-        bindGameTooltip(bWU, () => tooltipWeaponUltimate(h));
-        bWU.addEventListener("click", () => {
-          if (!isViewingActive || !ready) return;
-          if (!combatAbilityInputDebounce()) return;
-          if (model.tryWeaponUltimate()) {
-            resetCombatSelection();
-            resumeMovementPreviewAfterHeroAction();
-            refreshOverlays();
-            update();
-          }
-        });
-        actionRow.appendChild(bWU);
-      }
-
-      if (h.ultimateId === "especialista_destruicao") {
-        const ult = HEROES.pistoleiro.ultimates.find(
-          (u) => u.id === "especialista_destruicao",
-        )!;
-        const manaUlt = manaCostBadgeText(0);
-        const key = hotkeys[hotkeyIdx++] ?? "?";
-        const bu = el(
-          combatSquareSkillHtml({
-            disabled: !isViewingActive,
-            iconHtml: skillButtonIconHtml("especialista_destruicao"),
-            hotkey: key,
-            combatHotkey:
-              key.length === 1 && key !== "?" ? key.toLowerCase() : undefined,
-            manaBadge: manaUlt,
-            ariaLabel: ult.name,
-            selectKind: "skill",
-            selectId: "especialista_destruicao",
-          }),
-        );
-        bindGameTooltip(bu, () => tooltipEspecialista(h, model));
-        bu.addEventListener("click", () => {
-          if (!isViewingActive) return;
-          cancelPendingOrDebouncedActivate(bu, () => {
-            pendingCombat = { kind: "skill", id: "especialista_destruicao" };
-            movePreviewActive = false;
-            refreshOverlays();
-            update();
+    } else if (
+      h.heroClass === "pistoleiro" ||
+      h.heroClass === "sacerdotisa"
+    ) {
+      for (const sk of tmpl.skills) {
+        if (sk.id === "sentenca") {
+          const sm = sentencaManaCost(h.weaponLevel);
+          const cdS = model.sandboxNoCdUltEnabled()
+            ? 0
+            : (h.skillCd[sk.id] ?? 0);
+          const dis =
+            cdS > 0 || h.mana < sm || !isViewingActive;
+          const key = hotkeys[hotkeyIdx++] ?? "?";
+          const manaBadge = manaCostBadgeText(sm);
+          const b = el(
+            combatSquareSkillHtml({
+              disabled: dis,
+              iconHtml: skillButtonIconHtml(sk.id),
+              hotkey: key,
+              combatHotkey:
+                key.length === 1 && key !== "?"
+                  ? key.toLowerCase()
+                  : undefined,
+              manaBadge,
+              ariaLabel: ariaSkillLabel(sk.name, cdS),
+              cdTurns: cdS > 0 ? cdS : undefined,
+            }),
+          );
+          bindGameTooltip(b, () => tooltipSkillById(h, model, sk));
+          b.addEventListener("click", () => {
+            if (!isViewingActive) return;
+            if (!combatAbilityInputDebounce()) return;
+            if (model.trySkill("sentenca")) {
+              resetCombatSelection();
+              resumeMovementPreviewAfterHeroAction();
+              refreshOverlays();
+              update();
+            }
           });
-        });
-        actionRow.appendChild(bu);
+          actionRow.appendChild(b);
+          continue;
+        }
+        if (
+          sk.id === "atirar_todo_lado" &&
+          h.heroClass === "pistoleiro" &&
+          h.ultimateId === "arauto_caos"
+        ) {
+          const tiroSk = pistoleiroTiroDestruidorSkillDef();
+          const tiroCharges = h.tiroDestruidorCharges ?? 0;
+          const tiroNoCharges =
+            !model.devSandboxMode && tiroCharges < 1;
+          addSkillBtn(
+            "tiro_destruidor",
+            tiroSk.name,
+            h.skillCd["tiro_destruidor"] ?? 0,
+            tiroNoCharges,
+            tiroSk,
+          );
+          continue;
+        }
+        const noMana = false;
+        addSkillBtn(sk.id, sk.name, h.skillCd[sk.id] ?? 0, noMana, sk);
       }
+    }
+
+    if (
+      h.heroClass === "sacerdotisa" ||
+      h.heroClass === "pistoleiro" ||
+      h.heroClass === "gladiador"
+    ) {
+      const cls = h.heroClass!;
+      const ready =
+        model.sandboxNoCdUltEnabled() || h.weaponUltMeter >= 1;
+      const pct = Math.round(
+        model.sandboxNoCdUltEnabled() ? 100 : h.weaponUltMeter * 100,
+      );
+      const keyU = hotkeys[hotkeyIdx++] ?? "T";
+      const wname = weaponUltNamePt(cls);
+      const wid = weaponUltIconId(cls);
+      const bWU = el(
+        combatSquareSkillHtml({
+          disabled: !isViewingActive || !ready,
+          iconHtml: skillButtonIconHtml(wid),
+          hotkey: keyU,
+          combatHotkey:
+            keyU.length === 1 && keyU !== "?" ? keyU.toLowerCase() : undefined,
+          manaBadge: manaCostBadgeText(0),
+          ariaLabel: wname,
+          extraClass: `lol-skill-btn--weapon-ult ${ready ? "lol-skill-btn--weapon-ult--ready" : ""}`,
+          extraStyle: `--weapon-ult-pct:${pct}`,
+          ultFill: true,
+        }),
+      );
+      bindGameTooltip(bWU, () => tooltipWeaponUltimate(h));
+      bWU.addEventListener("click", () => {
+        if (!isViewingActive || !ready) return;
+        if (!combatAbilityInputDebounce()) return;
+        if (model.tryWeaponUltimate()) {
+          resetCombatSelection();
+          resumeMovementPreviewAfterHeroAction();
+          refreshOverlays();
+          update();
+        }
+      });
+      actionRow.appendChild(bWU);
+    }
+
+    if (h.ultimateId === "especialista_destruicao") {
+      const ult = HEROES.pistoleiro.ultimates.find(
+        (u) => u.id === "especialista_destruicao",
+      )!;
+      const manaUlt = manaCostBadgeText(0);
+      const key = hotkeys[hotkeyIdx++] ?? "?";
+      const bu = el(
+        combatSquareSkillHtml({
+          disabled: !isViewingActive,
+          iconHtml: skillButtonIconHtml("especialista_destruicao"),
+          hotkey: key,
+          combatHotkey:
+            key.length === 1 && key !== "?" ? key.toLowerCase() : undefined,
+          manaBadge: manaUlt,
+          ariaLabel: ult.name,
+          selectKind: "skill",
+          selectId: "especialista_destruicao",
+        }),
+      );
+      bindGameTooltip(bu, () => tooltipEspecialista(h, model));
+      bu.addEventListener("click", () => {
+        if (!isViewingActive) return;
+        cancelPendingOrDebouncedActivate(bu, () => {
+          pendingCombat = { kind: "skill", id: "especialista_destruicao" };
+          movePreviewActive = false;
+          refreshOverlays();
+          update();
+        });
+      });
+      actionRow.appendChild(bu);
     }
 
     {
