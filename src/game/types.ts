@@ -248,13 +248,14 @@ export interface WaveConfig {
 
 export interface MetaProgress {
   crystals: number;
-  /** 0-5 por trilho de % */
+  /** 0–10 por trilho: +20% por nível em stats que usam `permPercent` (dano, vida, defesa, cura/escudo, XP, ouro). */
   permDamage: number;
   permHp: number;
   permDef: number;
   permHealShield: number;
   permXp: number;
   permGold: number;
+  /** 0–10: contribuição ao drop de cristal (ver `crystalDropChanceForKill`). */
   permCrystalDrop: number;
   /** 0-3 cartas iniciais extra */
   initialCards: number;
@@ -272,7 +273,9 @@ export interface MetaProgress {
   weaponLevelByHeroSlot: [WeaponLevel, WeaponLevel, WeaponLevel];
 }
 
-export const META_COSTS = [1, 2, 4, 6, 9] as const;
+/** Nível máximo por trilho de meta na loja de cristais (dano, vida, etc.). */
+export const META_TRACK_MAX_LEVEL = 10;
+
 export const INITIAL_CARD_COSTS = [2, 5, 9] as const;
 
 /** Loja de cristais: +1 rerol gratuito por escolha de level-up (máx. 3 compras). */

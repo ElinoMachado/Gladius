@@ -14,6 +14,7 @@ import {
   ARTIFACT_PICK_PAID_CHARGES_MAX,
   ARTIFACT_PICK_PAID_CRYSTAL_COST,
   ARTIFACT_REROLL_BONUS_COSTS,
+  META_TRACK_MAX_LEVEL,
 } from "./types";
 import {
   buildHexArena,
@@ -5306,7 +5307,7 @@ export class GameModel {
     return Math.floor(
       25 * trevo +
         shopXp +
-        this.meta.permXp +
+        permPercent(this.meta.permXp) +
         this.partyXpBonusPct +
         pantanoHelmoXpBonusPercent(u.forgeLoadout),
     );
@@ -5315,12 +5316,12 @@ export class GameModel {
   private grantXp(u: Unit, base: number): void {
     const trevo = u.artifacts["trevo"] ?? 0;
     const shopXp = u.artifacts["_xp_shop"] ?? 0;
-    const metaXp = this.meta.permXp;
+    const metaXpPct = permPercent(this.meta.permXp);
     let mult =
       1 +
       0.25 * trevo +
       shopXp / 100 +
-      metaXp / 100 +
+      metaXpPct / 100 +
       this.partyXpBonusPct / 100 +
       pantanoHelmoXpBonusPercent(u.forgeLoadout) / 100;
     const gained = Math.floor(base * mult);
@@ -6177,10 +6178,9 @@ export class GameModel {
       | "permCrystalDrop",
   ): boolean {
     const cur = this.meta[track];
-    if (cur >= 5) return false;
-    const costs = [1, 2, 4, 6, 9];
-    const cost = costs[cur];
-    if (cost === undefined || this.meta.crystals < cost) return false;
+    if (cur >= META_TRACK_MAX_LEVEL) return false;
+    const cost = cur + 1;
+    if (this.meta.crystals < cost) return false;
     this.meta.crystals -= cost;
     this.meta[track]++;
     this.saveMeta();

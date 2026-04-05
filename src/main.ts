@@ -34,13 +34,14 @@ import {
   clearAllForgeEquipmentLayoutPrefs,
   loadForgeEquipmentLayoutPrefs,
 } from "./render/forgeEquipmentLayoutPrefs";
-import type {
-  GamePhase,
-  HeroClassId,
-  TeamColor,
-  BiomeId,
-  Unit,
-  WeaponLevel,
+import {
+  META_TRACK_MAX_LEVEL,
+  type GamePhase,
+  type HeroClassId,
+  type TeamColor,
+  type BiomeId,
+  type Unit,
+  type WeaponLevel,
 } from "./game/types";
 import type { SkillDef } from "./game/data/heroes";
 import { HEROES } from "./game/data/heroes";
@@ -2882,13 +2883,13 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
   const m = model.meta;
   grid.replaceChildren();
   const tracks = [
-    ["permDamage", "Dano meta"],
-    ["permHp", "Vida meta"],
-    ["permDef", "Defesa meta"],
-    ["permHealShield", "Cura/escudo meta"],
-    ["permXp", "XP meta"],
-    ["permGold", "Ouro meta (início + ganhos na run)"],
-    ["permCrystalDrop", "Drop cristal meta"],
+    ["permDamage", "Dano"],
+    ["permHp", "Vida"],
+    ["permDef", "Defesa"],
+    ["permHealShield", "Cura/escudo"],
+    ["permXp", "XP"],
+    ["permGold", "Ouro"],
+    ["permCrystalDrop", "Drop cristal"],
   ] as const;
   for (const [key, label] of tracks) {
     const cur = m[key];
@@ -2899,7 +2900,8 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
       cost != null
         ? `Comprar por ${cost} cristais`
         : "Melhoria no nível máximo";
-    const div = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">${label}: nível ${cur}/5 (+${permPercent(cur)}%)${cost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" data-meta="${key}" ${!canBuy ? "disabled" : ""} aria-label="${escapeHtml(ariaBuy)}">${btnLabel}</button></div>`);
+    const lineText = `${label}: +20% · ${cur}/${META_TRACK_MAX_LEVEL}${cost != null ? "" : " — máx."}`;
+    const div = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">${lineText}</span><button type="button" class="btn crystal-shop-buy-btn" data-meta="${key}" ${!canBuy ? "disabled" : ""} aria-label="${escapeHtml(ariaBuy)}">${btnLabel}</button></div>`);
     grid.appendChild(div);
     div.querySelector("button")!.addEventListener("click", () => {
       if (model.buyMetaTrack(key)) render();
@@ -2913,7 +2915,7 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
     icCost != null
       ? `Comprar por ${icCost} cristais`
       : "Número máximo de compras";
-  const icDiv = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">+1 carta por nível (escolha de artefatos): ${ic}/3 compras${icCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-ic" ${!icCanBuy ? "disabled" : ""} aria-label="${escapeHtml(icAria)}">${icBtnLabel}</button></div>`);
+  const icDiv = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Escolha de artefatos: +1 · ${ic}/3 compras${icCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-ic" ${!icCanBuy ? "disabled" : ""} aria-label="${escapeHtml(icAria)}">${icBtnLabel}</button></div>`);
   grid.appendChild(icDiv);
   icDiv.querySelector("#btn-ic")!.addEventListener("click", () => {
     if (model.buyInitialCards()) render();
@@ -2925,10 +2927,10 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
   const rrBonusBtn = rrBonusCost != null ? `${rrBonusCost} 💎` : "—";
   const rrBonusAria =
     rrBonusCost != null
-      ? `Comprar +1 rerol gratuito por escolha por ${rrBonusCost} cristais`
+      ? `Comprar reroll extra por ${rrBonusCost} cristais`
       : "Número máximo de compras";
   const rrDiv = el(
-    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">+1 rerol gratuito por escolha de artefatos (level-up): ${rrBonus}/3 compras${rrBonusCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-artifact-rr-bonus" ${!rrBonusCanBuy ? "disabled" : ""} aria-label="${escapeHtml(rrBonusAria)}">${rrBonusBtn}</button></div>`,
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Reroll: +1 · ${rrBonus}/3 compras${rrBonusCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-artifact-rr-bonus" ${!rrBonusCanBuy ? "disabled" : ""} aria-label="${escapeHtml(rrBonusAria)}">${rrBonusBtn}</button></div>`,
   );
   grid.appendChild(rrDiv);
   rrDiv.querySelector("#btn-artifact-rr-bonus")!.addEventListener("click", () => {
@@ -2941,10 +2943,10 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
   const banBonusBtn = banBonusCost != null ? `${banBonusCost} 💎` : "—";
   const banBonusAria =
     banBonusCost != null
-      ? `Comprar +1 banimento gratuito por escolha por ${banBonusCost} cristais`
+      ? `Comprar banimento extra por ${banBonusCost} cristais`
       : "Número máximo de compras";
   const banDiv = el(
-    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">+1 banimento gratuito por escolha de artefatos: ${banBonus}/3 compras${banBonusCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-artifact-ban-bonus" ${!banBonusCanBuy ? "disabled" : ""} aria-label="${escapeHtml(banBonusAria)}">${banBonusBtn}</button></div>`,
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Banimentos: +1 · ${banBonus}/3 compras${banBonusCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-artifact-ban-bonus" ${!banBonusCanBuy ? "disabled" : ""} aria-label="${escapeHtml(banBonusAria)}">${banBonusBtn}</button></div>`,
   );
   grid.appendChild(banDiv);
   banDiv.querySelector("#btn-artifact-ban-bonus")!.addEventListener("click", () => {
@@ -6422,7 +6424,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       const xpBase = Math.floor(
         25 * tre0 +
           shop0 +
-          m.meta.permXp +
+          permPercent(m.meta.permXp) +
           m.partyXpBonusPct +
           pantanoHelmoXpBonusPercent(h.forgeLoadout),
       );

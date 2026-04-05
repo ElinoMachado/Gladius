@@ -6,7 +6,7 @@ import type {
   WeaponLevel,
 } from "./types";
 import { normalizeWeaponLevel } from "./weaponData";
-import { INITIAL_CARD_COSTS, META_COSTS } from "./types";
+import { INITIAL_CARD_COSTS, META_TRACK_MAX_LEVEL } from "./types";
 import { COMBAT_BIOMES } from "./data/biomes";
 import {
   normalizeForgeMeta,
@@ -180,12 +180,30 @@ function clampMeta03(n: unknown): number {
   return Math.max(0, Math.min(3, Math.floor(x)));
 }
 
+function clampPermTrackLevel(n: unknown): number {
+  const x =
+    typeof n === "number"
+      ? n
+      : typeof n === "string"
+        ? Number(n)
+        : NaN;
+  if (!Number.isFinite(x)) return 0;
+  return Math.max(0, Math.min(META_TRACK_MAX_LEVEL, Math.floor(x)));
+}
+
 function buildMetaFromMainBlob(raw: string): MetaProgress {
   const o = JSON.parse(raw) as MetaProgress;
   const d = defaultMeta();
   return {
     ...d,
     ...o,
+    permDamage: clampPermTrackLevel(o.permDamage),
+    permHp: clampPermTrackLevel(o.permHp),
+    permDef: clampPermTrackLevel(o.permDef),
+    permHealShield: clampPermTrackLevel(o.permHealShield),
+    permXp: clampPermTrackLevel(o.permXp),
+    permGold: clampPermTrackLevel(o.permGold),
+    permCrystalDrop: clampPermTrackLevel(o.permCrystalDrop),
     artifactRerollBonus: clampMeta03(o.artifactRerollBonus),
     artifactBanBonus: clampMeta03(o.artifactBanBonus),
     essences: mergeEssencesFromSave(o.essences, d.essences),
@@ -276,12 +294,14 @@ export function clearAllLocalProgressForFreshStart(): void {
 }
 
 export function permPercent(level: number): number {
-  return [0, 20, 40, 60, 80, 100][level] ?? 0;
+  const L = Math.max(0, Math.min(META_TRACK_MAX_LEVEL, Math.floor(level)));
+  return 20 * L;
 }
 
+/** Próximo custo em cristais: +1 por nível atual (1ª compra = 1💎, …, 10ª = 10💎). */
 export function nextMetaCost(currentLevel: number): number | null {
-  if (currentLevel >= 5) return null;
-  return META_COSTS[currentLevel] ?? null;
+  if (currentLevel >= META_TRACK_MAX_LEVEL) return null;
+  return currentLevel + 1;
 }
 
 export function nextInitialCardCost(current: number): number | null {
