@@ -208,7 +208,15 @@ import { initForgeEquipmentLayoutPrefsFromDeploy } from "./render/forgeEquipment
 import { UNIT_MOVE_SEGMENT_MS } from "./game/combatTiming";
 import { heroAttackClipName } from "./game/heroCombatAnimMs";
 import {
+  BUNKER_AUTO_REPAIR_GOLD,
+  BUNKER_AUTO_REPAIR_HP_PER_RANK,
+  BUNKER_AUTO_REPAIR_MAX_RANK,
+  BUNKER_AUTO_REPAIR_MIN_TIER,
   BUNKER_EVOLVE_COSTS,
+  BUNKER_FORTIFY_GOLD,
+  BUNKER_FORTIFY_MAX_BUYS_PER_WAVE,
+  BUNKER_FORTIFY_MIN_TIER,
+  BUNKER_FORTIFY_SHIELD,
   BUNKER_TIRO_MIN_TIER,
   bunkerDisplayLevel,
   bunkerMinasCooldownWaves,
@@ -3821,15 +3829,30 @@ function showGoldShop(isInitial: boolean): void {
         /* `emit` → `render` → `refreshGoldShop`; evitar segundo `renderShop` aqui (WebGL). */
       });
     });
-    panel.querySelector("#gold-shop-bunk-repair")?.addEventListener("click", () => {
-      model.buyBunkerRepair(h.id);
-    });
-    panel.querySelector("#gold-shop-bunk-evolve")?.addEventListener("click", () => {
-      model.buyBunkerEvolve(h.id);
+    panel.querySelectorAll("[data-gold-bunker-buy]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const kind = (btn as HTMLElement).dataset.goldBunkerBuy;
+        if (kind === "repair") model.buyBunkerRepair(h.id);
+        else if (kind === "evolve") model.buyBunkerEvolve(h.id);
+        else if (kind === "auto_reparo") model.buyBunkerAutoRepair(h.id);
+        else if (kind === "fortificar") model.buyBunkerFortify(h.id);
+      });
     });
     const bEv = panel.querySelector("#gold-shop-bunk-evolve") as HTMLElement | null;
     if (bEv && bunkerShop && bunkerShop.tier < 2) {
       bindGameTooltip(bEv, () => bunkerEvolveTooltipHtml(bunkerShop.tier));
+    }
+    const bAr = panel.querySelector(
+      "#gold-shop-bunk-auto-reparo",
+    ) as HTMLElement | null;
+    if (bAr && bunkerShop && bunkerShop.tier >= BUNKER_AUTO_REPAIR_MIN_TIER) {
+      bindGameTooltip(bAr, () => bunkerAutoReparoShopTooltipHtml(bunkerShop));
+    }
+    const bFo = panel.querySelector(
+      "#gold-shop-bunk-fortificar",
+    ) as HTMLElement | null;
+    if (bFo && bunkerShop && bunkerShop.tier >= BUNKER_FORTIFY_MIN_TIER) {
+      bindGameTooltip(bFo, () => bunkerFortificarShopTooltipHtml(bunkerShop));
     }
     panel.querySelectorAll(".shop-hero-gold-bag").forEach((node) => {
       bindGameTooltip(node as HTMLElement, () => {
@@ -4745,6 +4768,16 @@ function bunkerEvolveTooltipHtml(currentTier: 0 | 1 | 2): string {
   return `<div class="game-ui-tooltip-inner"><div class="game-ui-tooltip-title">Após evolução (bunker nv. ${bunkerDisplayLevel(nt)})</div><p class="game-ui-tooltip-passive"><span class="tt-lbl">PV máx.:</span> ${formatTooltipNumber(st.maxHp)} · <span class="tt-lbl">Defesa:</span> ${formatTooltipNumber(st.defesa)}</p></div>`;
 }
 
+function bunkerAutoReparoShopTooltipHtml(bunk: BunkerState): string {
+  const per = BUNKER_AUTO_REPAIR_HP_PER_RANK;
+  const cur = bunk.autoRepairRank * per;
+  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--bunker-shop"><div class="game-ui-tooltip-title">Auto reparo</div><p class="game-ui-tooltip-passive">Desbloqueado no <strong>bunker nv. ${bunkerDisplayLevel(BUNKER_AUTO_REPAIR_MIN_TIER)}</strong>.</p><p class="game-ui-tooltip-body">Cada compra sobe o nível (máx. ${BUNKER_AUTO_REPAIR_MAX_RANK}). Ao fim de cada ciclo de turnos dos heróis, o bunker recupera <strong>${per} PV × nível</strong>. Custo: ${BUNKER_AUTO_REPAIR_GOLD} ouro (Estrategista nato: metade).</p><p class="game-ui-tooltip-passive game-ui-tooltip-passive--tight-top">Nível ${bunk.autoRepairRank}/${BUNKER_AUTO_REPAIR_MAX_RANK} → +${cur} PV por ciclo.</p></div>`;
+}
+
+function bunkerFortificarShopTooltipHtml(bunk: BunkerState): string {
+  return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--bunker-shop"><div class="game-ui-tooltip-title">Fortificar</div><p class="game-ui-tooltip-passive">Desbloqueado no <strong>bunker nv. ${bunkerDisplayLevel(BUNKER_FORTIFY_MIN_TIER)}</strong>.</p><p class="game-ui-tooltip-body">Compra <strong>+${BUNKER_FORTIFY_SHIELD} escudo</strong> no bunker por <strong>${BUNKER_FORTIFY_GOLD} ouro</strong>, até ${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE} vezes por wave. O escudo absorve dano antes dos PV do bunker e <strong>zera entre waves</strong> (Estrategista nato: metade do ouro).</p><p class="game-ui-tooltip-passive game-ui-tooltip-passive--tight-top">Escudo: ${tipInt(bunk.fortifyShield)} · Compras nesta wave: ${bunk.fortifyBuysThisWave}/${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE}</p></div>`;
+}
+
 /** Loja: mesmo formato do HUD de combate, com stats ao nível atual e ao próximo do bunker. */
 function bunkerMinasGoldShopCompositeTooltip(
   h: Unit,
@@ -4857,8 +4890,55 @@ function goldShopBunkerBuyGridHtml(bunk: BunkerState, h: Unit): string {
           <span class="shop-item__cost">${evCost} ouro</span>
         </span>
       </span>`;
-  return `<button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-repair" data-gold-bunker-buy="repair" ${missing <= 0 || !canRepair ? "disabled" : ""} aria-label="${escapeHtml(repairLabel)}">${repairInner}</button>
-      <button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-evolve" data-gold-bunker-buy="evolve" ${evolveDisabled ? "disabled" : ""} aria-label="${escapeHtml(evolveLabel)}">${evolveInner}</button>`;
+  const rows: string[] = [
+    `<button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-repair" data-gold-bunker-buy="repair" ${missing <= 0 || !canRepair ? "disabled" : ""} aria-label="${escapeHtml(repairLabel)}">${repairInner}</button>`,
+    `<button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-evolve" data-gold-bunker-buy="evolve" ${evolveDisabled ? "disabled" : ""} aria-label="${escapeHtml(evolveLabel)}">${evolveInner}</button>`,
+  ];
+  if (bunk.tier >= BUNKER_AUTO_REPAIR_MIN_TIER) {
+    let arCost = BUNKER_AUTO_REPAIR_GOLD;
+    if (h.ultimateId === "estrategista_nato") arCost = Math.ceil(arCost * 0.5);
+    const arFull = bunk.autoRepairRank >= BUNKER_AUTO_REPAIR_MAX_RANK;
+    const canAr = !arFull && h.ouro >= arCost;
+    const arDisabled = arFull || !canAr;
+    const arLabel = arFull
+      ? "Auto reparo no nível máximo"
+      : canAr
+        ? `Auto reparo por ${formatOuroDisplay(arCost)} ouro`
+        : `Auto reparo: ouro insuficiente (${formatOuroDisplay(arCost)} necessário)`;
+    const arInner = `<span class="shop-item__row">
+        <span class="shop-item__ico">${skillButtonIconHtml("bunker_auto_reparo")}</span>
+        <span class="shop-item__meta">
+          <span class="shop-item__label">Auto reparo</span>
+          <span class="shop-item__cost">${arFull ? `Máx. ${BUNKER_AUTO_REPAIR_MAX_RANK}/${BUNKER_AUTO_REPAIR_MAX_RANK}` : `${arCost} ouro`}</span>
+        </span>
+      </span>`;
+    rows.push(
+      `<button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-auto-reparo" data-gold-bunker-buy="auto_reparo" ${arDisabled ? "disabled" : ""} aria-label="${escapeHtml(arLabel)}">${arInner}</button>`,
+    );
+  }
+  if (bunk.tier >= BUNKER_FORTIFY_MIN_TIER) {
+    let foCost = BUNKER_FORTIFY_GOLD;
+    if (h.ultimateId === "estrategista_nato") foCost = Math.ceil(foCost * 0.5);
+    const foFull = bunk.fortifyBuysThisWave >= BUNKER_FORTIFY_MAX_BUYS_PER_WAVE;
+    const canFo = !foFull && h.ouro >= foCost;
+    const foDisabled = foFull || !canFo;
+    const foLabel = foFull
+      ? "Fortificar: limite de compras nesta wave"
+      : canFo
+        ? `Fortificar por ${formatOuroDisplay(foCost)} ouro (+${BUNKER_FORTIFY_SHIELD} escudo)`
+        : `Fortificar: ouro insuficiente (${formatOuroDisplay(foCost)} necessário)`;
+    const foInner = `<span class="shop-item__row">
+        <span class="shop-item__ico">${skillButtonIconHtml("bunker_fortificar")}</span>
+        <span class="shop-item__meta">
+          <span class="shop-item__label">Fortificar</span>
+          <span class="shop-item__cost">${foFull ? "Limite wave" : `${foCost} ouro`}</span>
+        </span>
+      </span>`;
+    rows.push(
+      `<button type="button" class="shop-item shop-item--gold-buy shop-item--bunker-buy" id="gold-shop-bunk-fortificar" data-gold-bunker-buy="fortificar" ${foDisabled ? "disabled" : ""} aria-label="${escapeHtml(foLabel)}">${foInner}</button>`,
+    );
+  }
+  return rows.join("\n      ");
 }
 
 function applyGoldShopVizFocus(panel: HTMLElement, hasBunker: boolean): void {
@@ -4888,7 +4968,7 @@ function applyGoldShopVizFocus(panel: HTMLElement, hasBunker: boolean): void {
       "aria-label",
       bunker
         ? "Mostrar herói e melhorias do herói"
-        : "Mostrar bunker — reparar e evoluir na grelha abaixo",
+        : "Mostrar bunker — melhorias na grelha abaixo",
     );
   }
 }
@@ -4946,7 +5026,7 @@ function goldShopBunkerSectionHtml(bunk: BunkerState): string {
         <p class="shop-hero-stats-head shop-bunker-skills-block__head">Habilidades</p>
         <div id="gold-shop-bunker-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do bunker"></div>
       </div>
-      <p class="shop-bunker-viz-layout__hint">Reparar e evoluir: usa a grelha de compras quando o bunker estiver em primeiro plano (seta). Custo de reparação = PV em falta (mín. 1 ouro por PV incompleto). Evoluções: 300 ouro (1.ª), 500 ouro (2.ª).</p>
+      <p class="shop-bunker-viz-layout__hint">Reparar, evoluir, Auto reparo e Fortificar: grelha de compras com o bunker em primeiro plano (seta). Reparação = PV em falta. Evoluções: 300 / 500 ouro. Auto reparo (bunker nv. 2+): 50 ouro por nível, até 10 níveis (+2 PV por ciclo de turnos por nível). Fortificar (bunker nv. 3): 100 ouro por +100 escudo, até 5× por wave (escudo zera entre waves).</p>
     </div>
   </div>`;
 }
@@ -4968,7 +5048,7 @@ interface HeroStatCell {
 function bunkerShopStatCells(bunk: BunkerState): HeroStatCell[] {
   const hpDisp = `${tipInt(bunk.hp)}/${tipInt(bunk.maxHp)}`;
   const defDisp = tipInt(bunk.defesa);
-  return [
+  const cells: HeroStatCell[] = [
     {
       icon: "max_hp",
       label: "Vida",
@@ -4990,6 +5070,29 @@ function bunkerShopStatCells(bunk: BunkerState): HeroStatCell[] {
       }),
     },
   ];
+  if (bunk.tier >= BUNKER_AUTO_REPAIR_MIN_TIER) {
+    const r = bunk.autoRepairRank;
+    const perCiclo = r * BUNKER_AUTO_REPAIR_HP_PER_RANK;
+    const arDisp = `${r}/${BUNKER_AUTO_REPAIR_MAX_RANK} · +${perCiclo}/ciclo`;
+    cells.push({
+      icon: "regen_hp",
+      label: "Auto reparo",
+      value: arDisp,
+      tooltipValue: arDisp,
+      tooltipHtml: bunkerAutoReparoShopTooltipHtml(bunk),
+    });
+  }
+  if (bunk.tier >= BUNKER_FORTIFY_MIN_TIER) {
+    const foDisp = `${tipInt(bunk.fortifyShield)} · ${bunk.fortifyBuysThisWave}/${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE}`;
+    cells.push({
+      icon: "pen_escudo",
+      label: "Fortificar",
+      value: foDisp,
+      tooltipValue: foDisp,
+      tooltipHtml: bunkerFortificarShopTooltipHtml(bunk),
+    });
+  }
+  return cells;
 }
 
 type StatDeltaKind = "int" | "pct" | "mult" | "float";

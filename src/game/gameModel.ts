@@ -158,7 +158,15 @@ import {
   UNIT_MOVE_SEGMENT_MS,
 } from "./combatTiming";
 import {
+  BUNKER_AUTO_REPAIR_GOLD,
+  BUNKER_AUTO_REPAIR_HP_PER_RANK,
+  BUNKER_AUTO_REPAIR_MAX_RANK,
+  BUNKER_AUTO_REPAIR_MIN_TIER,
   BUNKER_EVOLVE_COSTS,
+  BUNKER_FORTIFY_GOLD,
+  BUNKER_FORTIFY_MAX_BUYS_PER_WAVE,
+  BUNKER_FORTIFY_MIN_TIER,
+  BUNKER_FORTIFY_SHIELD,
   type BunkerState,
   bunkerMinasCooldownWaves,
   bunkerMinasDamageMult,
@@ -369,6 +377,9 @@ type ShopBunkerSnapshot = {
   defesa: number;
   tier: 0 | 1 | 2;
   occupantId: string | null;
+  autoRepairRank: number;
+  fortifyShield: number;
+  fortifyBuysThisWave: number;
 };
 
 type ShopRestoreSnapshot = {
@@ -1006,6 +1017,7 @@ export class GameModel {
       this.meta = o.meta;
       this.units = o.units;
       this.bunkers = o.bunkers ?? {};
+      this.ensureAllBunkerFields();
       this.wave = o.wave ?? 0;
       this.partyOrder = o.partyOrder ?? [];
       this.currentHeroIndex = o.currentHeroIndex ?? 0;
@@ -1666,6 +1678,7 @@ export class GameModel {
 
   /** Um bunker por bioma de combate, no anel ~8 hex do centro (castelo). */
   private ensureBunkersPlaced(): void {
+    this.ensureAllBunkerFields();
     const used = new Set<string>();
     for (const b of this.allBunkerStates()) {
       used.add(axialKey(b.q, b.r));
@@ -2121,6 +2134,7 @@ export class GameModel {
   advanceHeroOrRound(): void {
     this.currentHeroIndex++;
     if (this.currentHeroIndex >= this.partyOrder.length) {
+      this.applyBunkerAutoRepairAfterHeroCycle();
       this.maybeApplyGoldDrainAfterPlayerCycle();
       this.runEnemyPhase();
       return;
@@ -2172,6 +2186,7 @@ export class GameModel {
     }
     this.currentHeroIndex++;
     if (this.currentHeroIndex >= this.partyOrder.length) {
+      this.applyBunkerAutoRepairAfterHeroCycle();
       this.maybeApplyGoldDrainAfterPlayerCycle();
       this.runEnemyPhase();
       return;
@@ -2187,6 +2202,47 @@ export class GameModel {
 
   private hasLivingEnemies(): boolean {
     return this.units.some((u) => !u.isPlayer && u.hp > 0);
+  }
+
+  /** Garante campos novos em bunkers vindos de saves antigos. */
+  private ensureAllBunkerFields(): void {
+    for (const bi of COMBAT_BIOMES) {
+      const b = this.bunkers[bi];
+      if (!b) continue;
+      if (typeof b.autoRepairRank !== "number" || !Number.isFinite(b.autoRepairRank))
+        b.autoRepairRank = 0;
+      if (typeof b.fortifyShield !== "number" || !Number.isFinite(b.fortifyShield))
+        b.fortifyShield = 0;
+      if (
+        typeof b.fortifyBuysThisWave !== "number" ||
+        !Number.isFinite(b.fortifyBuysThisWave)
+      )
+        b.fortifyBuysThisWave = 0;
+    }
+  }
+
+  /**
+   * Auto reparo: cura PV do bunker após o último herói terminar o turno (antes do dreno de ouro e da fase inimiga).
+   */
+  private applyBunkerAutoRepairAfterHeroCycle(): void {
+    if (this.phase !== "combat") return;
+    for (const b of this.allBunkerStates()) {
+      const rank = b.autoRepairRank;
+      if (rank <= 0 || b.hp <= 0 || b.hp >= b.maxHp) continue;
+      const gain = rank * BUNKER_AUTO_REPAIR_HP_PER_RANK;
+      const prev = b.hp;
+      b.hp = Math.min(b.maxHp, b.hp + gain);
+      const healed = b.hp - prev;
+      if (healed > 0) {
+        this.pushCombatFloat({
+          unitId: BUNKER_COMBAT_FLOAT_ID,
+          kind: "heal",
+          amount: healed,
+          targetIsPlayer: true,
+          bunkerHex: { q: b.q, r: b.r },
+        });
+      }
+    }
   }
 
   private rainhaEndTurn(priest: Unit): void {
@@ -2636,6 +2692,12 @@ export class GameModel {
       h.ouroWave = 0;
       h.shieldGGBlue = 0;
       h.escudoResidualTagged = 0;
+    }
+    for (const bi of COMBAT_BIOMES) {
+      const b = this.bunkers[bi];
+      if (!b) continue;
+      b.fortifyShield = 0;
+      b.fortifyBuysThisWave = 0;
     }
     const essences: { id: ForgeEssenceId; n: number }[] = [];
     for (const id of Object.keys(this.waveEssencesGained) as ForgeEssenceId[]) {
@@ -3609,6 +3671,21 @@ export class GameModel {
       bk.occupantId === tgt.id &&
       dmgToHero > 0
     ) {
+      const fSh = bk.fortifyShield;
+      if (fSh > 0) {
+        const absF = Math.min(dmgToHero, fSh);
+        bk.fortifyShield = fSh - absF;
+        dmgToHero -= absF;
+        if (absF > 0) {
+          this.pushCombatFloat({
+            unitId: BUNKER_COMBAT_FLOAT_ID,
+            kind: "shield_absorb",
+            amount: absF,
+            targetIsPlayer: true,
+            bunkerHex: { q: bk.q, r: bk.r },
+          });
+        }
+      }
       const absorb = Math.min(dmgToHero, bk.hp);
       bunkerAbsorbed = absorb;
       bk.hp -= absorb;
@@ -5781,6 +5858,50 @@ export class GameModel {
     return true;
   }
 
+  buyBunkerAutoRepair(heroId: string): boolean {
+    const u = this.units.find((x) => x.id === heroId);
+    if (!u || !u.isPlayer) return false;
+    const biome = this.heroHomeBiome(u);
+    if (biome === "hub") return false;
+    const b = this.bunkers[biome];
+    if (!b) return false;
+    if (b.tier < BUNKER_AUTO_REPAIR_MIN_TIER) return false;
+    if (b.autoRepairRank >= BUNKER_AUTO_REPAIR_MAX_RANK) return false;
+    let cost = BUNKER_AUTO_REPAIR_GOLD;
+    if (u.ultimateId === "estrategista_nato") cost = Math.ceil(cost * 0.5);
+    if (u.ouro < cost) return false;
+    u.ouro -= cost;
+    b.autoRepairRank++;
+    this.log(
+      `Auto reparo (bunker ${BIOME_LABELS[biome]}): nível ${b.autoRepairRank}/${BUNKER_AUTO_REPAIR_MAX_RANK} (+${BUNKER_AUTO_REPAIR_HP_PER_RANK} PV por ciclo de turnos).`,
+    );
+    this.emit();
+    return true;
+  }
+
+  buyBunkerFortify(heroId: string): boolean {
+    const u = this.units.find((x) => x.id === heroId);
+    if (!u || !u.isPlayer) return false;
+    const biome = this.heroHomeBiome(u);
+    if (biome === "hub") return false;
+    const b = this.bunkers[biome];
+    if (!b) return false;
+    if (b.tier < BUNKER_FORTIFY_MIN_TIER) return false;
+    if (b.fortifyBuysThisWave >= BUNKER_FORTIFY_MAX_BUYS_PER_WAVE)
+      return false;
+    let cost = BUNKER_FORTIFY_GOLD;
+    if (u.ultimateId === "estrategista_nato") cost = Math.ceil(cost * 0.5);
+    if (u.ouro < cost) return false;
+    u.ouro -= cost;
+    b.fortifyShield += BUNKER_FORTIFY_SHIELD;
+    b.fortifyBuysThisWave++;
+    this.log(
+      `Fortificar (bunker ${BIOME_LABELS[biome]}): +${BUNKER_FORTIFY_SHIELD} escudo (${b.fortifyBuysThisWave}/${BUNKER_FORTIFY_MAX_BUYS_PER_WAVE} nesta wave).`,
+    );
+    this.emit();
+    return true;
+  }
+
   buyBunkerEvolve(heroId: string): boolean {
     const u = this.units.find((x) => x.id === heroId);
     if (!u || !u.isPlayer) return false;
@@ -5882,7 +6003,10 @@ export class GameModel {
         x.maxHp !== y.maxHp ||
         x.defesa !== y.defesa ||
         x.tier !== y.tier ||
-        x.occupantId !== y.occupantId
+        x.occupantId !== y.occupantId ||
+        (x.autoRepairRank ?? 0) !== (y.autoRepairRank ?? 0) ||
+        (x.fortifyShield ?? 0) !== (y.fortifyShield ?? 0) ||
+        (x.fortifyBuysThisWave ?? 0) !== (y.fortifyBuysThisWave ?? 0)
       )
         return true;
     }
@@ -5947,6 +6071,9 @@ export class GameModel {
         defesa: b.defesa,
         tier: b.tier,
         occupantId: b.occupantId,
+        autoRepairRank: b.autoRepairRank,
+        fortifyShield: b.fortifyShield,
+        fortifyBuysThisWave: b.fortifyBuysThisWave,
       });
     }
     return out;
@@ -5990,6 +6117,9 @@ export class GameModel {
         defesa: sb.defesa,
         tier: sb.tier,
         occupantId: sb.occupantId,
+        autoRepairRank: sb.autoRepairRank ?? 0,
+        fortifyShield: sb.fortifyShield ?? 0,
+        fortifyBuysThisWave: sb.fortifyBuysThisWave ?? 0,
       };
     }
   }

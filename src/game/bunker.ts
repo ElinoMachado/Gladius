@@ -9,9 +9,31 @@ export interface BunkerState {
   tier: 0 | 1 | 2;
   /** Herói dentro do bunker (mesmo hex). */
   occupantId: string | null;
+  /**
+   * Compras permanentes na loja (Auto reparo): cada rank cura `BUNKER_AUTO_REPAIR_HP_PER_RANK`
+   * PV do bunker após cada ciclo de turnos dos heróis (antes da fase inimiga).
+   */
+  autoRepairRank: number;
+  /** Escudo extra do bunker (Fortificar); zera entre waves. */
+  fortifyShield: number;
+  /** Quantas vezes se comprou Fortificar nesta wave (máx. `BUNKER_FORTIFY_MAX_BUYS_PER_WAVE`). */
+  fortifyBuysThisWave: number;
 }
 
 export const BUNKER_EVOLVE_COSTS: [number, number] = [300, 500];
+
+export const BUNKER_AUTO_REPAIR_GOLD = 50;
+export const BUNKER_AUTO_REPAIR_MAX_RANK = 10;
+/** PV curados por rank após cada ciclo de turnos dos heróis. */
+export const BUNKER_AUTO_REPAIR_HP_PER_RANK = 2;
+/** Bunker nv. 2 em UI (= tier 1). */
+export const BUNKER_AUTO_REPAIR_MIN_TIER = 1 as const;
+
+export const BUNKER_FORTIFY_GOLD = 100;
+export const BUNKER_FORTIFY_SHIELD = 100;
+export const BUNKER_FORTIFY_MAX_BUYS_PER_WAVE = 5;
+/** Bunker nv. 3 em UI (= tier 2). */
+export const BUNKER_FORTIFY_MIN_TIER = 2 as const;
 
 /**
  * Multiplicador de dano recebido pelo bunker (após mitigação), só inimigos → ocupante.
@@ -76,5 +98,8 @@ export function createInitialBunkerState(q: number, r: number): BunkerState {
     defesa,
     tier: 0,
     occupantId: null,
+    autoRepairRank: 0,
+    fortifyShield: 0,
+    fortifyBuysThisWave: 0,
   };
 }

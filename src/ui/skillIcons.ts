@@ -86,6 +86,14 @@ const icons: Record<string, string> = {
   weapon_ult_furia: wrap(
     `<defs><linearGradient id="wu3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#aa4030"/><stop offset="1" stop-color="#401010"/></linearGradient></defs><rect width="${V}" height="${V}" rx="4" fill="url(#wu3)"/><path fill="#c9a227" d="M8 6h12v4H8z"/><path fill="#e8e0d8" d="M10 10l4 14 4-14z"/>`,
   ),
+
+  bunker_auto_reparo: wrap(
+    `<defs><linearGradient id="barBg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a4a38"/><stop offset="1" stop-color="#0e1a14"/></linearGradient></defs><rect width="${V}" height="${V}" rx="4" fill="url(#barBg)"/><path fill="none" stroke="#6ecf8f" stroke-width="1.4" stroke-linecap="round" d="M9 7h10M9 11h8M9 15h10"/><path fill="#88d4a0" stroke="#3a6a48" stroke-width="0.6" d="M6.5 9.5l3-2.2v4.4z"/><path fill="none" stroke="#c8f0d8" stroke-width="1.1" stroke-linecap="round" d="M17.5 18.5c1.8-1.6 2.8-3.8 2.8-6.2"/><path fill="#5ab878" d="M16 20l4 1.5-1.2-3.8z"/>`,
+  ),
+
+  bunker_fortificar: wrap(
+    `<defs><linearGradient id="bforBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a3a58"/><stop offset="1" stop-color="#101828"/></linearGradient></defs><rect width="${V}" height="${V}" rx="4" fill="url(#bforBg)"/><path fill="none" stroke="#7eb0ff" stroke-width="1.35" stroke-linejoin="round" d="M14 5.5l7 3.5v7L14 20l-7-4v-7z"/><path fill="#4068a8" fill-opacity="0.35" d="M14 9l4 2v5l-4 2.2-4-2.3V11z"/><path fill="none" stroke="#b8d4ff" stroke-width="0.9" d="M10 11.5h8M10 14.5h8"/>`,
+  ),
 };
 
 const fallback = wrap(
