@@ -958,11 +958,13 @@ function applyCombatSandboxArtifactFilter(
   rawQuery: string,
 ): void {
   const q = normalizeArtifactSearchKey(rawQuery);
+  const tokens = q.length === 0 ? [] : q.split(" ").filter(Boolean);
   panel.querySelectorAll("[data-sandbox-artifact]").forEach((node) => {
     const btn = node as HTMLElement;
     const blob = btn.dataset.artifactSearchBlob ?? "";
     (btn as HTMLButtonElement).hidden =
-      q.length > 0 && !blob.includes(q);
+      tokens.length > 0 &&
+      !tokens.every((t) => t.length > 0 && blob.includes(t));
   });
 }
 
@@ -3601,14 +3603,13 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     ) as HTMLInputElement | null;
     if (searchInp) {
       searchInp.value = combatSandboxArtifactSearchQuery;
-      searchInp.addEventListener(
-        "input",
-        () => {
-          combatSandboxArtifactSearchQuery = searchInp.value;
-          applyCombatSandboxArtifactFilter(panel, combatSandboxArtifactSearchQuery);
-        },
-        { signal },
-      );
+      const runFilter = (): void => {
+        combatSandboxArtifactSearchQuery = searchInp.value;
+        applyCombatSandboxArtifactFilter(panel, combatSandboxArtifactSearchQuery);
+      };
+      searchInp.addEventListener("input", runFilter, { signal });
+      /** IME (acentos): o `input` pode falhar até fechar a composição. */
+      searchInp.addEventListener("compositionend", runFilter, { signal });
     }
     panel.querySelectorAll("[data-sandbox-artifact]").forEach((node) => {
       const btn = node as HTMLElement;

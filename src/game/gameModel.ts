@@ -4248,19 +4248,16 @@ export class GameModel {
     return best;
   }
 
-  /**
-   * Espada do fogo eterno: inimigo mais distante no bioma do hex do herói (hub = todos).
-   */
-  private farthestEnemyToInHeroBiome(hero: Unit): Unit | null {
-    const heroBio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
+  private farthestEnemyMatching(
+    hero: Unit,
+    includeEnemy: (e: Unit, enemyBiome: BiomeId) => boolean,
+  ): Unit | null {
     let best: Unit | null = null;
     let d = -1;
     for (const e of this.enemies()) {
       if (e.hp <= 0) continue;
-      if (heroBio !== "hub") {
-        const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
-        if (eb !== heroBio) continue;
-      }
+      const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
+      if (!includeEnemy(e, eb)) continue;
       const dist = hexDistance({ q: hero.q, r: hero.r }, { q: e.q, r: e.r });
       if (dist > d) {
         d = dist;
@@ -4268,6 +4265,25 @@ export class GameModel {
       }
     }
     return best;
+  }
+
+  /**
+   * Espada do fogo eterno: inimigo mais distante no bioma do hex do herói (hub = todos);
+   * se não houver ninguém nesse bioma, tenta o bioma inicial da run; por fim qualquer inimigo
+   * (evita falha em arenas multi-bioma / sandbox).
+   */
+  private farthestEnemyToInHeroBiome(hero: Unit): Unit | null {
+    const heroBio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
+    let best = this.farthestEnemyMatching(hero, (_e, eb) =>
+      heroBio === "hub" ? true : eb === heroBio,
+    );
+    if (best) return best;
+    const home = this.heroHomeBiome(hero);
+    if (home !== "hub" && home !== heroBio) {
+      best = this.farthestEnemyMatching(hero, (_e, eb) => eb === home);
+      if (best) return best;
+    }
+    return this.farthestEnemyMatching(hero, () => true);
   }
 
   private applyEspadaFogoEternoTurnStart(h: Unit): void {
@@ -6000,6 +6016,7 @@ export class GameModel {
     if (!artifactDefById(artifactId)) return false;
     const u = this.units.find((x) => x.id === heroId);
     if (!u?.isPlayer) return false;
+    const prevStacks = u.artifacts[artifactId] ?? 0;
     const ok =
       delta === 1
         ? this.incrementArtifactStack(u, artifactId)
@@ -6010,6 +6027,29 @@ export class GameModel {
     if (artifactId === "braco_forte") {
       const ch = this.currentHero();
       if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
+    }
+    if (
+      artifactId === "espada_fogo_eterno" &&
+      (u.artifacts["espada_fogo_eterno"] ?? 0) <= 0
+    ) {
+      delete u.espadaFogoOrbitVisualCount;
+    }
+    if (
+      artifactId === "espada_fogo_eterno" &&
+      delta === 1 &&
+      prevStacks === 0 &&
+      (u.artifacts["espada_fogo_eterno"] ?? 0) > 0
+    ) {
+      const ch = this.currentHero();
+      if (
+        ch &&
+        ch.id === u.id &&
+        this.phase === "combat" &&
+        !this.inEnemyPhase &&
+        !this.duel
+      ) {
+        this.applyEspadaFogoEternoTurnStart(u);
+      }
     }
     this.emit();
     return true;
