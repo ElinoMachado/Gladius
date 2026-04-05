@@ -3111,14 +3111,7 @@ export class GameModel {
       return true;
     }
 
-    if (this.bunkerAtHex(h.q, h.r)?.occupantId === h.id) {
-      const okFromBunker =
-        skillId === "tiro_destruidor" ||
-        skillId === "atirar_todo_lado" ||
-        skillId === "sentenca" ||
-        skillId === "especialista_destruicao";
-      if (!okFromBunker) return false;
-    }
+    if (this.bunkerAtHex(h.q, h.r)?.occupantId === h.id) return false;
 
     if (skillId === "tiro_destruidor") {
       if (h.heroClass !== "pistoleiro" || h.ultimateId !== "arauto_caos")
@@ -4428,6 +4421,8 @@ export class GameModel {
   tryWeaponUltimate(): boolean {
     const h = this.currentHero();
     if (!h || h.hp <= 0 || this.phase !== "combat") return false;
+    const bk = this.bunkerAtHex(h.q, h.r);
+    if (bk && bk.occupantId === h.id) return false;
     if (!this.sandboxNoCdUltEnabled() && h.weaponUltMeter < 1) return false;
     if (h.heroClass === "sacerdotisa") return this.castParaisoNaTerra(h);
     if (h.heroClass === "pistoleiro") return this.castFuracaoBalas(h);
