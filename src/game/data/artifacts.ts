@@ -167,11 +167,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     pickBonusPerStack: { regenMana: 2, regenVida: 1 },
   },
   {
-    id: "alcance_mistico",
-    name: "Alcance místico",
+    id: "vendaval_arcana",
+    name: "Vendaval arcana",
     rarity: "uncommon",
-    description: "+1 de alcance por acúmulo.",
-    pickBonusPerStack: { alcance: 1 },
+    description: "+8% de dano com habilidades (não básico) por acúmulo.",
   },
   {
     id: "fio_cruel",
@@ -246,10 +245,11 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
       "Com vida cheia, a cura por roubo de vida vira escudo azul até 100 (teto sobe por acúmulo: 100 / 250 / 400 / 600 / 900 / 1500).",
   },
   {
-    id: "vendaval_arcana",
-    name: "Vendaval arcana",
+    id: "aura_tita",
+    name: "Aura do titã",
     rarity: "rare",
-    description: "+8% de dano com habilidades (não básico) por acúmulo.",
+    description:
+      "No início de cada wave: +50 de escudo azul por acúmulo (máx. 6). Ao ganhares um acúmulo durante a run, recebes já +50 de escudo.",
   },
   {
     id: "passo_gigante",

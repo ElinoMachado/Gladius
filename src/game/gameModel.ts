@@ -419,6 +419,23 @@ function shopArtifactsEq(
   return true;
 }
 
+const AURA_TITA_SHIELD_PER_STACK = 50;
+
+/** Save antigo: `alcance_mistico` → `aura_tita` e reverte alcance do bônus antigo. */
+function migrateAlcanceMisticoToAuraTita(units: Unit[]): void {
+  for (const u of units) {
+    const leg = u.artifacts["alcance_mistico"];
+    if (leg == null || leg <= 0) continue;
+    u.artifacts["aura_tita"] = (u.artifacts["aura_tita"] ?? 0) + leg;
+    delete u.artifacts["alcance_mistico"];
+    const baseA = u.statBaseline?.alcance;
+    u.alcance = Math.max(
+      typeof baseA === "number" && Number.isFinite(baseA) ? baseA : 1,
+      u.alcance - leg,
+    );
+  }
+}
+
 export class GameModel {
   meta: MetaProgress;
   grid: Map<string, HexCell> = new Map();
@@ -1033,6 +1050,7 @@ export class GameModel {
 
       this.meta = o.meta;
       this.units = o.units;
+      migrateAlcanceMisticoToAuraTita(this.units);
       this.bunkers = o.bunkers ?? {};
       this.ensureAllBunkerFields();
       this.wave = o.wave ?? 0;
@@ -1569,6 +1587,12 @@ export class GameModel {
       u.pistoleiroBonusDanoWave = 0;
       u.curandeiroDanoWave = 0;
       u.shieldGGBlue = 0;
+      const auraTita = u.artifacts["aura_tita"] ?? 0;
+      if (auraTita > 0) {
+        u.shieldGGBlue = roundToCombatDecimals(
+          AURA_TITA_SHIELD_PER_STACK * auraTita,
+        );
+      }
       u.escudoResidualTagged = 0;
       if ((u.furiaGiganteTurns ?? 0) > 0 || u.furiaExtraMaxHp) {
         this.revertFuriaGiganteStats(u);
@@ -5662,6 +5686,11 @@ export class GameModel {
     u.artifacts[artifactId] = prev + 1;
     const def = artifactDefById(artifactId);
     this.applyPickBonusPerStack(u, def?.pickBonusPerStack);
+    if (artifactId === "aura_tita" && u.isPlayer && u.hp > 0) {
+      u.shieldGGBlue = roundToCombatDecimals(
+        u.shieldGGBlue + AURA_TITA_SHIELD_PER_STACK,
+      );
+    }
     return true;
   }
 
@@ -5673,6 +5702,12 @@ export class GameModel {
     this.removePickBonusPerStack(u, def?.pickBonusPerStack);
     if (prev <= 1) delete u.artifacts[artifactId];
     else u.artifacts[artifactId] = prev - 1;
+    if (artifactId === "aura_tita" && u.isPlayer) {
+      u.shieldGGBlue = Math.max(
+        0,
+        roundToCombatDecimals(u.shieldGGBlue - AURA_TITA_SHIELD_PER_STACK),
+      );
+    }
     return true;
   }
 

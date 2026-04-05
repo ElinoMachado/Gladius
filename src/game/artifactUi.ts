@@ -83,6 +83,7 @@ const SPECIAL_MAX: Record<string, number> = {
   ira_dimensao: 2,
   carne_eterna: 3,
   penumbra: 3,
+  aura_tita: 6,
 };
 
 export function getArtifactMaxStacks(artifactId: string): number {
@@ -248,6 +249,8 @@ export function describeArtifactAtStack(
       return `Instâncias de dano e cura podem dar crítico. +${10 * n}% ao multiplicador de dano crítico nesses ticks (máx. 6 acúmulos).`;
     case "vendaval_arcana":
       return `+${8 * n}% de dano com habilidades (não básico).`;
+    case "aura_tita":
+      return `+${50 * n} de escudo no início da wave; +${50} de escudo ao ganhar este acúmulo.`;
     case "ceu_partido":
       return `+${15 * n}% de dano com habilidades (não básico).`;
     case "espinhos_reais":
