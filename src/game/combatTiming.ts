@@ -35,7 +35,7 @@ export const GOLPE_RELAMPAGO_MOVE_MS = 340;
 /** Sem deslocamento no mapa: pausa antes do impacto para ler o golpe. */
 export const GOLPE_RELAMPAGO_WINDUP_MS = 240;
 
-/** Espada do fogo eterno: rajada de projéteis no início do turno. */
+/** Espada do fogo eterno: intervalo entre projéteis da rajada no fim do turno. */
 export const ESPADA_FOGO_STAGGER_MS = 72;
 export const ESPADA_FOGO_PROJECTILE_SEC = 0.22;
 

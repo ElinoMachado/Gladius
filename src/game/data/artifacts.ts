@@ -328,7 +328,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Espada do fogo eterno",
     rarity: "legendary",
     description:
-      "No início do teu turno surgem lâminas a orbitar; ao encerrares o turno, cada uma atinge o inimigo mais distante no teu bioma (25+20% do teu dano base por acúmulo; +25 fixo e +10% por acúmulo extra). Número de golpes = ataques básicos permitidos neste turno (mín. 1).",
+      "Ao escolheres este artefato surgem lâminas a orbitar; no início do teu turno ressurgem; ao encerrares o turno, cada uma atinge o inimigo mais distante no teu bioma (25+20% do teu dano base por acúmulo; +25 fixo e +10% por acúmulo extra). Número de golpes = ataques básicos permitidos neste turno (mín. 1).",
   },
 
   /* ——— Míticos (6) ——— */

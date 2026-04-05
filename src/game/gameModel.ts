@@ -4299,8 +4299,8 @@ export class GameModel {
   }
 
   /**
-   * Início do turno: só VFX (lâminas a orbitar). O dano dispara em `scheduleEspadaFogoEternoVolleyOnTurnEnd`
-   * ao encerrar o turno — evita confusão com “nada acontece” e alinha ao fecho do turno do jogador.
+   * Só VFX (lâminas a orbitar): ao ganhar o artefato em combate, no início do turno do herói, ou após escolha no level-up.
+   * O dano dispara em `scheduleEspadaFogoEternoVolleyOnTurnEnd` ao encerrar o turno.
    */
   private prepareEspadaFogoEternoOrbitVisual(h: Unit): void {
     if (this.phase !== "combat" || this.duel) return;
@@ -6010,6 +6010,9 @@ export class GameModel {
         u.shieldGGBlue + AURA_TITA_SHIELD_PER_STACK,
       );
     }
+    if (artifactId === "espada_fogo_eterno" && u.isPlayer) {
+      this.prepareEspadaFogoEternoOrbitVisual(u);
+    }
     return true;
   }
 
@@ -6044,7 +6047,6 @@ export class GameModel {
     if (!artifactDefById(artifactId)) return false;
     const u = this.units.find((x) => x.id === heroId);
     if (!u?.isPlayer) return false;
-    const prevStacks = u.artifacts[artifactId] ?? 0;
     const ok =
       delta === 1
         ? this.incrementArtifactStack(u, artifactId)
@@ -6061,23 +6063,6 @@ export class GameModel {
       (u.artifacts["espada_fogo_eterno"] ?? 0) <= 0
     ) {
       delete u.espadaFogoOrbitVisualCount;
-    }
-    if (
-      artifactId === "espada_fogo_eterno" &&
-      delta === 1 &&
-      prevStacks === 0 &&
-      (u.artifacts["espada_fogo_eterno"] ?? 0) > 0
-    ) {
-      const ch = this.currentHero();
-      if (
-        ch &&
-        ch.id === u.id &&
-        this.phase === "combat" &&
-        !this.inEnemyPhase &&
-        !this.duel
-      ) {
-        this.prepareEspadaFogoEternoOrbitVisual(u);
-      }
     }
     this.emit();
     return true;
@@ -6209,6 +6194,9 @@ export class GameModel {
     u.mana = Math.min(u.mana, u.maxMana);
     this.pendingArtifacts = null;
     this.phase = "combat";
+    if (artifactId === "espada_fogo_eterno") {
+      this.prepareEspadaFogoEternoOrbitVisual(u);
+    }
     if (artifactId === "braco_forte") {
       const ch = this.currentHero();
       if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
