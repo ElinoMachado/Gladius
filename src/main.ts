@@ -3628,7 +3628,12 @@ function showGoldShop(isInitial: boolean): void {
   goldShopStall3d.start();
 
   const queueRenderShop = (): void => {
-    if (goldShopLayoutRafId !== 0) return;
+    /* Reagendar sempre: se ignorássemos chamadas com RAF pendente, um emit
+     * subsequente (ex.: evoluir bunker) podia ficar sem `renderShop` com o modelo novo. */
+    if (goldShopLayoutRafId !== 0) {
+      cancelAnimationFrame(goldShopLayoutRafId);
+      goldShopLayoutRafId = 0;
+    }
     goldShopLayoutRafId = requestAnimationFrame(() => {
       goldShopLayoutRafId = 0;
       renderShop();
@@ -3832,10 +3837,15 @@ function showGoldShop(isInitial: boolean): void {
     panel.querySelectorAll("[data-gold-bunker-buy]").forEach((btn) => {
       btn.addEventListener("click", () => {
         const kind = (btn as HTMLElement).dataset.goldBunkerBuy;
-        if (kind === "repair") model.buyBunkerRepair(h.id);
-        else if (kind === "evolve") model.buyBunkerEvolve(h.id);
-        else if (kind === "auto_reparo") model.buyBunkerAutoRepair(h.id);
-        else if (kind === "fortificar") model.buyBunkerFortify(h.id);
+        let ok = false;
+        if (kind === "repair") ok = model.buyBunkerRepair(h.id);
+        else if (kind === "evolve") ok = model.buyBunkerEvolve(h.id);
+        else if (kind === "auto_reparo") ok = model.buyBunkerAutoRepair(h.id);
+        else if (kind === "fortificar") ok = model.buyBunkerFortify(h.id);
+        if (ok) {
+          goldShopVizFocus = "bunker";
+          queueRenderShop();
+        }
       });
     });
     const bEv = panel.querySelector("#gold-shop-bunk-evolve") as HTMLElement | null;
