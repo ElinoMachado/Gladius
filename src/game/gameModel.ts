@@ -4943,7 +4943,8 @@ export class GameModel {
     this.applyPoisonAndHotTick(u);
 
     if (u.immobileThisTurn) {
-      u.defesa += u.artifacts["duro_pedra"] ?? 0;
+      const dp = u.artifacts["duro_pedra"] ?? 0;
+      if (dp > 0) u.defesa += 5 * dp;
     }
     const pb = computePartyBonus(this.runColors);
     if (pb.shieldPerTurn > 0) {

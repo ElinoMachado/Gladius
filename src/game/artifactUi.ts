@@ -229,8 +229,10 @@ export function describeArtifactAtStack(
       return `+${20 * n}% acerto crítico; acima de 100% o excesso não aumenta crítico; cada 5% de excesso → +1 de dano.`;
     case "imortal":
       return `Abaixo de 50% HP: +${50 * n}% da regen vida.`;
+    case "anel_penetrante":
+      return `+${6 * n} de penetração.`;
     case "duro_pedra":
-      return `Sem mover no turno: +${n} defesa; +${2 * n}% dano crítico ao receber exatamente 1 de dano.`;
+      return `Sem mover no turno: +${5 * n} defesa; +${2 * n}% dano crítico ao receber exatamente 1 de dano.`;
     case "ruler":
       return `Ignore os efeitos dos biomas e receba + ${n} de movimento.`;
     case "braco_forte": {
@@ -381,7 +383,17 @@ export function artifactCardFigureSvg(artifactId: string): string {
     alento_morte: `<path fill="none" stroke="#78909c" stroke-width="1.4" d="M24 8v32"/><path fill="#b0bec5" d="M16 18c0-4 4-8 8-8s8 4 8 8v6H16v-6z"/><path fill="#37474f" d="M18 26h12v6H18z"/><circle cx="20" cy="22" r="2" fill="#eceff1"/><circle cx="28" cy="22" r="2" fill="#eceff1"/>`,
     ronin: `<path fill="#b71c1c" d="M12 36 L24 10 L36 36 Z" stroke="#3e2723" stroke-width="1"/><path fill="#eceff1" d="M22 20h4v14h-4z"/>`,
     imortal: `<path fill="#c62828" d="M24 12 C32 20 32 32 24 38 C16 32 16 20 24 12"/><path fill="#ffcdd2" d="M24 22v10" stroke="#fff" stroke-width="2"/>`,
-    duro_pedra: `<rect x="10" y="14" width="28" height="22" rx="2" fill="#78909c" stroke="#455a64"/><path fill="#546e7a" d="M14 18h20v4H14zm0 8h20v4H14z"/>`,
+    aura_tita: `<path d="M14 28 Q24 8 34 28 L36 34 Q24 40 12 34 Z" fill="#eceff1" stroke="#78909c" stroke-width="1"/><path d="M16 26 Q24 22 32 26" fill="none" stroke="#546e7a"/><ellipse cx="30" cy="16" rx="5" ry="3" fill="#fff59d" opacity="0.95"/><path d="M18 30h12v2Q24 36 18 32z" fill="#b0bec5"/>`,
+    sorte_prata: `<path fill="none" stroke="#42a5f5" stroke-width="2" stroke-linecap="round" d="M6 34c10-6 8-18-2-14M4 26c8-4 6-12-2-10"/><circle cx="28" cy="22" r="7" fill="#1976d2"/><path fill="none" stroke="#90caf9" stroke-width="1.8" stroke-linecap="round" d="M36 16l8-3M36 22h10M36 28l8 3"/>`,
+    vendaval_arcana: `<rect x="22" y="10" width="4" height="30" rx="1" fill="#4e342e"/><ellipse cx="24" cy="10" rx="7" ry="4" fill="#7e57c2" stroke="#4527a0" stroke-width="0.8"/><path d="M24 6 L19 2 L29 2 Z" fill="#d1c4e9"/>`,
+    fio_cruel: `<path fill="#9575cd" d="M12 30l3.5-7 3.5 7-3.5 5z"/><path fill="#7e57c2" d="M22 32l2.5-6 2.5 6-2.5 4z"/><path fill="#b39ddb" d="M30 28l3-6 3 6-3 5z"/><path fill="#5e35b1" d="M17 18l2-4 2 4-2 3z" opacity="0.85"/>`,
+    pacto_rubro: `<path fill="#b71c1c" d="M11 36 L24 6 L27 6 L15 38z"/><path fill="#5d4037" d="M22 8h5v28h-5z"/><path fill="#c62828" d="M12 34 Q17 40 24 36 Q20 38 14 36" opacity="0.9"/><path fill="#ff5252" d="M14 32 Q16 35 18 33" opacity="0.7"/>`,
+    instinto: `<path fill="#2e7d32" d="M24 10c-3 0-5 3-3 5-3 1-4 5-1 6-2 3 1 6 4 5 1 3 5 3 6 0 3 2 6-1 5-4 3-1 3-5 0-6 2-2 0-5-3-5-1-3-5-3-6-1-2-2-5 0-5z"/><circle cx="24" cy="22" r="2.5" fill="#a5d6a7"/><path fill="none" stroke="#1b5e20" stroke-width="0.8" d="M24 14v16M16 22h16"/>`,
+    pulso_verde: `<path fill="#2e7d32" d="M24 38 C10 28 12 14 24 10 C36 14 38 28 24 38z"/><path fill="#66bb6a" d="M24 16 C18 22 20 30 24 34 C28 30 30 22 24 16z"/><path fill="#c8e6c9" d="M24 20 C22 24 23 28 24 30 C25 28 26 24 24 20z"/>`,
+    seda_vampira: `<path fill="#311b92" d="M12 18 Q24 36 36 18 Q24 28 12 18"/><path fill="#fce4ec" d="M16 20 Q24 30 32 20 L30 24 Q24 32 18 24 Z"/><path fill="#fff" d="M17 21 L19 27 L21 21 M23 21 L24 27 L25 21 M27 21 L29 27 L31 21" stroke="#880e4f" stroke-width="0.6"/>`,
+    furacao_ouro: `<path fill="none" stroke="#f9a825" stroke-width="1.2" d="M24 10 Q38 24 24 38 Q10 24 24 10" opacity="0.7"/><ellipse cx="18" cy="16" rx="6" ry="3.5" fill="#ffc107" stroke="#f57f17"/><ellipse cx="30" cy="20" rx="5" ry="3" fill="#ffca28" stroke="#f9a825" transform="rotate(25 30 20)"/><ellipse cx="20" cy="30" rx="5" ry="3" fill="#ffd54f" stroke="#ff8f00" transform="rotate(-35 20 30)"/><ellipse cx="28" cy="32" rx="4" ry="2.5" fill="#ffe082" stroke="#ffa000"/>`,
+    duro_pedra: `<ellipse cx="24" cy="40" rx="11" ry="3.5" fill="#455a64" opacity="0.45"/><path d="M15 18 Q24 12 33 18 L35 34 Q24 38 13 34 Z" fill="#78909c" stroke="#455a64" stroke-width="1"/><circle cx="20" cy="22" r="2.2" fill="#37474f"/><circle cx="28" cy="22" r="2.2" fill="#37474f"/><path d="M19 28h10" stroke="#37474f" stroke-width="1"/><path d="M17 30l3 5M24 30v6M31 30l-3 5" stroke="#607d8b" stroke-width="1.2"/>`,
+    anel_penetrante: `<ellipse cx="24" cy="24" rx="15" ry="11" fill="none" stroke="#6a1b9a" stroke-width="3.5"/><ellipse cx="24" cy="24" rx="9" ry="6" fill="none" stroke="#ce93d8" stroke-width="1.8"/><circle cx="24" cy="24" r="4" fill="#4a148c" opacity="0.35"/>`,
     ruler: `<rect x="8" y="10" width="32" height="28" rx="2" fill="#eceff1" stroke="#37474f"/><path fill="none" stroke="#1976d2" stroke-width="2" d="M14 18h20M14 24h16M14 30h20"/><circle cx="24" cy="20" r="3" fill="#ffd54f"/>`,
     braco_forte: `<ellipse cx="24" cy="28" rx="12" ry="8" fill="#d7ccc8"/><path fill="#8d6e63" d="M16 20h16v12H16z"/><path fill="#5d4037" d="M20 14h8v10h-8z"/>`,
     curandeiro_batalha: `<path fill="#43a047" d="M24 8v32M8 24h32" stroke="#2e7d32" stroke-width="4"/><circle cx="24" cy="24" r="10" fill="none" stroke="#66bb6a" stroke-width="2"/>`,

@@ -94,8 +94,8 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     id: "anel_penetrante",
     name: "Anel penetrante",
     rarity: "common",
-    description: "+1 de penetração por acúmulo.",
-    pickBonusPerStack: { penetracao: 1 },
+    description: "+6 de penetração por acúmulo.",
+    pickBonusPerStack: { penetracao: 6 },
   },
   {
     id: "raiz_vida",
@@ -207,7 +207,7 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     name: "Duro como pedra",
     rarity: "rare",
     description:
-      "+1 defesa se não mover no turno por acúmulo; +2% dano crítico ao receber exatamente 1 de dano.",
+      "+5 de defesa por acúmulo se não moveres no turno (5 × acúmulos); +2% dano crítico ao receber exatamente 1 de dano.",
   },
   {
     id: "braco_forte",
