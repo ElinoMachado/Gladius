@@ -3769,11 +3769,71 @@ body.enemy-inspect--dragging-body {
   overflow: hidden;
 }
 
+.lol-bar-track--with-ico {
+  display: flex;
+  align-items: center;
+  gap: 0.32rem;
+  height: auto;
+  min-height: 18px;
+  background: transparent;
+  border: none;
+  overflow: visible;
+}
+
+.lol-bar-track-mid {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 18px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid #2a2830;
+  overflow: hidden;
+}
+
+.lol-bar-ico {
+  flex: 0 0 20px;
+  width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.lol-bar-ico .lol-stat-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lol-bar-ico .lol-stat-ico svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.lol-bar-label--shield-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4em;
+}
+
+.lol-bar-resource-name {
+  font-weight: 650;
+  opacity: 0.88;
+  letter-spacing: 0.02em;
+}
+
 .lol-bar--xp .lol-bar-track {
   height: 14px;
 }
 
-.lol-bar--shield .lol-bar-track {
+.lol-bar--xp .lol-bar-track-mid {
+  height: 14px;
+}
+
+.lol-bar--shield .lol-bar-track-mid {
   height: 14px;
 }
 

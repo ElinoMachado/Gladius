@@ -106,14 +106,23 @@ export function mountColorTriangleEditor(
     });
   };
 
-  const onDocDown = (e: MouseEvent): void => {
+  const onDocPointer = (e: PointerEvent): void => {
     if (!root.isConnected) {
-      document.removeEventListener("mousedown", onDocDown, true);
+      document.removeEventListener("pointerdown", onDocPointer, true);
       return;
     }
-    if (!root.contains(e.target as Node)) closePopover();
+    if (openIndex === null) return;
+    const t = e.target as Node;
+    if (root.contains(t)) return;
+    closePopover();
   };
-  document.addEventListener("mousedown", onDocDown, true);
+  document.addEventListener("pointerdown", onDocPointer, true);
+
+  const onDocKey = (e: KeyboardEvent): void => {
+    if (e.key !== "Escape" || openIndex === null) return;
+    closePopover();
+  };
+  document.addEventListener("keydown", onDocKey, true);
 
   vtxBtns.forEach((btn, index) => {
     btn.addEventListener("click", (e) => {
@@ -151,7 +160,8 @@ export function mountColorTriangleEditor(
   return {
     refresh,
     destroy: (): void => {
-      document.removeEventListener("mousedown", onDocDown, true);
+      document.removeEventListener("pointerdown", onDocPointer, true);
+      document.removeEventListener("keydown", onDocKey, true);
       closePopover();
       root.remove();
     },

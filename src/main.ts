@@ -6744,9 +6744,12 @@ function showCombatHUD(): void {
                 <div class="lol-hp-slot">
                   <div class="lol-hp-single-wrap" id="lol-hp-single-wrap">
                     <div class="lol-bar lol-bar--hp" aria-hidden="true">
-                      <div class="lol-bar-track">
-                        <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill"></div>
-                        <span class="lol-bar-label" id="lol-hp-txt"></span>
+                      <div class="lol-bar-track lol-bar-track--with-ico">
+                        <span class="lol-bar-ico" aria-hidden="true">${statIconWrap("max_hp", 0)}</span>
+                        <div class="lol-bar-track-mid">
+                          <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill"></div>
+                          <span class="lol-bar-label" id="lol-hp-txt"></span>
+                        </div>
                       </div>
                       <span class="lol-bar-regen-hint lol-bar-regen-hint--hp" id="lol-hp-regen" aria-hidden="true"></span>
                     </div>
@@ -6755,16 +6758,22 @@ function showCombatHUD(): void {
                     <div class="lol-hp-dual-row">
                       <div class="lol-hp-dual-stack" id="lol-hp-dual-stack" data-focus="bunker">
                         <div class="lol-bar lol-bar--hp lol-hp-layer lol-hp-layer--hero" aria-hidden="true">
-                          <div class="lol-bar-track">
-                            <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill-hero"></div>
-                            <span class="lol-bar-label" id="lol-hp-txt-hero"></span>
+                          <div class="lol-bar-track lol-bar-track--with-ico">
+                            <span class="lol-bar-ico" aria-hidden="true">${statIconWrap("max_hp", 1)}</span>
+                            <div class="lol-bar-track-mid">
+                              <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill-hero"></div>
+                              <span class="lol-bar-label" id="lol-hp-txt-hero"></span>
+                            </div>
                           </div>
                           <span class="lol-bar-regen-hint lol-bar-regen-hint--hp" id="lol-hp-regen-hero" aria-hidden="true"></span>
                         </div>
                         <div class="lol-bar lol-bar--hp lol-hp-layer lol-hp-layer--bunker" aria-hidden="true">
-                          <div class="lol-bar-track">
-                            <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill-bunker"></div>
-                            <span class="lol-bar-label" id="lol-hp-txt-bunker"></span>
+                          <div class="lol-bar-track lol-bar-track--with-ico">
+                            <span class="lol-bar-ico" aria-hidden="true">${statIconWrap("max_hp", 2)}</span>
+                            <div class="lol-bar-track-mid">
+                              <div class="lol-bar-fill lol-bar-fill--hp" id="lol-hp-fill-bunker"></div>
+                              <span class="lol-bar-label" id="lol-hp-txt-bunker"></span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -6776,9 +6785,12 @@ function showCombatHUD(): void {
                   </div>
                 </div>
                 <div class="lol-bar lol-bar--mana" aria-hidden="true">
-                  <div class="lol-bar-track">
-                    <div class="lol-bar-fill lol-bar-fill--mana" id="lol-mana-fill"></div>
-                    <span class="lol-bar-label" id="lol-mana-txt"></span>
+                  <div class="lol-bar-track lol-bar-track--with-ico">
+                    <span class="lol-bar-ico" aria-hidden="true">${statIconWrap("max_mana", 0)}</span>
+                    <div class="lol-bar-track-mid">
+                      <div class="lol-bar-fill lol-bar-fill--mana" id="lol-mana-fill"></div>
+                      <span class="lol-bar-label" id="lol-mana-txt"></span>
+                    </div>
                   </div>
                   <span class="lol-bar-regen-hint lol-bar-regen-hint--mana" id="lol-mana-regen" aria-hidden="true"></span>
                 </div>
@@ -6789,9 +6801,15 @@ function showCombatHUD(): void {
                   </div>
                 </div>
                 <div class="lol-bar lol-bar--shield" aria-hidden="true">
-                  <div class="lol-bar-track">
-                    <div class="lol-bar-fill lol-bar-fill--shield" id="lol-shield-fill"></div>
-                    <span class="lol-bar-label" id="lol-shield-txt"></span>
+                  <div class="lol-bar-track lol-bar-track--with-ico">
+                    <span class="lol-bar-ico" aria-hidden="true">${statIconWrap("pen_escudo", 3)}</span>
+                    <div class="lol-bar-track-mid">
+                      <div class="lol-bar-fill lol-bar-fill--shield" id="lol-shield-fill"></div>
+                      <span class="lol-bar-label lol-bar-label--shield-inline" id="lol-shield-lbl">
+                        <span class="lol-bar-resource-name">Escudo</span>
+                        <span id="lol-shield-txt">0</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -306,6 +306,10 @@ export class GameRenderer {
   private lastCanvasCssHeight = 1;
   /** Foco suave no plano XZ (world x, world z em .y). */
   private focusTarget: THREE.Vector2 | null = null;
+  /** Hex alvo enquanto há foco suave (atualiza o pan se `arenaYaw` estiver a interpolar). */
+  private focusAxial: { q: number; r: number; alignArena: boolean } | null = null;
+  /** Rotação da arena alvo (rad); null = sem interpolação. */
+  private arenaYawTarget: number | null = null;
   private fitCheckAcc = 0;
   private readonly camOffsetDir = new THREE.Vector3(85, 92, 85).normalize();
   private readonly camDistance = 152;
@@ -451,6 +455,8 @@ export class GameRenderer {
       this.keysDown.clear();
       this.panVelocity.set(0, 0);
       this.focusTarget = null;
+      this.focusAxial = null;
+      this.arenaYawTarget = null;
       this.panPointerDown = false;
       this.panDragMoved = false;
       this.suppressCanvasClick = false;
@@ -525,9 +531,14 @@ export class GameRenderer {
       if (alignArena) this.setArenaYawFromAxial(q, r);
       return;
     }
-    if (alignArena) this.setArenaYawFromAxial(q, r);
     if (!this.focusTarget) this.focusTarget = new THREE.Vector2();
-    this.worldPanInto(q, r, this.focusTarget);
+    this.focusAxial = { q, r, alignArena };
+    if (alignArena) {
+      this.arenaYawTarget = this.computeArenaYawForAxial(q, r);
+    } else {
+      this.arenaYawTarget = null;
+    }
+    this.refreshFocusWorldPanTarget();
   }
 
   /** Centraliza na hora (sem lerp), ex.: início do turno do jogador; alinha bioma ao herói. */
@@ -540,6 +551,8 @@ export class GameRenderer {
       this.setArenaYawFromAxial(q, r);
       return;
     }
+    this.focusAxial = null;
+    this.arenaYawTarget = null;
     this.setArenaYawFromAxial(q, r);
     this.worldPanInto(q, r, this.pan);
     this.focusTarget = null;
@@ -567,14 +580,11 @@ export class GameRenderer {
    * Rodamos a arena para o raio (profundidade do triângulo, em direção à base) coincidir com a “vertical”
    * do ecrã no chão — assim a base fica alinhada (horizontal na vista), não em diagonal.
    */
-  private setArenaYawFromAxial(q: number, r: number): void {
+  /** Ângulo Y da arena para alinhar o setor do hex à vista (sem aplicar ainda). */
+  private computeArenaYawForAxial(q: number, r: number): number {
     const { x, z } = axialToWorld(q, r, HEX_SIZE);
     const len = Math.hypot(x, z);
-    if (len < 0.55) {
-      this.arenaYaw = 0;
-      this.arenaRoot.rotation.y = this.arenaYaw;
-      return;
-    }
+    if (len < 0.55) return 0;
     const alpha = Math.atan2(z, x);
     this.applyCameraPose();
     const ndcEps = 0.07;
@@ -589,13 +599,24 @@ export class GameRenderer {
         thetaU = Math.atan2(uz, ux);
       }
     }
-    // Raio lógico tem ângulo α; após rotação Y da arena fica α − φ. Igualamos a “cima” no ecrã (θ_u).
-    this.arenaYaw = alpha - thetaU;
+    return alpha - thetaU;
+  }
+
+  private setArenaYawFromAxial(q: number, r: number): void {
+    this.arenaYaw = this.computeArenaYawForAxial(q, r);
     this.arenaRoot.rotation.y = this.arenaYaw;
+    this.arenaYawTarget = null;
+  }
+
+  private refreshFocusWorldPanTarget(): void {
+    if (!this.focusAxial || !this.focusTarget) return;
+    this.worldPanInto(this.focusAxial.q, this.focusAxial.r, this.focusTarget);
   }
 
   clearCameraFocus(): void {
     this.focusTarget = null;
+    this.focusAxial = null;
+    this.arenaYawTarget = null;
   }
 
   /**
@@ -613,6 +634,8 @@ export class GameRenderer {
     const camEnabledRestore = this.cameraInputEnabled;
     this.setCameraInputEnabled(false);
     this.focusTarget = null;
+    this.focusAxial = null;
+    this.arenaYawTarget = null;
     this.panVelocity.set(0, 0);
 
     const S = 3;
@@ -1951,6 +1974,8 @@ export class GameRenderer {
       this.panDragLastAppliedClientX = e.clientX;
       this.panDragLastAppliedClientY = e.clientY;
       this.focusTarget = null;
+      this.focusAxial = null;
+      this.arenaYawTarget = null;
       this.applyCameraPose();
     });
 
@@ -2151,6 +2176,28 @@ export class GameRenderer {
     }
   }
 
+  private updateArenaYawLerp(dt: number): void {
+    if (
+      this.usePersistentFreeCamera &&
+      !this.arenaLayoutEditActive &&
+      !this.combatUsesOrthographicView
+    )
+      return;
+    if (this.arenaYawTarget === null) return;
+    const target = this.arenaYawTarget;
+    let diff = target - this.arenaYaw;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const k = 1 - Math.exp(-5 * dt);
+    this.arenaYaw += diff * k;
+    this.arenaRoot.rotation.y = this.arenaYaw;
+    if (Math.abs(diff) < 0.014) {
+      this.arenaYaw = target;
+      this.arenaRoot.rotation.y = this.arenaYaw;
+      this.arenaYawTarget = null;
+    }
+  }
+
   private updateFocusLerp(dt: number): void {
     if (
       this.usePersistentFreeCamera &&
@@ -2159,21 +2206,32 @@ export class GameRenderer {
     )
       return;
     if (!this.focusTarget || !this.cameraInputEnabled) return;
-    if (this.panDragMoved) return;
-    if (this.keysDown.size > 0) {
+    if (this.panDragMoved) {
       this.focusTarget = null;
+      this.focusAxial = null;
+      this.arenaYawTarget = null;
       return;
     }
-    const k = 1 - Math.exp(-11 * dt);
+    if (this.keysDown.size > 0) {
+      this.focusTarget = null;
+      this.focusAxial = null;
+      this.arenaYawTarget = null;
+      return;
+    }
+    if (this.focusAxial) this.refreshFocusWorldPanTarget();
+    const k = 1 - Math.exp(-5 * dt);
     this.pan.x += (this.focusTarget.x - this.pan.x) * k;
     this.pan.y += (this.focusTarget.y - this.pan.y) * k;
-    if (
-      Math.hypot(this.focusTarget.x - this.pan.x, this.focusTarget.y - this.pan.y) <
-      0.14
-    ) {
+    const dist = Math.hypot(
+      this.focusTarget.x - this.pan.x,
+      this.focusTarget.y - this.pan.y,
+    );
+    const yawDone = this.arenaYawTarget === null;
+    if (yawDone && dist < 0.14) {
       this.pan.x = this.focusTarget.x;
       this.pan.y = this.focusTarget.y;
       this.focusTarget = null;
+      this.focusAxial = null;
     }
   }
 
@@ -4323,6 +4381,7 @@ export class GameRenderer {
     this.updateShieldBubblePulse(dt);
     this.updateArenaLayoutEditSession(dt);
     if (!cometOn) {
+      this.updateArenaYawLerp(dt);
       this.updateFocusLerp(dt);
       if (!this.panDragMoved) {
         this.updateCameraPan(dt);
