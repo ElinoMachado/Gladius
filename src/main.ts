@@ -1656,6 +1656,7 @@ function el(html: string): HTMLElement {
 
 function showArtifactCodex(): void {
   hideGameTooltip();
+  removeEquipmentModal();
   disposeMenu3dPreviews();
   uiRoot.innerHTML = "";
   const shell = el(`<div class="artifact-codex-screen">
@@ -1702,6 +1703,7 @@ function showArtifactCodex(): void {
 
 function showEnemyCompendium(): void {
   hideGameTooltip();
+  removeEquipmentModal();
   disposeMenu3dPreviews();
   uiRoot.innerHTML = "";
   const catalog = allEnemyArchetypesSorted();
@@ -2166,6 +2168,7 @@ function syncForgeHeroPanel(body: HTMLElement, meta: (typeof model)["meta"]): vo
 
 function showForge(): void {
   hideGameTooltip();
+  removeEquipmentModal();
   disposeMenu3dPreviews();
   forgeUiBiomePicksByHero[0] = {};
   forgeUiBiomePicksByHero[1] = {};
@@ -2313,6 +2316,7 @@ function showForge(): void {
 /** Menu principal: só dica enquanto se ajusta coliseu/câmara (clique passa ao canvas). */
 function showArenaLayoutEditHud(): void {
   hideGameTooltip();
+  removeEquipmentModal();
   disposeMenu3dPreviews();
   mainMenuSword3d?.dispose();
   mainMenuSword3d = null;
@@ -2406,6 +2410,7 @@ function enterEquipmentLayoutEditFromMenu(): void {
   if (!import.meta.env.DEV) return;
   disposeEquipmentLayoutEditor();
   hideGameTooltip();
+  removeEquipmentModal();
   disposeMenu3dPreviews();
   mainMenuSword3d?.dispose();
   mainMenuSword3d = null;
@@ -2555,6 +2560,7 @@ function enterEquipmentLayoutEditFromMenu(): void {
 function showMainMenu(): void {
   model.devSandboxMode = false;
   hideGameTooltip();
+  removeEquipmentModal();
   disposeMenu3dPreviews();
   mainMenuSword3d?.dispose();
   mainMenuSword3d = null;
@@ -2691,6 +2697,7 @@ function formatRunElapsedHhMmSs(ms: number): string {
 function showWaveSummaryOverlay(): void {
   const summary = model.peekWaveLootSummary();
   hideGameTooltip();
+  removeEquipmentModal();
   uiRoot.innerHTML = "";
   if (!summary) {
     model.dismissWaveSummary();
@@ -2747,6 +2754,7 @@ function showWaveSummaryOverlay(): void {
 
 function showCrystalShop(): void {
   hideGameTooltip();
+  removeEquipmentModal();
   disposeMenu3dPreviews();
   crystalShop3d?.dispose();
   crystalShop3d = null;
@@ -2868,6 +2876,7 @@ function showHeroSetup(): void {
   disposeHeroSetupPreviews();
   heroSetupPreviewInstances = [];
   hideGameTooltip();
+  removeEquipmentModal();
   disposeMenu3dPreviews();
   uiRoot.innerHTML = "";
   const heroes = selectedHeroes();
@@ -2993,6 +3002,7 @@ function showBiomeSetup(): void {
   disposeBiomePicker();
   disposeBioHeroPreview();
   hideGameTooltip();
+  removeEquipmentModal();
   uiRoot.innerHTML = "";
   const heroes = selectedHeroes();
   if (heroes.length === 0) {
@@ -3133,6 +3143,7 @@ function showBiomeSetup(): void {
 
 function showColorSetup(): void {
   hideGameTooltip();
+  removeEquipmentModal();
   uiRoot.innerHTML = "";
   while (setup.colors.length < 3) setup.colors.push("azul");
   setup.colors = setup.colors.slice(0, 3);
@@ -3541,6 +3552,7 @@ function showGoldShop(isInitial: boolean): void {
   goldShopStall3d = null;
   goldShopHeroPreview3d?.dispose();
   goldShopHeroPreview3d = null;
+  removeEquipmentModal();
   uiRoot.innerHTML = "";
   const party = model.getParty();
   let idx = Math.min(
@@ -6775,6 +6787,7 @@ function showCombatHUD(): void {
   disposeEnemyInspectPreview();
   enemyInspectUiAbort?.abort();
   enemyInspectUiAbort = null;
+  removeEquipmentModal();
   uiRoot.innerHTML = "";
   const sandboxHudHtml =
     import.meta.env.DEV && model.devSandboxMode
@@ -8584,6 +8597,7 @@ function showCombatHUD(): void {
 
 function showLevelPick(): void {
   hideGameTooltip();
+  removeEquipmentModal();
   const p = model.pendingArtifacts!;
   const hero = model.units.find((x) => x.id === p.unitId);
   uiRoot.innerHTML = "";
@@ -8711,6 +8725,7 @@ function showLevelPick(): void {
 
 function showUltimatePick(): void {
   hideGameTooltip();
+  removeEquipmentModal();
   const p = model.pendingUltimate!;
   const u = model.units.find((x) => x.id === p.unitId);
   uiRoot.innerHTML = "";
@@ -8772,6 +8787,7 @@ function showUltimatePick(): void {
 
 function showVictory(): void {
   hideGameTooltip();
+  removeEquipmentModal();
   uiRoot.innerHTML = "";
   const s = el(`
     <div class="screen screen--crystal-veil screen--victory-end">
@@ -8789,6 +8805,7 @@ function showVictory(): void {
 
 function showDefeat(): void {
   hideGameTooltip();
+  removeEquipmentModal();
   uiRoot.innerHTML = "";
   const s = el(`
     <div class="screen screen--crystal-veil screen--defeat-end">
@@ -8843,6 +8860,24 @@ function shouldShowBunkerMeshes(phase: GamePhase): boolean {
   );
 }
 
+/**
+ * Pausa (Esc) usa backdrop em `document.body`. Se a fase mudar ou o estado dessincronizar,
+ * o véu escuro pode ficar por cima de tudo e bloquear o jogo.
+ */
+function syncPauseMenuWithGamePhase(): void {
+  const orphan = document.getElementById("run-pause-backdrop");
+  if (orphan && !runPauseOpen) {
+    orphan.remove();
+  }
+  if (runPauseOpen && !orphan) {
+    runPauseOpen = false;
+    runPauseEl = null;
+  }
+  if (!isRunPhaseForPauseMenu(model.phase)) {
+    closeRunPauseMenu();
+  }
+}
+
 function render(): void {
   if (!import.meta.env.DEV) {
     model.devSandboxMode = false;
@@ -8854,6 +8889,7 @@ function render(): void {
   ) {
     model.applyDevSandboxBuffs();
   }
+  syncPauseMenuWithGamePhase();
   if (model.phase !== "shop_wave" && model.phase !== "shop_initial") {
     refreshGoldShop = null;
   }

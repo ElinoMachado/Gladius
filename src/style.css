@@ -2875,13 +2875,15 @@ h1 {
   background: rgba(0, 0, 0, 0.28);
   opacity: 0;
   transition: opacity 0.42s ease;
-  pointer-events: auto;
+  /* Só intercepta cliques quando visível — evita “parede invisível” se o fade falhar ou durante o fade-in. */
+  pointer-events: none;
   cursor: pointer;
   filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.5));
 }
 
 .wave-intro-overlay--visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .wave-intro-inner {
