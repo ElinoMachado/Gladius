@@ -304,24 +304,7 @@ export class GameRenderer {
   /** Evita `setSize(0,0)` quando o layout ainda não mediu o canvas (ecrã preto). */
   private lastCanvasCssWidth = 1;
   private lastCanvasCssHeight = 1;
-  /** Duração fixa do deslocamento da câmara ao focar um hex (ex.: mudança de turno). */
-  private static readonly HERO_FOCUS_DURATION_MS = 1000;
-  /**
-   * Interpolação pan + rotação da arena para o herói/alvo em `HERO_FOCUS_DURATION_MS`.
-   * Substitui o salto instantâneo de `snapCameraToAxial` e o lerp exponencial antigo de `focusOnAxial`.
-   */
-  private heroFocusTween: {
-    startMs: number;
-    q: number;
-    r: number;
-    alignArena: boolean;
-    panStartX: number;
-    panStartY: number;
-    yawStart: number;
-    yawEnd: number;
-  } | null = null;
-  private readonly focusTweenPanScratch = new THREE.Vector2();
-  /** Foco suave no plano XZ (world x, world z em .y). — legado; foco de combate usa `heroFocusTween`. */
+  /** Foco suave no plano XZ (world x, world z em .y). */
   private focusTarget: THREE.Vector2 | null = null;
   /** Hex alvo enquanto há foco suave (atualiza o pan se `arenaYaw` estiver a interpolar). */
   private focusAxial: { q: number; r: number; alignArena: boolean } | null = null;
@@ -471,7 +454,6 @@ export class GameRenderer {
     if (!enabled) {
       this.keysDown.clear();
       this.panVelocity.set(0, 0);
-      this.heroFocusTween = null;
       this.focusTarget = null;
       this.focusAxial = null;
       this.arenaYawTarget = null;
@@ -549,10 +531,17 @@ export class GameRenderer {
       if (alignArena) this.setArenaYawFromAxial(q, r);
       return;
     }
-    this.startHeroFocusTween(q, r, alignArena);
+    if (!this.focusTarget) this.focusTarget = new THREE.Vector2();
+    this.focusAxial = { q, r, alignArena };
+    if (alignArena) {
+      this.arenaYawTarget = this.computeArenaYawForAxial(q, r);
+    } else {
+      this.arenaYawTarget = null;
+    }
+    this.refreshFocusWorldPanTarget();
   }
 
-  /** Centraliza no hex com animação de 1 s (início do turno, cometa, etc.). */
+  /** Centraliza na hora (sem lerp), ex.: início do turno do jogador; alinha bioma ao herói. */
   snapCameraToAxial(q: number, r: number): void {
     if (
       this.usePersistentFreeCamera &&
@@ -562,81 +551,16 @@ export class GameRenderer {
       this.setArenaYawFromAxial(q, r);
       return;
     }
-    this.startHeroFocusTween(q, r, true);
-  }
-
-  /** Inicia tween de pan/rotação até (q,r) com duração fixa. */
-  private startHeroFocusTween(
-    q: number,
-    r: number,
-    alignArena: boolean,
-  ): void {
-    this.focusTarget = null;
     this.focusAxial = null;
     this.arenaYawTarget = null;
+    this.setArenaYawFromAxial(q, r);
+    this.worldPanInto(q, r, this.pan);
+    this.focusTarget = null;
     this.panVelocity.set(0, 0);
-    const yawStart = this.arenaYaw;
-    const yawEnd = alignArena
-      ? this.computeArenaYawForAxial(q, r)
-      : yawStart;
-    this.heroFocusTween = {
-      startMs: performance.now(),
-      q,
-      r,
-      alignArena,
-      panStartX: this.pan.x,
-      panStartY: this.pan.y,
-      yawStart,
-      yawEnd,
-    };
-  }
-
-  private static shortAngleDelta(from: number, to: number): number {
-    let d = to - from;
-    while (d > Math.PI) d -= Math.PI * 2;
-    while (d < -Math.PI) d += Math.PI * 2;
-    return d;
-  }
-
-  private updateHeroFocusTween(): void {
-    const tw = this.heroFocusTween;
-    if (!tw) return;
-    if (
-      this.usePersistentFreeCamera &&
-      !this.arenaLayoutEditActive &&
-      !this.combatUsesOrthographicView
-    ) {
-      this.heroFocusTween = null;
-      return;
-    }
-    if (this.panDragMoved || this.keysDown.size > 0) {
-      this.heroFocusTween = null;
-      return;
-    }
-    const now = performance.now();
-    const t = Math.min(
-      1,
-      (now - tw.startMs) / GameRenderer.HERO_FOCUS_DURATION_MS,
-    );
-    const ease = t * t * (3 - 2 * t);
-    if (tw.alignArena) {
-      const dYaw = GameRenderer.shortAngleDelta(tw.yawStart, tw.yawEnd);
-      this.arenaYaw = tw.yawStart + dYaw * ease;
-      this.arenaRoot.rotation.y = this.arenaYaw;
-      this.worldPanInto(tw.q, tw.r, this.pan);
-    } else {
-      this.arenaYaw = tw.yawStart;
-      this.arenaRoot.rotation.y = this.arenaYaw;
-      const panEnd = this.focusTweenPanScratch;
-      this.worldPanInto(tw.q, tw.r, panEnd);
-      this.pan.x = THREE.MathUtils.lerp(tw.panStartX, panEnd.x, ease);
-      this.pan.y = THREE.MathUtils.lerp(tw.panStartY, panEnd.y, ease);
-    }
-    if (t >= 1) {
-      this.arenaYaw = tw.yawEnd;
-      this.arenaRoot.rotation.y = this.arenaYaw;
-      this.worldPanInto(tw.q, tw.r, this.pan);
-      this.heroFocusTween = null;
+    if (this.domCanvas) {
+      this.applyCameraPose();
+      this.clampPanIntoColiseum();
+      this.applyCameraPose();
     }
   }
 
@@ -690,7 +614,6 @@ export class GameRenderer {
   }
 
   clearCameraFocus(): void {
-    this.heroFocusTween = null;
     this.focusTarget = null;
     this.focusAxial = null;
     this.arenaYawTarget = null;
@@ -2050,7 +1973,6 @@ export class GameRenderer {
       this.applyPanDeltaFromClientPixels(canvas, e.clientX, e.clientY, lx, ly);
       this.panDragLastAppliedClientX = e.clientX;
       this.panDragLastAppliedClientY = e.clientY;
-      this.heroFocusTween = null;
       this.focusTarget = null;
       this.focusAxial = null;
       this.arenaYawTarget = null;
@@ -2099,7 +2021,6 @@ export class GameRenderer {
       (e) => {
         if (!this.cameraInputEnabled || isTypingTarget(e.target)) return;
         e.preventDefault();
-        this.heroFocusTween = null;
         const factor = Math.exp(-e.deltaY * 0.0018);
         this.zoom = THREE.MathUtils.clamp(this.zoom * factor, 0.12, 5.5);
         this.applyOrthoFrustum(canvas);
@@ -4460,11 +4381,8 @@ export class GameRenderer {
     this.updateShieldBubblePulse(dt);
     this.updateArenaLayoutEditSession(dt);
     if (!cometOn) {
-      this.updateHeroFocusTween();
-      if (!this.heroFocusTween) {
-        this.updateArenaYawLerp(dt);
-        this.updateFocusLerp(dt);
-      }
+      this.updateArenaYawLerp(dt);
+      this.updateFocusLerp(dt);
       if (!this.panDragMoved) {
         this.updateCameraPan(dt);
       }

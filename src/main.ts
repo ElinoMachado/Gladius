@@ -1016,8 +1016,8 @@ function heroHasAnyEnabledCombatAction(m: GameModel, h: Unit): boolean {
 
   const sandboxCd = m.sandboxNoCdUltEnabled();
   const tmpl = HEROES[h.heroClass];
-  const bunk = m.bunkerAtHex(h.q, h.r);
-  const inBunker = !!bunk && bunk.occupantId === h.id;
+  const bunk = h.isPlayer ? m.bunkerForOccupant(h.id) : null;
+  const inBunker = bunk != null && bunk.hp > 0;
 
   if (m.movementLeft > 0) {
     const reach = m.reachableForCurrentHero();
@@ -4086,8 +4086,8 @@ function mountGoldShopHeroSkillsRow(
     () => tooltipBasicAttack(h, m),
   );
 
-  const bunk = m.bunkerAtHex(h.q, h.r);
-  const inBunker = !!bunk && bunk.occupantId === h.id;
+  const bunk = h.isPlayer ? m.bunkerForOccupant(h.id) : null;
+  const inBunker = bunk != null && bunk.hp > 0;
   if (inBunker && bunk) {
     const cdM = cdEff(h.skillCd["bunker_minas"] ?? 0);
     if (inGoldShop) {
@@ -6562,9 +6562,8 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       }),
     });
   }
-  const Bb = m.bunkerAtHex(h.q, h.r);
-  const inBunkHud =
-    h.isPlayer && !!Bb && Bb.hp > 0 && Bb.occupantId === h.id;
+  const Bb = h.isPlayer ? m.bunkerForOccupant(h.id) : null;
+  const inBunkHud = !!Bb && Bb.hp > 0;
   if (inBunkHud && Bb) {
     const B = Bb;
     cells.unshift({
@@ -7473,9 +7472,8 @@ function showCombatHUD(): void {
     lolLoadout.classList.remove("lol-loadout--inactive");
     const tmpl = HEROES[h.heroClass];
     const bio = biomeAt(model.grid, h.q, h.r) as BiomeId;
-    const bunkHere = model.bunkerAtHex(h.q, h.r);
-    const bunkHud =
-      !!bunkHere && bunkHere.hp > 0 && bunkHere.occupantId === h.id;
+    const bunkHere = h.isPlayer ? model.bunkerForOccupant(h.id) : null;
+    const bunkHud = !!bunkHere && bunkHere.hp > 0;
     lolPortrait.style.background = "";
     lolPortrait.style.backgroundImage = `linear-gradient(180deg,${displayColorCss(h.displayColor)}aa,rgba(0,0,0,0.42)),url(${JSON.stringify(heroSplashDataUrl(h.heroClass))})`;
     lolPortrait.style.backgroundSize = "cover, cover";
@@ -7557,7 +7555,8 @@ function showCombatHUD(): void {
         model.phase === "combat" &&
         isViewingActive &&
         h.level >= 60 &&
-        !h.ultimateId;
+        !h.ultimateId &&
+        !bunkHud;
       const readyCls = formaReady ? " lol-forma-final-slot--ready" : "";
       const formaEvolved = !!(h.ultimateId && h.formaFinal);
       const slotWeaponIco = formaEvolved
@@ -7690,9 +7689,7 @@ function showCombatHUD(): void {
       actionRow.appendChild(b);
     };
 
-    const bunk = model.bunkerAtHex(h.q, h.r);
-    const inBunker = !!bunk && bunk.occupantId === h.id;
-    if (inBunker && bunk) {
+    if (bunkHud && bunkHere) {
       const cdM = model.sandboxNoCdUltEnabled()
         ? 0
         : (h.skillCd["bunker_minas"] ?? 0);
@@ -7722,7 +7719,7 @@ function showCombatHUD(): void {
         });
       });
       actionRow.appendChild(bMin);
-      if (bunk.tier >= 2) {
+      if (bunkHere.tier >= 2) {
         const cdT = model.sandboxNoCdUltEnabled()
           ? 0
           : (h.skillCd["bunker_tiro_preciso"] ?? 0);
@@ -7874,7 +7871,7 @@ function showCombatHUD(): void {
     }
 
     if (
-      !(inBunker && bunk) &&
+      !bunkHud &&
       (h.heroClass === "sacerdotisa" ||
         h.heroClass === "pistoleiro" ||
         h.heroClass === "gladiador")
@@ -7916,10 +7913,7 @@ function showCombatHUD(): void {
       actionRow.appendChild(bWU);
     }
 
-    if (
-      !(inBunker && bunk) &&
-      h.ultimateId === "especialista_destruicao"
-    ) {
+    if (!bunkHud && h.ultimateId === "especialista_destruicao") {
       const ult = HEROES.pistoleiro.ultimates.find(
         (u) => u.id === "especialista_destruicao",
       )!;
