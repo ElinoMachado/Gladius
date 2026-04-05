@@ -1,0 +1,29 @@
+---
+description: WebGL/Three.js — ciclo de vida, innerHTML e partilha de recursos GPU (evitar context lost)
+alwaysApply: true
+---
+
+# WebGL / Three.js e o DOM
+
+Ao adicionar ou alterar ecrãs com `WebGLRenderer` (Three.js, R3F com canvas próprio, etc.):
+
+## `innerHTML` / substituir árvore DOM
+
+- Se o canvas WebGL estiver **dentro** do nó que vais apagar com `innerHTML`, `replaceChildren`, ou `textContent` em ancestral, o browser **destrói o canvas** → perda de contexto (`WEBGL_context_lost`), ecrã cinzento, estado órfão no JS.
+- **Antes** de limpar o DOM: `renderer.dispose()` **ou** (para reciclar o mesmo renderer) **desanexar** o canvas do pai (`removeChild` / `remove()`) **sem** `dispose`, reconstruir o HTML, voltar a `appendChild` no novo host e `setSize` / retomar o loop.
+- Em **mudanças de rota/fase** (SPA, máquina de estados do jogo): garantir dispose/detach nos pontos centrais de transição, não só nos botões “Fechar”, para não ficar canvas vivo quando outro ecrã faz `uiRoot.innerHTML = ""`.
+
+## `dispose()` e recursos partilhados
+
+- Clones de GLB com `material.clone()` podem **partilhar as mesmas `Texture`** que o modelo em cache. `material.dispose()` num clone pode libertar texturas ainda usadas por outros meshes → corrupção e context lost.
+- Para assets partilhados: **não** dar `dispose` em materiais/texturas do clone; libertar só geometrias próprias do clone, ou anular maps antes de dispose, conforme a arquitetura do projeto.
+- Vários `WebGLRenderer` ativos (pré-visualizações + jogo) aumentam pressão na GPU; limitar `pixelRatio` em previews ajuda.
+
+## Checklist rápido para código novo
+
+1. Onde o canvas está no DOM? Algum `innerHTML` nesse ramo?
+2. Onde a instância é criada e onde deve morrer (dispose / detach)?
+3. Há texturas ou materiais partilhados entre clones e cache?
+4. Transições de fase limpam **todos** os renderers que viviam no `uiRoot` (ou equivalente)?
+
+Em `dispose()`, remover o canvas com `domElement.parentNode?.removeChild(domElement)` em vez de exigir `parentNode === host` original (o canvas pode ter sido destacado antes).
