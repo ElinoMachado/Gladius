@@ -5910,7 +5910,7 @@ body.enemy-inspect--dragging-body {
   margin-bottom: 0.35rem;
 }
 
-/* Atributos + compras do bunker na shop-mid-row (paridade com grelha de ouro do herói). */
+/* Só grelha de compras do bunker na shop-mid-row (como o herói); resto fica no cartão. */
 .shop-bunker-mid-block {
   width: 100%;
   margin-top: 0.75rem;
@@ -5919,20 +5919,12 @@ body.enemy-inspect--dragging-body {
   box-sizing: border-box;
 }
 
+.shop-bunker-mid-block--buys-only .shop-grid.shop-grid--bunker-buy {
+  margin-top: 0;
+}
+
 .shop-bunker-mid-block[hidden] {
   display: none !important;
-}
-
-.shop-bunker-mid-block__buy-head {
-  margin-top: 0.55rem;
-  margin-bottom: 0.22rem;
-}
-
-.shop-bunker-mid-block__hint {
-  margin: 0.5rem 0 0;
-  font-size: 0.72rem;
-  line-height: 1.45;
-  color: rgba(200, 190, 170, 0.88);
 }
 
 .shop-screen__panel--gold .gold-shop-bunker-skill--locked {

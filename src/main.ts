@@ -3760,7 +3760,7 @@ function showGoldShop(isInitial: boolean): void {
               </div>
             </div>
           </div>
-          <button type="button" class="shop-viz-flip-arrow" id="shop-viz-flip-toggle" aria-label="Mostrar bunker — atributos e compras na grelha abaixo">
+          <button type="button" class="shop-viz-flip-arrow" id="shop-viz-flip-toggle" aria-label="Mostrar bunker — compras do bunker na grelha abaixo">
             <span class="shop-viz-flip-arrow__chevron" aria-hidden="true">→</span>
             <span class="shop-viz-flip-arrow__text">Bunker</span>
           </button>
@@ -3769,12 +3769,8 @@ function showGoldShop(isInitial: boolean): void {
         <div class="shop-mid-row">
           <div class="shop-mid-cell shop-mid-cell--gold">
             <div id="shop-grid-hero-gold" class="shop-grid"${heroGridHidden}${heroGridAria}>${list}</div>
-            <div id="shop-bunker-mid-block" class="shop-bunker-mid-block"${bunkMidHidden}${bunkMidAria}>
-              <p class="shop-hero-stats-head">Atributos do bunker</p>
-              <div id="gold-shop-bunker-stats" class="lol-stats-list gold-shop-hero-stats-grid" aria-label="Atributos do bunker"></div>
-              <p class="shop-hero-stats-head shop-bunker-mid-block__buy-head">Melhorias de ouro</p>
+            <div id="shop-bunker-mid-block" class="shop-bunker-mid-block shop-bunker-mid-block--buys-only"${bunkMidHidden}${bunkMidAria}>
               <div id="shop-grid-bunker-gold" class="shop-grid shop-grid--bunker-buy">${goldShopBunkerBuyGridHtml(bunkerShop, h)}</div>
-              <p class="shop-bunker-mid-block__hint">Reparação = PV em falta. Evoluções: 300 / 500 ouro. Auto reparo (nv. 2+): 50 ouro/nível. Fortificar (nv. 3): 100 ouro por +100 escudo (até 5× por wave; escudo zera entre waves).</p>
             </div>
           </div>
         </div>`;
@@ -4987,7 +4983,7 @@ function applyGoldShopVizFocus(panel: HTMLElement, hasBunker: boolean): void {
       "aria-label",
       bunker
         ? "Mostrar herói e melhorias do herói"
-        : "Mostrar bunker — atributos e compras na grelha abaixo",
+        : "Mostrar bunker — compras do bunker na grelha abaixo",
     );
   }
 }
@@ -5026,7 +5022,10 @@ function mountGoldShopBunkerSkillsRow(
   );
 }
 
-/** Cartão do bunker no carrossel: só 3D, nível e habilidades (atributos e ouro ficam na grelha de baixo, como o herói). */
+/**
+ * Cartão do bunker no carrossel: 3D, nível, atributos, habilidades e texto de ajuda.
+ * Só as compras em ouro ficam fora, na grelha inferior (paridade com o herói).
+ */
 function goldShopBunkerSectionHtml(bunk: BunkerState): string {
   const t = effectiveBunkerTier(bunk);
   const disp = bunkerDisplayLevel(t);
@@ -5036,14 +5035,17 @@ function goldShopBunkerSectionHtml(bunk: BunkerState): string {
       <div id="bunker-preview-host" class="gold-shop-hero-3d-host shop-bunker-viz-layout__3d-host" data-bunker-preview-tier="${t}" aria-hidden="true"></div>
     </div>
     <div class="shop-hero-stats-col shop-bunker-viz-layout__col">
+      <p class="shop-hero-stats-head">Atributos do bunker</p>
       <div class="shop-bunker-level-row" role="group" aria-label="Nível do bunker">
         <span class="shop-bunker-level-row__lbl">Nível</span>
         <span class="shop-bunker-level-row__val">${nvStr}</span>
       </div>
+      <div id="gold-shop-bunker-stats" class="lol-stats-list gold-shop-hero-stats-grid" aria-label="PV, defesa e extras do bunker"></div>
       <div class="shop-bunker-skills-block">
         <p class="shop-hero-stats-head shop-bunker-skills-block__head">Habilidades</p>
         <div id="gold-shop-bunker-skills" class="gold-shop-hero-skills-row" role="group" aria-label="Habilidades do bunker"></div>
       </div>
+      <p class="shop-bunker-viz-layout__hint">Reparação = PV em falta. Evoluções: 300 / 500 ouro. Auto reparo (bunker nv. 2+): 50 ouro/nível. Fortificar (bunker nv. 3): 100 ouro por +100 escudo (até 5× por wave; escudo zera entre waves). As compras ficam na grelha por baixo.</p>
     </div>
   </div>`;
 }
