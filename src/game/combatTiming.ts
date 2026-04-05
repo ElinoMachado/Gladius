@@ -37,8 +37,6 @@ export const GOLPE_RELAMPAGO_WINDUP_MS = 240;
 
 /** Espada do fogo eterno: intervalo entre projéteis da rajada no fim do turno. */
 export const ESPADA_FOGO_STAGGER_MS = 72;
-/** Margem após o último golpe antes de iniciar a fase inimiga (evita corrida com `inEnemyPhase`). */
-export const ESPADA_FOGO_ENEMY_PHASE_AFTER_VOLLEY_MS = 100;
 export const ESPADA_FOGO_PROJECTILE_SEC = 0.22;
 
 /**

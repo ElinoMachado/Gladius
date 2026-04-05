@@ -164,7 +164,6 @@ import {
   SENTENCA_FIRST_DAMAGE_MS,
   SENTENCA_HEAL_AFTER_LAST_HIT_MS,
   SENTENCA_STAGGER_MS,
-  ESPADA_FOGO_ENEMY_PHASE_AFTER_VOLLEY_MS,
   ESPADA_FOGO_STAGGER_MS,
   UNIT_MOVE_SEGMENT_MS,
 } from "./combatTiming";
@@ -2259,9 +2258,8 @@ export class GameModel {
 
   endHeroTurn(): void {
     const h = this.currentHero();
-    let espadaVolleyTailMs: number | null = null;
     if (h) {
-      espadaVolleyTailMs = this.scheduleEspadaFogoEternoVolleyOnTurnEnd(h);
+      this.scheduleEspadaFogoEternoVolleyOnTurnEnd(h);
       delete h.espadaFogoOrbitVisualCount;
       clearBravuraInstances(h);
       if (!this.sandboxNoCdUltEnabled()) {
@@ -2306,7 +2304,7 @@ export class GameModel {
     if (this.currentHeroIndex >= this.partyOrder.length) {
       this.applyBunkerAutoRepairAfterHeroCycle();
       this.maybeApplyGoldDrainAfterPlayerCycle();
-      this.queueEnemyPhaseAfterHeroVolley(espadaVolleyTailMs);
+      this.runEnemyPhase();
       return;
     }
     this.beginHeroTurn();
@@ -2507,38 +2505,7 @@ export class GameModel {
     this.log(`Fim do ciclo dos heróis: ouro da wave reduzido (base 5 por herói, menos reduções).`);
   }
 
-  /**
-   * Após o último herói: espera a rajada da Espada do fogo (se houver) antes de `runEnemyPhase`.
-   * Isto evita `inEnemyPhase === true` enquanto os golpes ainda correm — o primeiro golpe podia
-   * limpar a wave e `finishEnemyPhaseAfterAllMoves` anulava a fase inimiga, deixando o combate preso.
-   */
-  /**
-   * @param volleyTailMs `null` = não houve rajada da Espada; número = ms até ao último golpe (pode ser 0 com 1 golpe).
-   */
-  private queueEnemyPhaseAfterHeroVolley(volleyTailMs: number | null): void {
-    if (this.phase !== "combat" || this.duel) return;
-    const aliveN = this.enemies().filter((e) => e.hp > 0).length;
-    const mult =
-      aliveN <= 3 ? 1 : Math.max(0.08, Math.min(1, 3 / aliveN));
-    const base = Math.round(220 * mult);
-    if (volleyTailMs === null) {
-      this.runEnemyPhase();
-      return;
-    }
-    const delay = Math.max(
-      base,
-      volleyTailMs + ESPADA_FOGO_ENEMY_PHASE_AFTER_VOLLEY_MS,
-    );
-    this.queueCombat(delay, () => {
-      if (this.phase !== "combat" || this.duel) return;
-      this.runEnemyPhase(true);
-    });
-  }
-
-  /**
-   * @param skipIntroProcessDelay — `true` quando já se esperou (ex. após rajada da Espada): não duplicar o wind-up de 220ms.
-   */
-  private runEnemyPhase(skipIntroProcessDelay = false): void {
+  private runEnemyPhase(): void {
     this.inEnemyPhase = true;
     this.lastEnemyActedId = null;
     const aliveN = this.enemies().filter((e) => e.hp > 0).length;
@@ -2550,9 +2517,7 @@ export class GameModel {
       this.finishEnemyPhaseAfterAllMoves();
       return;
     }
-    const t0 = skipIntroProcessDelay
-      ? 0
-      : Math.round(220 * this.enemyPhaseTimingMult);
+    const t0 = Math.round(220 * this.enemyPhaseTimingMult);
     this.queueCombat(t0, () => {
       if (this.phase !== "combat" || !this.inEnemyPhase) return;
       this.processNextEnemyTurn();
@@ -4350,21 +4315,17 @@ export class GameModel {
    * Fim do turno do herói: rajada (1 lâmina por ataque básico permitido no turno, mín. 1).
    * Corre antes de limpar Bravura para o número de golpes coincidir com o teto de básicos do turno.
    */
-  /**
-   * @returns `null` se não houver rajada; caso contrário ms até ao instante do último golpe
-   * (`(strikes-1)*stagger`, pode ser 0 com um só golpe).
-   */
-  private scheduleEspadaFogoEternoVolleyOnTurnEnd(h: Unit): number | null {
-    if (this.phase !== "combat" || this.duel) return null;
+  private scheduleEspadaFogoEternoVolleyOnTurnEnd(h: Unit): void {
+    if (this.phase !== "combat" || this.duel) return;
     const stacks = Math.min(3, h.artifacts["espada_fogo_eterno"] ?? 0);
-    if (stacks <= 0 || h.hp <= 0) return null;
+    if (stacks <= 0 || h.hp <= 0) return;
     const strikes = Math.max(1, this.maxBasicAttacksForHero(h));
     const flat = 25 * stacks;
     const pct = 10 + 10 * stacks;
     const baseDano = heroDanoPlusRoninOverflow(h);
     const raw = roundToCombatDecimals(flat + baseDano * (pct / 100));
-    if (raw <= 0) return null;
-    if (!this.farthestEnemyToInHeroBiome(h)) return null;
+    if (raw <= 0) return;
+    if (!this.farthestEnemyToInHeroBiome(h)) return;
 
     this.log(
       `${h.name}: Espada do fogo eterno (${strikes} golpe(s), ${flat}+${pct}% dano base).`,
@@ -4392,7 +4353,6 @@ export class GameModel {
         this.emit();
       });
     }
-    return (strikes - 1) * ESPADA_FOGO_STAGGER_MS;
   }
 
   /**
