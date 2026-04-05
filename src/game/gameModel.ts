@@ -1441,15 +1441,26 @@ export class GameModel {
       });
       return;
     }
-    const now = performance.now();
-    this.combatSchedule.sort((a, b) => a.at - b.at);
-    while (this.combatSchedule.length > 0 && this.combatSchedule[0]!.at <= now) {
+    /**
+     * Reavaliar `performance.now()` a cada job: tarefas enfileiradas *dentro* de outra
+     * usam um `at` ≥ o instante atual e ficavam de fora do `while` se `now` fosse
+     * fixo no início (ex.: Espada do fogo eterno ao fechar a fase inimiga).
+     */
+    let guard = 0;
+    const maxIter = 2000;
+    while (this.combatSchedule.length > 0 && guard++ < maxIter) {
+      this.combatSchedule.sort((a, b) => a.at - b.at);
+      const now = performance.now();
+      if (this.combatSchedule[0]!.at > now) break;
       const job = this.combatSchedule.shift()!;
       try {
         job.fn();
       } catch (e) {
         console.error(e);
       }
+    }
+    if (guard >= maxIter) {
+      console.error("tickCombatSchedule: limite de iterações (possível ciclo infinito).");
     }
     flushCombatOutcomeQueue({
       hasPendingCombatSchedule: () => this.hasPendingCombatSchedule(),

@@ -961,10 +961,17 @@ function applyCombatSandboxArtifactFilter(
   const tokens = q.length === 0 ? [] : q.split(" ").filter(Boolean);
   panel.querySelectorAll("[data-sandbox-artifact]").forEach((node) => {
     const btn = node as HTMLElement;
-    const blob = btn.dataset.artifactSearchBlob ?? "";
-    (btn as HTMLButtonElement).hidden =
+    const blob =
+      btn.getAttribute("data-artifact-search-blob") ??
+      btn.dataset.artifactSearchBlob ??
+      "";
+    const hide =
       tokens.length > 0 &&
       !tokens.every((t) => t.length > 0 && blob.includes(t));
+    const b = btn as HTMLButtonElement;
+    b.hidden = hide;
+    b.setAttribute("aria-hidden", hide ? "true" : "false");
+    b.style.display = hide ? "none" : "";
   });
 }
 
@@ -3387,7 +3394,7 @@ function sandboxHeroForCombatEditor(m: GameModel): Unit | null {
 }
 
 function mountCombatSandboxDevtools(signal: AbortSignal): void {
-  if (!import.meta.env.DEV || !model.devSandboxMode) return;
+  if (!model.devSandboxMode) return;
   const hero = sandboxHeroForCombatEditor(model);
   const waveOpts = Array.from({ length: FINAL_VICTORY_WAVE }, (_, i) => {
     const w = i + 1;
@@ -3562,7 +3569,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
       ) {
         return;
       }
-      if (!import.meta.env.DEV || !model.devSandboxMode) return;
+      if (!model.devSandboxMode) return;
       if (model.phase !== "combat") return;
       ev.preventDefault();
       ev.stopPropagation();
@@ -7005,10 +7012,9 @@ function showCombatHUD(): void {
   enemyInspectUiAbort = null;
   removeEquipmentModal();
   uiRoot.innerHTML = "";
-  const sandboxHudHtml =
-    import.meta.env.DEV && model.devSandboxMode
-      ? `<div class="hud-block hud-sandbox-pill" role="note">Sandbox — painel ao centro (arrastar pelo título) · <kbd class="hud-sandbox-kbd">A</kbd> mostrar/ocultar · artefatos esq./dir.</div>`
-      : "";
+  const sandboxHudHtml = model.devSandboxMode
+    ? `<div class="hud-block hud-sandbox-pill" role="note">Sandbox — painel ao centro (arrastar pelo título) · <kbd class="hud-sandbox-kbd">A</kbd> mostrar/ocultar · artefatos esq./dir.</div>`
+    : "";
   const hud = el(`
     <div class="hud">
       ${sandboxHudHtml}

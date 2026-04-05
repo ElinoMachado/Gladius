@@ -6945,6 +6945,10 @@ body.enemy-inspect--dragging-body {
   min-height: 2.85rem;
 }
 
+.shop-sandbox-artifact[hidden] {
+  display: none !important;
+}
+
 .shop-sandbox-artifact:hover {
   filter: brightness(1.06);
 }
