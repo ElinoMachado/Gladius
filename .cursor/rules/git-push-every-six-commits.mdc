@@ -1,0 +1,18 @@
+---
+description: Com 6+ commits locais à frente do remoto, fazer push ao remoto.
+alwaysApply: true
+---
+
+# Push ao remoto a cada 6 commits
+
+Quando trabalhares em git neste repositório e criares commits (sozinha ou em sequência com outras regras):
+
+1. **Contar** quantos commits o ramo atual tem **ainda não enviados** ao remoto:
+   - Preferir: `git rev-list --count @{u}..HEAD` (exige *upstream* configurado, ex.: `git push -u origin main` na primeira vez).
+   - Se `@{u}` não existir, usar o remoto habitual, ex.: `git rev-list --count origin/main..HEAD` no `main`.
+2. Se o número for **≥ 6**, no **final da tarefa** (depois dos commits previstos), executa **`git push`** para o remoto do ramo atual.
+3. Se o push for **rejected** (histórico divergente), integra com `git pull --rebase` (ou merge, se o projeto assim o fizer) e volta a tentar o push até sucesso ou bloqueio real (conflitos).
+
+**Exceções:** não fazer push se o utilizador pedir para não enviar ao remoto, ou se estiveres só em clone local sem remoto configurado.
+
+**Nota:** Esta regra **complementa** a de commits locais: commit primeiro conforme acordado; quando o atraso face ao `origin` (ou equivalente) acumular 6 commits, sobe.
