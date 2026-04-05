@@ -107,10 +107,10 @@ export const GOLD_SHOP: GoldShopItem[] = [
   },
   {
     id: "heal_shield",
-    label: "Potencial cura/escudo +5%",
+    label: "Potencial cura/escudo +10%",
     cost: 20,
     apply: (u) => {
-      u.potencialCuraEscudo += 5;
+      u.potencialCuraEscudo += 10;
     },
   },
   {

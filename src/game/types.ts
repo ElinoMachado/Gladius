@@ -248,10 +248,11 @@ export interface WaveConfig {
 
 export interface MetaProgress {
   crystals: number;
-  /** 0–10 por trilho: +20% por nível em stats que usam `permPercent` (dano, vida, defesa, cura/escudo, XP, ouro). */
+  /** 0–10 por trilho: +20% por nível em stats que usam `permPercent` (dano, vida, defesa, XP, ouro). Cura/escudo usa soma direta (+10/nível). */
   permDamage: number;
   permHp: number;
   permDef: number;
+  /** 0–10: +10 pontos percentuais de potencial cura/escudo por nível (soma direta, ver `metaPotencialCuraEscudoAdditivePoints`). */
   permHealShield: number;
   permXp: number;
   permGold: number;

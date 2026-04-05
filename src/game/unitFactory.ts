@@ -21,7 +21,10 @@ import type {
 import { priestPassivePotencialPoints } from "./weaponData";
 import { applyForgeGearToUnit } from "./forge";
 import { applyPartyBonusToUnit, computePartyBonus } from "./colorSynergy";
-import { permPercent } from "./metaStore";
+import {
+  metaPotencialCuraEscudoAdditivePoints,
+  permPercent,
+} from "./metaStore";
 
 let uid = 1;
 function nid(prefix: string): string {
@@ -45,7 +48,7 @@ export function applyMetaToBaseStats(
     maxHp: Math.round(h.maxHp * (1 + metaPct(meta.permHp))),
     dano: Math.round(h.dano * (1 + metaPct(meta.permDamage))),
     defesa: Math.round(h.defesa * (1 + metaPct(meta.permDef))),
-    potencialCuraEscudo: h.potencialCuraEscudo * (1 + metaPct(meta.permHealShield)),
+    potencialCuraEscudo: h.potencialCuraEscudo,
   };
 }
 
@@ -136,6 +139,9 @@ export function createHeroUnit(
     u.potencialCuraEscudo += pp;
     u.priestPassivePotencialSnapshot = pp;
   }
+  u.potencialCuraEscudo += metaPotencialCuraEscudoAdditivePoints(
+    meta.permHealShield ?? 0,
+  );
   if (cls === "gladiador") {
     u.gladiadorDuelWins = 0;
     u.gladiadorDuelHpGranted = 0;

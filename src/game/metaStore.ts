@@ -324,6 +324,20 @@ export function permPercent(level: number): number {
   return 20 * L;
 }
 
+/**
+ * Pontos percentuais somados ao potencial cura/escudo (trilho da loja de cristais).
+ * Cada nível = +10 somado ao total (ex.: 3 → +30; não é multiplicativo como dano/vida).
+ */
+export function metaPotencialCuraEscudoAdditivePoints(
+  permHealShieldLevel: number,
+): number {
+  const L = Math.max(
+    0,
+    Math.min(META_TRACK_MAX_LEVEL, Math.floor(permHealShieldLevel)),
+  );
+  return 10 * L;
+}
+
 /** Próximo custo em cristais: +1 por nível atual (1ª compra = 1💎, …, 10ª = 10💎). */
 export function nextMetaCost(currentLevel: number): number | null {
   if (currentLevel >= META_TRACK_MAX_LEVEL) return null;

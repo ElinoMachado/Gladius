@@ -2904,7 +2904,10 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
       cost != null
         ? `Comprar por ${cost} cristais`
         : "Melhoria no nível máximo";
-    const lineText = `${label}: +20% · ${cur}/${META_TRACK_MAX_LEVEL}${cost != null ? "" : " — máx."}`;
+    const lineText =
+      key === "permHealShield"
+        ? `${label}: +10% · ${cur}/${META_TRACK_MAX_LEVEL}${cost != null ? "" : " — máx."}`
+        : `${label}: +20% · ${cur}/${META_TRACK_MAX_LEVEL}${cost != null ? "" : " — máx."}`;
     const div = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">${lineText}</span><button type="button" class="btn crystal-shop-buy-btn" data-meta="${key}" ${!canBuy ? "disabled" : ""} aria-label="${escapeHtml(ariaBuy)}">${btnLabel}</button></div>`);
     grid.appendChild(div);
     div.querySelector("button")!.addEventListener("click", () => {
