@@ -274,7 +274,6 @@ import {
   SENTENCA_FIRST_DAMAGE_MS,
   SENTENCA_HEAL_AFTER_LAST_HIT_MS,
   SENTENCA_STAGGER_MS,
-  ESPADA_FOGO_PROJECTILE_SEC,
 } from "./game/combatTiming";
 
 /** Paginação do strip de artefatos no combate (20 por página). */
@@ -616,16 +615,6 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
       }, delay);
       break;
     }
-    case "espada_fogo_strike":
-      if (!getSkipCombatAnimations()) {
-        view.queueEspadaFogoFireSwordProjectile(
-          h.heroId,
-          h.targetId,
-          ESPADA_FOGO_PROJECTILE_SEC,
-        );
-        playMagicWhoosh();
-      }
-      break;
     default:
       break;
   }

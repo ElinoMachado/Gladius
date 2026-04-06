@@ -6,6 +6,7 @@ import type {
   HeroClassId,
   MetaProgress,
   TeamColor,
+  TurnStage,
   Unit,
   WeaponLevel,
 } from "./types";
@@ -164,7 +165,6 @@ import {
   SENTENCA_FIRST_DAMAGE_MS,
   SENTENCA_HEAL_AFTER_LAST_HIT_MS,
   SENTENCA_STAGGER_MS,
-  ESPADA_FOGO_STAGGER_MS,
   UNIT_MOVE_SEGMENT_MS,
 } from "./combatTiming";
 import {
@@ -250,11 +250,6 @@ export type CombatVfxHint =
       heroId: string;
       targetId: string;
       delayMs: number;
-    }
-  | {
-      kind: "espada_fogo_strike";
-      heroId: string;
-      targetId: string;
     };
 
 /** Id sintético para números flutuantes de dano no bunker (HUD / canvas). */
@@ -559,6 +554,8 @@ export class GameModel {
   lastEnemyActedId: string | null = null;
   /** UI: acabou de iniciar o turno de um herói (câmera + preview de movimento). */
   private playerTurnJustStarted = false;
+  /** Estado lógico do turno do herói atual (início/principal/fim/ocioso). */
+  turnStage: TurnStage = "idle";
   /** Consumido pelo render: animação hex-a-hex no canvas. */
   pendingMoveAnim: {
     unitId: string;
@@ -579,6 +576,10 @@ export class GameModel {
   private enemyTurnQueue: Unit[] = [];
   /** Ações de combate escalonadas (dano alinhado a VFX). */
   private combatSchedule: { at: number; fn: () => void }[] = [];
+  /** Mortes de inimigos pendentes para resolver em ordem estável. */
+  private pendingEnemyDeathQueue: { killerId: string | null; victimId: string }[] =
+    [];
+  private flushingEnemyDeathQueue = false;
   /**
    * Sentença: cura em grupo agendada. Se a wave acabar no último hit, `onWaveCleared`
    * limpa a fila antes do job de cura — aplicamos aqui antes de `clearCombatSchedule`.
@@ -891,6 +892,7 @@ export class GameModel {
     this.artifactBannedThisRun.clear();
 
     this.playerTurnJustStarted = false;
+    this.turnStage = "idle";
     this.inEnemyPhase = false;
     this.lastEnemyActedId = null;
     this.enemyTurnQueue = [];
@@ -921,6 +923,7 @@ export class GameModel {
     this.bunkers = {};
     this.partyOrder = [];
     this.phase = "main_menu";
+    this.turnStage = "idle";
     this.wave = 0;
     this.currentHeroIndex = 0;
     this.movementLeft = 0;
@@ -984,6 +987,7 @@ export class GameModel {
         pendingCometaArcanoWithoutIntro: this.pendingCometaArcanoWithoutIntro,
         skipDeslumbroDecayAfterCometaOnce: this.skipDeslumbroDecayAfterCometaOnce,
         playerTurnJustStarted: this.playerTurnJustStarted,
+        turnStage: this.turnStage,
         enemyPhaseTimingMult: this.enemyPhaseTimingMult,
         rochosoTauntHeroId: this.rochosoTauntHeroId,
         enemyTurnQueueIds: this.enemyTurnQueue.map((u) => u.id),
@@ -1069,6 +1073,7 @@ export class GameModel {
         pendingCometaArcanoWithoutIntro?: boolean;
         skipDeslumbroDecayAfterCometaOnce?: boolean;
         playerTurnJustStarted?: boolean;
+        turnStage?: TurnStage;
         enemyPhaseTimingMult?: number;
         rochosoTauntHeroId?: string | null;
         enemyTurnQueueIds?: string[];
@@ -1134,6 +1139,7 @@ export class GameModel {
       this.skipDeslumbroDecayAfterCometaOnce =
         o.skipDeslumbroDecayAfterCometaOnce ?? false;
       this.playerTurnJustStarted = o.playerTurnJustStarted ?? false;
+      this.turnStage = o.turnStage ?? "idle";
       this.enemyPhaseTimingMult = o.enemyPhaseTimingMult ?? 1;
       this.rochosoTauntHeroId = o.rochosoTauntHeroId ?? null;
       this.pendingSentencaPartyHeal = o.pendingSentencaPartyHeal ?? null;
@@ -1171,6 +1177,7 @@ export class GameModel {
       this.inEnemyPhase = false;
       this.blockEnemyPhaseForWaveIntro = false;
       this.playerTurnJustStarted = false;
+      this.turnStage = "idle";
       this.enemyTurnQueue = [];
 
       this.saveMeta();
@@ -1382,7 +1389,7 @@ export class GameModel {
         addDeslumbroInstances(e, desN);
       }
     }
-    this.onDeaths();
+    this.flushEnemyDeathQueue();
     this.skipDeslumbroDecayAfterCometaOnce = true;
     this.log("Cometa arcano: a onda de energia atinge os inimigos.");
     this.emit();
@@ -1444,7 +1451,7 @@ export class GameModel {
     /**
      * Reavaliar `performance.now()` a cada job: tarefas enfileiradas *dentro* de outra
      * usam um `at` ≥ o instante atual e ficavam de fora do `while` se `now` fosse
-     * fixo no início (ex.: Espada do fogo eterno ao fechar a fase inimiga).
+     * fixo no início.
      */
     let guard = 0;
     const maxIter = 2000;
@@ -1474,6 +1481,8 @@ export class GameModel {
 
   private clearCombatSchedule(): void {
     this.combatSchedule = [];
+    this.pendingEnemyDeathQueue = [];
+    this.flushingEnemyDeathQueue = false;
     this.drainDeferredKillLevelUpQueue();
   }
 
@@ -1521,6 +1530,7 @@ export class GameModel {
   startNewRun(setup: RunSetup): void {
     clearRunSessionCheckpoint();
     this.playerTurnJustStarted = false;
+    this.turnStage = "idle";
     this.inEnemyPhase = false;
     this.lastEnemyActedId = null;
     this.enemyTurnQueue = [];
@@ -1604,6 +1614,7 @@ export class GameModel {
     this.ensureBunkersPlaced();
     this.captureShopSnapshot();
     this.phase = "shop_initial";
+    this.turnStage = "idle";
     this.currentHeroIndex = 0;
     this.rochosoTauntHeroId = null;
     this.emit();
@@ -1619,6 +1630,7 @@ export class GameModel {
 
   startWave(n: number): void {
     this.playerTurnJustStarted = false;
+    this.turnStage = "idle";
     this.clearCombatSchedule();
     this.pendingCombatVfxQueue = [];
     clearCombatOutcomeQueue();
@@ -2201,8 +2213,10 @@ export class GameModel {
   }
 
   beginHeroTurn(): void {
+    this.turnStage = "start";
     const h = this.currentHero();
     if (!h || h.hp <= 0) {
+      this.turnStage = "idle";
       this.advanceHeroOrRound();
       return;
     }
@@ -2216,11 +2230,12 @@ export class GameModel {
       );
       h.hp = 0;
       this.maybeApplyHeroOnDeathArtifacts(h);
-      this.onDeaths();
+      this.flushEnemyDeathQueue();
       if (
         this.phase === "combat" &&
         this.getParty().every((u) => u.hp <= 0)
       ) {
+        this.turnStage = "idle";
         this.phase = "defeat";
         this.meta.crystals += this.crystalsRun;
         this.saveMeta();
@@ -2236,13 +2251,232 @@ export class GameModel {
     this.movementLeft = mov;
     this.basicAttacksSpentThisTurn = 0;
     this.syncBasicLeftFromSpent(h);
-    this.prepareEspadaFogoEternoOrbitVisual(h);
+    this.runFlamingSwordAutonomousTurn(h);
     h.immobileThisTurn = true;
     if (h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos") {
       h.tiroDestruidorUsedThisTurn = false;
     }
+    this.turnStage = "main";
     this.playerTurnJustStarted = true;
     this.emit();
+  }
+
+  private runPriorityQueue(
+    items: { priority: number; run: () => void }[],
+  ): void {
+    items.sort((a, b) => a.priority - b.priority);
+    for (const item of items) item.run();
+  }
+
+  /**
+   * Fim de turno do herói com prioridades explícitas:
+   * 1) artefatos de fim de turno (ex.: Espada)
+   * 2) limpeza de estado temporário
+   * 3) resolução de efeitos/cooldowns
+   */
+  private runHeroEndTurnPipeline(h: Unit): void {
+    this.runPriorityQueue([
+      { priority: 10, run: () => clearBravuraInstances(h) },
+      {
+        priority: 20,
+        run: () => {
+          if (!this.sandboxNoCdUltEnabled()) {
+            for (const k of Object.keys(h.skillCd)) {
+              const v = h.skillCd[k] ?? 0;
+              if (v > 0) h.skillCd[k] = v - 1;
+            }
+          }
+        },
+      },
+      { priority: 30, run: () => this.applyEndTurnEffects(h) },
+      {
+        priority: 40,
+        run: () => {
+          if (h.ultimateId === "rainha_desespero") this.rainhaEndTurn(h);
+        },
+      },
+      { priority: 50, run: () => this.applyVolcanicAtEndOfTurn(h) },
+      {
+        priority: 60,
+        run: () => {
+          if (h.furiaGiganteTurns && h.furiaGiganteTurns > 0) {
+            h.furiaGiganteTurns--;
+            if (h.furiaGiganteTurns <= 0) this.endFuriaGigante(h);
+          }
+        },
+      },
+      {
+        priority: 70,
+        run: () => {
+          if (
+            h.heroClass === "pistoleiro" &&
+            h.ultimateId === "arauto_caos" &&
+            !h.tiroDestruidorUsedThisTurn
+          ) {
+            const c = h.tiroDestruidorCharges ?? 0;
+            if (c < 5) h.tiroDestruidorCharges = c + 1;
+          }
+        },
+      },
+    ]);
+  }
+
+  private coroaFerroStacks(h: Unit): number {
+    return Math.min(3, Math.max(0, h.artifacts["coroa_ferro"] ?? 0));
+  }
+
+  private flamingSwordMaxHpByStacks(stacks: number): number {
+    if (stacks <= 0) return 0;
+    return 200 + (stacks - 1) * 100;
+  }
+
+  private ensureFlamingSwordState(h: Unit): boolean {
+    const stacks = this.coroaFerroStacks(h);
+    if (stacks <= 0 || h.hp <= 0) {
+      delete h.flamingSwordHp;
+      delete h.flamingSwordPos;
+      return false;
+    }
+    const maxHp = this.flamingSwordMaxHpByStacks(stacks);
+    h.flamingSwordHp = maxHp;
+    if (!h.flamingSwordPos) {
+      const occ = this.occupiedHexKeysExcluding(h.id);
+      let best: { q: number; r: number } | null = null;
+      let bestDist = Infinity;
+      for (const n of hexNeighbors(h.q, h.r)) {
+        const nk = axialKey(n.q, n.r);
+        if (!this.grid.has(nk) || occ.has(nk)) continue;
+        const nearestEnemyDist = Math.min(
+          ...this.enemies().map((e) => hexDistance(n, { q: e.q, r: e.r })),
+          Infinity,
+        );
+        if (nearestEnemyDist < bestDist) {
+          bestDist = nearestEnemyDist;
+          best = { q: n.q, r: n.r };
+        }
+      }
+      h.flamingSwordPos = best ?? { q: h.q, r: h.r };
+    }
+    return true;
+  }
+
+  private farthestEnemyFromPos(pos: { q: number; r: number }): Unit | null {
+    let best: Unit | null = null;
+    let bestDist = -1;
+    for (const e of this.enemies()) {
+      if (e.hp <= 0) continue;
+      const d = hexDistance(pos, { q: e.q, r: e.r });
+      if (d > bestDist) {
+        bestDist = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  private bestFlamingSwordMove(
+    hero: Unit,
+    from: { q: number; r: number },
+    target: Unit,
+    movement: number,
+    range: number,
+  ): { q: number; r: number } {
+    const d0 = hexDistance(from, { q: target.q, r: target.r });
+    if (d0 <= range) return from;
+    const blocked = this.occupiedHexKeysExcluding(hero.id);
+    blocked.delete(axialKey(from.q, from.r));
+    const reach = reachableHexes(
+      this.grid,
+      from,
+      movement,
+      false,
+      false,
+      blocked,
+    );
+    let best = from;
+    let bestDist = d0;
+    let bestCost = Infinity;
+    for (const [k, cost] of reach) {
+      if (k === axialKey(from.q, from.r)) continue;
+      const [q, r] = k.split(",").map(Number) as [number, number];
+      const d = hexDistance({ q, r }, { q: target.q, r: target.r });
+      if (d < bestDist || (d === bestDist && cost < bestCost)) {
+        best = { q, r };
+        bestDist = d;
+        bestCost = cost;
+      }
+    }
+    return best;
+  }
+
+  private runFlamingSwordAutonomousTurn(hero: Unit): void {
+    if (this.phase !== "combat" || this.duel) return;
+    if (!this.ensureFlamingSwordState(hero)) return;
+    const stacks = this.coroaFerroStacks(hero);
+    const attacks = 2 + (stacks - 1);
+    const damage = 40 + (stacks - 1) * 20;
+    const swordDefense = 100 + (stacks - 1) * 50;
+    const swordRange = 3;
+    const swordMovement = 7;
+    let pos = hero.flamingSwordPos ?? { q: hero.q, r: hero.r };
+    let strikesDone = 0;
+    for (let i = 0; i < attacks; i++) {
+      if (this.phase !== "combat") break;
+      const target = this.farthestEnemyFromPos(pos);
+      if (!target) break;
+      pos = this.bestFlamingSwordMove(hero, pos, target, swordMovement, swordRange);
+      if (hexDistance(pos, { q: target.q, r: target.r }) > swordRange) continue;
+      strikesDone++;
+      const prev = {
+        q: hero.q,
+        r: hero.r,
+        dano: hero.dano,
+        defesa: hero.defesa,
+        alcance: hero.alcance,
+        movimento: hero.movimento,
+        penetracao: hero.penetracao,
+        penetracaoEscudo: hero.penetracaoEscudo,
+        lifesteal: hero.lifesteal,
+        heroClass: hero.heroClass,
+        artifacts: hero.artifacts,
+        forgeLoadout: hero.forgeLoadout,
+      };
+      hero.q = pos.q;
+      hero.r = pos.r;
+      hero.dano = damage;
+      hero.defesa = swordDefense;
+      hero.alcance = swordRange;
+      hero.movimento = swordMovement;
+      hero.penetracao = 0;
+      hero.penetracaoEscudo = 0;
+      hero.lifesteal = 0;
+      hero.heroClass = undefined;
+      hero.artifacts = {};
+      hero.forgeLoadout = undefined;
+      const crit = rollCrit(hero.acertoCritico);
+      this.dealDamage(hero, target, damage, crit, false, true, {
+        suppressOnHitArtifacts: true,
+        suppressLifesteal: true,
+      });
+      hero.q = prev.q;
+      hero.r = prev.r;
+      hero.dano = prev.dano;
+      hero.defesa = prev.defesa;
+      hero.alcance = prev.alcance;
+      hero.movimento = prev.movimento;
+      hero.penetracao = prev.penetracao;
+      hero.penetracaoEscudo = prev.penetracaoEscudo;
+      hero.lifesteal = prev.lifesteal;
+      hero.heroClass = prev.heroClass;
+      hero.artifacts = prev.artifacts;
+      hero.forgeLoadout = prev.forgeLoadout;
+    }
+    hero.flamingSwordPos = pos;
+    if (strikesDone > 0) {
+      this.log(
+        `${hero.name}: Espada flamejante atinge ${strikesDone} alvo(s) neste início de turno.`,
+      );
+    }
   }
 
   advanceHeroOrRound(): void {
@@ -2257,42 +2491,18 @@ export class GameModel {
   }
 
   endHeroTurn(): void {
+    this.turnStage = "end";
     const h = this.currentHero();
     if (h) {
-      this.scheduleEspadaFogoEternoVolleyOnTurnEnd(h);
-      delete h.espadaFogoOrbitVisualCount;
-      clearBravuraInstances(h);
-      if (!this.sandboxNoCdUltEnabled()) {
-        for (const k of Object.keys(h.skillCd)) {
-          const v = h.skillCd[k] ?? 0;
-          if (v > 0) h.skillCd[k] = v - 1;
-        }
-      }
-      this.applyEndTurnEffects(h);
-      if (h.ultimateId === "rainha_desespero") {
-        this.rainhaEndTurn(h);
-      }
-      this.applyVolcanicAtEndOfTurn(h);
-      if (h.furiaGiganteTurns && h.furiaGiganteTurns > 0) {
-        h.furiaGiganteTurns--;
-        if (h.furiaGiganteTurns <= 0) {
-          this.endFuriaGigante(h);
-        }
-      }
-      if (
-        h.heroClass === "pistoleiro" &&
-        h.ultimateId === "arauto_caos" &&
-        !h.tiroDestruidorUsedThisTurn
-      ) {
-        const c = h.tiroDestruidorCharges ?? 0;
-        if (c < 5) h.tiroDestruidorCharges = c + 1;
-      }
+      this.runHeroEndTurnPipeline(h);
     }
     if (this.phase !== "combat") {
+      this.turnStage = "idle";
       this.emit();
       return;
     }
     if (this.getParty().every((u) => u.hp <= 0)) {
+      this.turnStage = "idle";
       this.phase = "defeat";
       this.meta.crystals += this.crystalsRun;
       this.saveMeta();
@@ -2506,6 +2716,7 @@ export class GameModel {
   }
 
   private runEnemyPhase(): void {
+    this.turnStage = "idle";
     this.inEnemyPhase = true;
     this.lastEnemyActedId = null;
     const aliveN = this.enemies().filter((e) => e.hp > 0).length;
@@ -2561,7 +2772,7 @@ export class GameModel {
       if (u && !u.isPlayer && u.hp > 0) {
         this.applyRochosoTier3EndOfEnemyTurnRiposte(u);
         this.applyPoisonAndHotTick(u);
-        this.onDeaths();
+        this.flushEnemyDeathQueue();
       }
       this.processNextEnemyTurn();
     });
@@ -2618,6 +2829,7 @@ export class GameModel {
       return;
     }
     if (this.getParty().every((u) => u.hp <= 0)) {
+      this.turnStage = "idle";
       this.phase = "defeat";
       this.meta.crystals += this.crystalsRun;
       this.saveMeta();
@@ -2717,10 +2929,10 @@ export class GameModel {
     }
     let volcanicEnvKill = false;
     if (!u.isPlayer && volcanicWasAlive && u.hp <= 0) {
-      this.onEnemyKilled(null, u);
+      this.enqueueEnemyDeath(null, u);
       volcanicEnvKill = true;
     }
-    this.onDeaths();
+    this.flushEnemyDeathQueue();
     if (volcanicEnvKill) {
       for (const hero of this.getParty()) {
         if (hero.hp > 0) this.flushCombatLevelUp(hero);
@@ -2813,6 +3025,7 @@ export class GameModel {
       this.pendingWaveSummaryNext = "shop";
     }
     this.phase = "wave_summary";
+    this.turnStage = "idle";
     this.emit();
   }
 
@@ -3610,11 +3823,12 @@ export class GameModel {
       this.log(`${gladiator.name} vence o duelo!`);
     }
     if (gladiator) this.flushCombatLevelUp(gladiator);
-    this.onDeaths();
+    this.flushEnemyDeathQueue();
     if (
       this.phase === "combat" &&
       this.getParty().every((x) => x.hp <= 0)
     ) {
+      this.turnStage = "idle";
       this.phase = "defeat";
       this.meta.crystals += this.crystalsRun;
       this.saveMeta();
@@ -3991,7 +4205,7 @@ export class GameModel {
       });
     }
     if (tgt === src) {
-      this.onDeaths();
+      this.flushEnemyDeathQueue();
       return dmgToHero;
     }
     if (
@@ -4016,7 +4230,7 @@ export class GameModel {
       this.addWeaponUltTakenCharge(tgt, dmgToHero + shieldAbsorb);
     }
     if (!tgt.isPlayer && wasAlive && tgt.hp <= 0) {
-      this.onEnemyKilled(src.isPlayer ? src : null, tgt);
+      this.enqueueEnemyDeath(src.isPlayer ? src : null, tgt);
       if (src.ultimateId === "rainha_desespero" && src.heroClass === "sacerdotisa") {
         this.addHeroOuroWithMetaBonus(src, 5);
       }
@@ -4040,7 +4254,7 @@ export class GameModel {
         }
       }
     }
-    this.onDeaths();
+    this.flushEnemyDeathQueue();
     return dmgToHero;
   }
 
@@ -4258,101 +4472,6 @@ export class GameModel {
       }
     }
     return best;
-  }
-
-  private farthestEnemyMatching(
-    hero: Unit,
-    includeEnemy: (e: Unit, enemyBiome: BiomeId) => boolean,
-  ): Unit | null {
-    let best: Unit | null = null;
-    let d = -1;
-    for (const e of this.enemies()) {
-      if (e.hp <= 0) continue;
-      const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
-      if (!includeEnemy(e, eb)) continue;
-      const dist = hexDistance({ q: hero.q, r: hero.r }, { q: e.q, r: e.r });
-      if (dist > d) {
-        d = dist;
-        best = e;
-      }
-    }
-    return best;
-  }
-
-  /**
-   * Espada do fogo eterno: inimigo mais distante no bioma do hex do herói (hub = todos);
-   * se não houver ninguém nesse bioma, tenta o bioma inicial da run; por fim qualquer inimigo
-   * (evita falha em arenas multi-bioma / sandbox).
-   */
-  private farthestEnemyToInHeroBiome(hero: Unit): Unit | null {
-    const heroBio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
-    let best = this.farthestEnemyMatching(hero, (_e, eb) =>
-      heroBio === "hub" ? true : eb === heroBio,
-    );
-    if (best) return best;
-    const home = this.heroHomeBiome(hero);
-    if (home !== "hub" && home !== heroBio) {
-      best = this.farthestEnemyMatching(hero, (_e, eb) => eb === home);
-      if (best) return best;
-    }
-    return this.farthestEnemyMatching(hero, () => true);
-  }
-
-  /**
-   * Só VFX (lâminas a orbitar): ao ganhar o artefato em combate, no início do turno do herói, ou após escolha no level-up.
-   * O dano dispara em `scheduleEspadaFogoEternoVolleyOnTurnEnd` ao encerrar o turno.
-   */
-  private prepareEspadaFogoEternoOrbitVisual(h: Unit): void {
-    if (this.phase !== "combat" || this.duel) return;
-    const stacks = Math.min(3, h.artifacts["espada_fogo_eterno"] ?? 0);
-    if (stacks <= 0 || h.hp <= 0) return;
-    if (!this.farthestEnemyToInHeroBiome(h)) return;
-    const strikes = Math.max(1, this.maxBasicAttacksForHero(h));
-    h.espadaFogoOrbitVisualCount = strikes;
-  }
-
-  /**
-   * Fim do turno do herói: rajada (1 lâmina por ataque básico permitido no turno, mín. 1).
-   * Corre antes de limpar Bravura para o número de golpes coincidir com o teto de básicos do turno.
-   */
-  private scheduleEspadaFogoEternoVolleyOnTurnEnd(h: Unit): void {
-    if (this.phase !== "combat" || this.duel) return;
-    const stacks = Math.min(3, h.artifacts["espada_fogo_eterno"] ?? 0);
-    if (stacks <= 0 || h.hp <= 0) return;
-    const strikes = Math.max(1, this.maxBasicAttacksForHero(h));
-    const flat = 25 * stacks;
-    const pct = 10 + 10 * stacks;
-    const baseDano = heroDanoPlusRoninOverflow(h);
-    const raw = roundToCombatDecimals(flat + baseDano * (pct / 100));
-    if (raw <= 0) return;
-    if (!this.farthestEnemyToInHeroBiome(h)) return;
-
-    this.log(
-      `${h.name}: Espada do fogo eterno (${strikes} golpe(s), ${flat}+${pct}% dano base).`,
-    );
-
-    for (let i = 0; i < strikes; i++) {
-      this.queueCombat(i * ESPADA_FOGO_STAGGER_MS, () => {
-        const att = this.units.find((u) => u.id === h.id);
-        if (!att || att.hp <= 0 || this.phase !== "combat" || this.duel) return;
-        const tgt = this.farthestEnemyToInHeroBiome(att);
-        if (!tgt || tgt.hp <= 0) return;
-        att.espadaFogoOrbitVisualCount = Math.max(0, strikes - i - 1);
-        this.pendingCombatVfxQueue.push({
-          kind: "espada_fogo_strike",
-          heroId: att.id,
-          targetId: tgt.id,
-        });
-        this.dealDamage(att, tgt, raw, false, true, false, {
-          suppressOnHitArtifacts: true,
-        });
-        this.flushCombatLevelUp(att);
-        if (this.phase === "combat") {
-          this.tryResolveWaveClearAfterCombatResume();
-        }
-        this.emit();
-      });
-    }
   }
 
   /**
@@ -5278,6 +5397,36 @@ export class GameModel {
     }
   }
 
+  private enqueueEnemyDeath(killer: Unit | null, victim: Unit): void {
+    if (victim.isPlayer) return;
+    this.pendingEnemyDeathQueue.push({
+      killerId: killer?.id ?? null,
+      victimId: victim.id,
+    });
+  }
+
+  /**
+   * Resolve mortes em ordem de entrada, antes da limpeza final de unidades.
+   * Mantém estável a sequência: kill hooks -> XP/level-up pendente -> limpeza.
+   */
+  private flushEnemyDeathQueue(): void {
+    if (this.flushingEnemyDeathQueue) return;
+    this.flushingEnemyDeathQueue = true;
+    try {
+      while (this.pendingEnemyDeathQueue.length > 0) {
+        const ev = this.pendingEnemyDeathQueue.shift()!;
+        const victim = this.units.find((u) => u.id === ev.victimId);
+        if (!victim || victim.isPlayer || victim.hp > 0) continue;
+        const killer =
+          ev.killerId != null ? this.units.find((u) => u.id === ev.killerId) : null;
+        this.onEnemyKilled(killer && killer.isPlayer ? killer : null, victim);
+      }
+      this.onDeaths();
+    } finally {
+      this.flushingEnemyDeathQueue = false;
+    }
+  }
+
   private onDeaths(): void {
     this.units = this.units.filter((u) => u.isPlayer || u.hp > 0);
     for (const b of this.allBunkerStates()) {
@@ -5783,6 +5932,7 @@ export class GameModel {
     if (u.level >= 60 && !u.ultimateId) {
       this.pendingUltimate = { unitId: u.id };
       this.phase = "ultimate_pick";
+      this.turnStage = "idle";
       this.emit();
       return;
     }
@@ -5808,6 +5958,7 @@ export class GameModel {
         banMode: false,
       };
       this.phase = "level_up_pick";
+      this.turnStage = "idle";
     }
     this.emit();
   }
@@ -6010,9 +6161,6 @@ export class GameModel {
         u.shieldGGBlue + AURA_TITA_SHIELD_PER_STACK,
       );
     }
-    if (artifactId === "espada_fogo_eterno" && u.isPlayer) {
-      this.prepareEspadaFogoEternoOrbitVisual(u);
-    }
     return true;
   }
 
@@ -6045,6 +6193,7 @@ export class GameModel {
     if (!this.devSandboxMode) return false;
     if (artifactId.startsWith("_")) return false;
     if (!artifactDefById(artifactId)) return false;
+    if (this.phase === "combat" && (this.inEnemyPhase || this.duel)) return false;
     const u = this.units.find((x) => x.id === heroId);
     if (!u?.isPlayer) return false;
     const ok =
@@ -6058,11 +6207,8 @@ export class GameModel {
       const ch = this.currentHero();
       if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
     }
-    if (
-      artifactId === "espada_fogo_eterno" &&
-      (u.artifacts["espada_fogo_eterno"] ?? 0) <= 0
-    ) {
-      delete u.espadaFogoOrbitVisualCount;
+    if (artifactId === "coroa_ferro") {
+      this.ensureFlamingSwordState(u);
     }
     this.emit();
     return true;
@@ -6110,6 +6256,7 @@ export class GameModel {
     this.pendingArtifacts = null;
     this.pendingUltimate = { unitId: h.id };
     this.phase = "ultimate_pick";
+    this.turnStage = "idle";
     this.emit();
     return true;
   }
@@ -6151,6 +6298,7 @@ export class GameModel {
     u.mana = Math.min(u.mana, u.maxMana);
     this.pendingUltimate = { unitId: u.id };
     this.phase = "ultimate_pick";
+    this.turnStage = "idle";
     this.log(
       `[Sandbox] ${u.name}: menu de forma final (nv. ${u.level}).`,
     );
@@ -6165,8 +6313,9 @@ export class GameModel {
     u.hp = 0;
     this.log(`[Sandbox] ${u.name} eliminado(a).`);
     this.maybeApplyHeroOnDeathArtifacts(u);
-    this.onDeaths();
+    this.flushEnemyDeathQueue();
     if (!this.units.some((x) => x.isPlayer)) {
+      this.turnStage = "idle";
       this.phase = "defeat";
       this.meta.crystals += this.crystalsRun;
       this.saveMeta();
@@ -6194,12 +6343,17 @@ export class GameModel {
     u.mana = Math.min(u.mana, u.maxMana);
     this.pendingArtifacts = null;
     this.phase = "combat";
-    if (artifactId === "espada_fogo_eterno") {
-      this.prepareEspadaFogoEternoOrbitVisual(u);
-    }
+    this.turnStage = "main";
     if (artifactId === "braco_forte") {
       const ch = this.currentHero();
       if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
+    }
+    if (artifactId === "coroa_ferro") {
+      this.ensureFlamingSwordState(u);
+      if (this.coroaFerroStacks(u) <= 0) {
+        delete u.flamingSwordHp;
+        delete u.flamingSwordPos;
+      }
     }
     this.checkLevelUp(u);
     this.pollPendingCombatLevelUp();
@@ -6229,6 +6383,7 @@ export class GameModel {
     u.mana = Math.min(u.mana, u.maxMana);
     this.pendingUltimate = null;
     this.phase = "combat";
+    this.turnStage = "main";
     this.checkLevelUp(u);
     this.pollPendingCombatLevelUp();
     if (this.phase === "combat") {

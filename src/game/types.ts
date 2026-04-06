@@ -151,15 +151,13 @@ export interface Unit extends CoreStats {
   sacrificioResilienteWaveDef?: number;
   /** Evita aplicar efeitos de morte (artefatos) mais do que uma vez por herói. */
   heroDeathArtifactsApplied?: boolean;
-  /**
-   * Espada do fogo eterno: quantas lâminas orbitam (VFX); desce a cada disparo no turno.
-   * Só no turno do herói; limpo no fim do turno.
-   */
-  espadaFogoOrbitVisualCount?: number;
   /** Golpe Relâmpago (motor_morte): próximo básico % */
   motorMorteNextBasicPct: number;
   /** Saiu do bunker neste ciclo: não pode reentrar até ao próprio turno. */
   bunkerReentryBlocked?: boolean;
+  /** Espada flamejante invocada pela Coroa de ferro (estado persistente por herói). */
+  flamingSwordHp?: number;
+  flamingSwordPos?: { q: number; r: number };
   /**
    * **Instâncias de dano** (DoT): veneno, queimadura, sangramento — filas de ticks de dano;
    * Amplicador de onda / Dobra temporal alteram quantas entram ou saem por turno.
@@ -254,6 +252,15 @@ export type GamePhase =
   | "ultimate_pick"
   | "victory"
   | "defeat";
+
+/**
+ * Estado lógico do turno do herói em combate.
+ * - `start`: resolução de efeitos de início do turno
+ * - `main`: ações do jogador
+ * - `end`: resolução de fim do turno (artefatos/efeitos/avanço)
+ * - `idle`: fora do turno do jogador (fase inimiga, menus, etc.)
+ */
+export type TurnStage = "start" | "main" | "end" | "idle";
 
 export interface WaveConfig {
   index: number;

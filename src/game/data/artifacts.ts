@@ -269,10 +269,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   /* ——— Lendários (8) ——— */
   {
     id: "coroa_ferro",
-    name: "Coroa de ferro",
+    name: "Espada flamejante",
     rarity: "legendary",
-    description: "+4 de dano e +4 de defesa por acúmulo.",
-    pickBonusPerStack: { dano: 4, defesa: 4 },
+    description:
+      "Invoca uma espada de fogo autônoma ao lado do herói. Ela prioriza inimigos mais distantes e ataca 2 vezes por turno (200 PV, 40 dano, 100 defesa, 3 alcance, 7 movimento). Cada acúmulo: +100 PV, +20 dano, +50 defesa e +1 ataque (máx. 3). Crítico igual ao do herói.",
   },
   {
     id: "martelo_juiz",
@@ -323,14 +323,6 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     description: "+5 de potencial de cura e escudo por acúmulo.",
     pickBonusPerStack: { potencialCuraEscudo: 5 },
   },
-  {
-    id: "espada_fogo_eterno",
-    name: "Espada do fogo eterno",
-    rarity: "legendary",
-    description:
-      "Ao escolheres este artefato surgem lâminas a orbitar; no início do teu turno ressurgem; ao encerrares o turno, cada uma atinge o inimigo mais distante no teu bioma (25+20% do teu dano base por acúmulo; +25 fixo e +10% por acúmulo extra). Número de golpes = ataques básicos permitidos neste turno (mín. 1).",
-  },
-
   /* ——— Míticos (6) ——— */
   {
     id: "guerra_total",

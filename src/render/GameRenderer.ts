@@ -207,12 +207,7 @@ export class GameRenderer {
     y: number;
     t: number;
     T: number;
-    style: "bullet" | "magic" | "fire_sword";
-  }[] = [];
-  private readonly espadaFogoBursts: {
-    group: THREE.Group;
-    t: number;
-    T: number;
+    style: "bullet" | "magic";
   }[] = [];
   /** Efeito estilo HQ (POW) no impacto da bala do pistoleiro. */
   private readonly comicPowBursts: {
@@ -243,8 +238,7 @@ export class GameRenderer {
     rings: THREE.Mesh[];
   }[] = [];
   private readonly duelFlameByUnit = new Map<string, THREE.Group>();
-  /** Lâminas orbitais (Espada do fogo eterno). */
-  private readonly espadaFogoOrbitByUnit = new Map<string, THREE.Group>();
+  private readonly flamingSwordByHeroId = new Map<string, THREE.Group>();
   /** Salto visual (ultimate pistoleiro): Y animado em `tick`; XZ atualizados em `syncUnits`. */
   private readonly heroUltJumpById = new Map<
     string,
@@ -2710,7 +2704,7 @@ export class GameRenderer {
         if (sb) sb.visible = false;
       }
     }
-    this.syncEspadaFogoEternalOrbits(units);
+    this.syncFlamingSwordCompanions(units);
     // Chamas de duelo continuam visíveis; podem ser afinadas depois caso desejado.
     for (const [id, g] of this.unitMeshes) {
       if (seen.has(id)) continue;
@@ -2743,13 +2737,63 @@ export class GameRenderer {
         this.duelFlameByUnit.delete(id);
       }
     }
-    for (const id of [...this.espadaFogoOrbitByUnit.keys()]) {
+    for (const id of [...this.flamingSwordByHeroId.keys()]) {
       if (!this.unitMeshes.has(id)) {
-        const root = this.espadaFogoOrbitByUnit.get(id)!;
+        const root = this.flamingSwordByHeroId.get(id)!;
         this.arenaRoot.remove(root);
         this.disposeObject3D(root);
-        this.espadaFogoOrbitByUnit.delete(id);
+        this.flamingSwordByHeroId.delete(id);
       }
+    }
+  }
+
+  private syncFlamingSwordCompanions(units: Unit[]): void {
+    const seen = new Set<string>();
+    for (const u of units) {
+      if (!u.isPlayer || u.hp <= 0) continue;
+      const stacks = Math.min(3, Math.max(0, u.artifacts["coroa_ferro"] ?? 0));
+      if (stacks <= 0) continue;
+      const pos = u.flamingSwordPos ?? { q: u.q, r: u.r };
+      const root = this.flamingSwordByHeroId.get(u.id);
+      if (!root) {
+        const g = new THREE.Group();
+        const blade = new THREE.Mesh(
+          new THREE.BoxGeometry(0.06, 0.42, 0.12),
+          new THREE.MeshStandardMaterial({
+            color: 0x4a0a0a,
+            emissive: 0xff2200,
+            emissiveIntensity: 1.2,
+            metalness: 0.35,
+            roughness: 0.38,
+          }),
+        );
+        blade.position.y = 0.22;
+        const flame = new THREE.Mesh(
+          new THREE.SphereGeometry(0.08, 10, 10),
+          new THREE.MeshBasicMaterial({
+            color: 0xff8800,
+            transparent: true,
+            opacity: 0.9,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        );
+        flame.position.y = 0.44;
+        g.add(blade, flame);
+        this.arenaRoot.add(g);
+        this.flamingSwordByHeroId.set(u.id, g);
+      }
+      const nowRoot = this.flamingSwordByHeroId.get(u.id)!;
+      nowRoot.scale.setScalar(1 + (stacks - 1) * 0.12);
+      const w = axialToWorld(pos.q, pos.r, HEX_SIZE);
+      nowRoot.position.set(w.x, this.playSurfaceYOffset() + 1.18, w.z);
+      seen.add(u.id);
+    }
+    for (const [id, root] of [...this.flamingSwordByHeroId]) {
+      if (seen.has(id)) continue;
+      this.arenaRoot.remove(root);
+      this.disposeObject3D(root);
+      this.flamingSwordByHeroId.delete(id);
     }
   }
 
@@ -3456,57 +3500,6 @@ export class GameRenderer {
     });
   }
 
-  queueEspadaFogoFireSwordProjectile(
-    fromId: string,
-    toId: string,
-    durationSec: number,
-  ): void {
-    const a = this.unitMeshes.get(fromId);
-    const b = this.unitMeshes.get(toId);
-    if (!a || !b) return;
-    const g = new THREE.Group();
-    const blade = new THREE.Mesh(
-      new THREE.BoxGeometry(0.065, 0.44, 0.13),
-      new THREE.MeshStandardMaterial({
-        color: 0x4a0a0a,
-        emissive: 0xff2200,
-        emissiveIntensity: 1.25,
-        metalness: 0.32,
-        roughness: 0.4,
-      }),
-    );
-    blade.position.y = 0.2;
-    const core = new THREE.Mesh(
-      new THREE.SphereGeometry(0.085, 10, 10),
-      new THREE.MeshBasicMaterial({
-        color: 0xff8800,
-        transparent: true,
-        opacity: 0.92,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }),
-    );
-    core.position.y = 0.4;
-    g.add(blade, core);
-    const y = 1.12;
-    g.position.set(a.position.x, y, a.position.z);
-    const dx = b.position.x - a.position.x;
-    const dz = b.position.z - a.position.z;
-    g.rotation.y = Math.atan2(dx, dz);
-    this.arenaRoot.add(g);
-    this.flyingProjectiles.push({
-      mesh: g,
-      x0: a.position.x,
-      z0: a.position.z,
-      x1: b.position.x,
-      z1: b.position.z,
-      y,
-      t: 0,
-      T: Math.max(0.05, durationSec),
-      style: "fire_sword",
-    });
-  }
-
   /** Desenho estilo quadrinho (burst + POW) para impacto de bala. */
   private spawnComicPowBurst(x: number, y: number, z: number): void {
     const w = 512;
@@ -3635,102 +3628,6 @@ export class GameRenderer {
     group.add(mkLine(0x3366cc, 0.55, 0.48));
     this.arenaRoot.add(group);
     this.golpeRelampagoBolts.push({ group, t: 0, T: 0.32 });
-  }
-
-  private spawnEspadaFogoImpact(x: number, y: number, z: number): void {
-    const g = new THREE.Group();
-    const mk = (rIn: number, rOut: number, col: number, op: number) => {
-      const geo = new THREE.RingGeometry(rIn, rOut, 18);
-      const mat = new THREE.MeshBasicMaterial({
-        color: col,
-        transparent: true,
-        opacity: op,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-      });
-      (mat.userData as { baseOp?: number }).baseOp = op;
-      const m = new THREE.Mesh(geo, mat);
-      m.rotation.x = -Math.PI / 2;
-      g.add(m);
-    };
-    mk(0.06, 0.36, 0xff3300, 0.62);
-    mk(0.1, 0.58, 0xff9500, 0.44);
-    g.position.set(x, y, z);
-    this.arenaRoot.add(g);
-    this.espadaFogoBursts.push({ group: g, t: 0, T: 0.26 });
-  }
-
-  private syncEspadaFogoEternalOrbits(units: Unit[]): void {
-    const seen = new Set<string>();
-    for (const u of units) {
-      if (!u.isPlayer || u.hp <= 0) continue;
-      const n = u.espadaFogoOrbitVisualCount ?? 0;
-      if (n <= 0) continue;
-      const prev = this.espadaFogoOrbitByUnit.get(u.id);
-      const prevN = (prev?.userData as { swordCount?: number }).swordCount;
-      if (prev && prevN === n) {
-        seen.add(u.id);
-        continue;
-      }
-      seen.add(u.id);
-
-      if (prev) {
-        this.arenaRoot.remove(prev);
-        this.disposeObject3D(prev);
-        this.espadaFogoOrbitByUnit.delete(u.id);
-      }
-
-      const root = new THREE.Group();
-      (root.userData as { swordCount: number }).swordCount = n;
-      const scaleSword = 0.9 / Math.sqrt(Math.max(1, n));
-      const orbitR = 0.52 + 0.48 / Math.max(1, n * 0.38);
-      for (let i = 0; i < n; i++) {
-        const ang = (2 * Math.PI * i) / n;
-        const sg = new THREE.Group();
-        const blade = new THREE.Mesh(
-          new THREE.BoxGeometry(0.052, 0.34, 0.11),
-          new THREE.MeshStandardMaterial({
-            color: 0x4a0808,
-            emissive: 0xff2200,
-            emissiveIntensity: 1.12,
-            metalness: 0.38,
-            roughness: 0.4,
-          }),
-        );
-        blade.position.y = 0.17;
-        const flame = new THREE.Mesh(
-          new THREE.SphereGeometry(0.065, 8, 8),
-          new THREE.MeshBasicMaterial({
-            color: 0xff6600,
-            transparent: true,
-            opacity: 0.88,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-          }),
-        );
-        flame.position.y = 0.3;
-        sg.add(blade, flame);
-        sg.position.set(
-          Math.cos(ang) * orbitR,
-          1.04,
-          Math.sin(ang) * orbitR,
-        );
-        sg.rotation.y = -ang + Math.PI / 2;
-        sg.scale.setScalar(scaleSword);
-        root.add(sg);
-      }
-      const ug = this.unitMeshes.get(u.id);
-      if (ug) root.position.copy(ug.position);
-      this.arenaRoot.add(root);
-      this.espadaFogoOrbitByUnit.set(u.id, root);
-    }
-    for (const [id, root] of [...this.espadaFogoOrbitByUnit]) {
-      if (seen.has(id)) continue;
-      this.arenaRoot.remove(root);
-      this.disposeObject3D(root);
-      this.espadaFogoOrbitByUnit.delete(id);
-    }
   }
 
   setDuelFlameAura(unitId: string, on: boolean): void {
@@ -4201,38 +4098,13 @@ export class GameRenderer {
       const x = THREE.MathUtils.lerp(p.x0, p.x1, u);
       const z = THREE.MathUtils.lerp(p.z0, p.z1, u);
       p.mesh.position.set(x, p.y, z);
-      if (p.style === "fire_sword") {
-        p.mesh.rotation.y += dt * 14;
-      }
       if (u >= 1) {
         if (p.style === "bullet") {
           this.spawnComicPowBurst(p.x1, p.y, p.z1);
-        } else if (p.style === "fire_sword") {
-          this.spawnEspadaFogoImpact(p.x1, p.y, p.z1);
         }
         this.arenaRoot.remove(p.mesh);
         this.disposeObject3D(p.mesh);
         this.flyingProjectiles.splice(i, 1);
-      }
-    }
-    for (let i = this.espadaFogoBursts.length - 1; i >= 0; i--) {
-      const b = this.espadaFogoBursts[i]!;
-      b.t += dt;
-      const u = b.t / b.T;
-      const sc = 1 + u * 2.4;
-      b.group.scale.setScalar(sc);
-      b.group.traverse((ch) => {
-        if (ch instanceof THREE.Mesh) {
-          const mat = ch.material as THREE.MeshBasicMaterial;
-          const base = (mat.userData as { baseOp?: number }).baseOp ?? 0.55;
-          mat.opacity =
-            u < 0.28 ? base : Math.max(0, base * (1 - (u - 0.28) / 0.72));
-        }
-      });
-      if (b.t >= b.T) {
-        this.arenaRoot.remove(b.group);
-        this.disposeObject3D(b.group);
-        this.espadaFogoBursts.splice(i, 1);
       }
     }
     for (let i = this.comicPowBursts.length - 1; i >= 0; i--) {
@@ -4364,16 +4236,16 @@ export class GameRenderer {
       root.position.copy(ug.position);
       root.rotation.y += dt * 2.8;
     }
-    for (const [id, root] of [...this.espadaFogoOrbitByUnit]) {
+    for (const [id, root] of [...this.flamingSwordByHeroId]) {
       const ug = this.unitMeshes.get(id);
       if (!ug) {
         this.arenaRoot.remove(root);
         this.disposeObject3D(root);
-        this.espadaFogoOrbitByUnit.delete(id);
+        this.flamingSwordByHeroId.delete(id);
         continue;
       }
-      root.position.copy(ug.position);
-      root.rotation.y += dt * 1.9;
+      root.rotation.y += dt * 3.4;
+      root.position.y += Math.sin(now * 0.006 + root.id) * 0.0009;
     }
     this.updateBunkerHitFlash(now);
   }

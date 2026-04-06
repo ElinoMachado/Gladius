@@ -89,7 +89,7 @@ const SPECIAL_MAX: Record<string, number> = {
   carne_eterna: 3,
   penumbra: 3,
   aura_tita: 6,
-  espada_fogo_eterno: 3,
+  coroa_ferro: 3,
 };
 
 export function getArtifactMaxStacks(artifactId: string): number {
@@ -261,10 +261,12 @@ export function describeArtifactAtStack(
       return `+${15 * n}% de dano com habilidades (não básico).`;
     case "espinhos_reais":
       return `Devolve ${8 * n}% do dano recebido de inimigos ao atacante.`;
-    case "espada_fogo_eterno": {
-      const flat = 25 * n;
-      const pct = 10 + 10 * n;
-      return `Lâminas ao ganhar o artefato; ressurgem no início do turno; ao encerrares o turno: ${flat}+${pct}% do teu dano base por golpe no inimigo mais distante no teu bioma (hub = todos). Golpes = básicos permitidos no turno (mín. 1).`;
+    case "coroa_ferro": {
+      const hp = 200 + (n - 1) * 100;
+      const dano = 40 + (n - 1) * 20;
+      const def = 100 + (n - 1) * 50;
+      const ataques = 2 + (n - 1);
+      return `Invoca espada autônoma: ${hp} PV, ${dano} dano, ${def} defesa, 3 alcance, 7 movimento, ${ataques} ataque(s) por turno. Prioriza inimigos mais distantes. Crítico = do herói.`;
     }
     case "guerra_total": {
       const flat = [50, 120, 210][n - 1] ?? 210;
@@ -415,7 +417,6 @@ export function artifactCardFigureSvg(artifactId: string): string {
     furacao_ouro: `<path fill="none" stroke="#f9a825" stroke-width="1.2" d="M24 10 Q38 24 24 38 Q10 24 24 10" opacity="0.7"/><ellipse cx="18" cy="16" rx="6" ry="3.5" fill="#ffc107" stroke="#f57f17"/><ellipse cx="30" cy="20" rx="5" ry="3" fill="#ffca28" stroke="#f9a825" transform="rotate(25 30 20)"/><ellipse cx="20" cy="30" rx="5" ry="3" fill="#ffd54f" stroke="#ff8f00" transform="rotate(-35 20 30)"/><ellipse cx="28" cy="32" rx="4" ry="2.5" fill="#ffe082" stroke="#ffa000"/>`,
     duro_pedra: `<ellipse cx="24" cy="40" rx="11" ry="3.5" fill="#455a64" opacity="0.45"/><path d="M15 18 Q24 12 33 18 L35 34 Q24 38 13 34 Z" fill="#78909c" stroke="#455a64" stroke-width="1"/><circle cx="20" cy="22" r="2.2" fill="#37474f"/><circle cx="28" cy="22" r="2.2" fill="#37474f"/><path d="M19 28h10" stroke="#37474f" stroke-width="1"/><path d="M17 30l3 5M24 30v6M31 30l-3 5" stroke="#607d8b" stroke-width="1.2"/>`,
     anel_penetrante: `<ellipse cx="24" cy="24" rx="15" ry="11" fill="none" stroke="#6a1b9a" stroke-width="3.5"/><ellipse cx="24" cy="24" rx="9" ry="6" fill="none" stroke="#ce93d8" stroke-width="1.8"/><circle cx="24" cy="24" r="4" fill="#4a148c" opacity="0.35"/>`,
-    espada_fogo_eterno: `<path fill="#b71c1c" stroke="#3e2723" stroke-width="0.8" d="M24 6 L28 34 L24 40 L20 34 Z"/><path fill="#ff5722" d="M22 10 L26 10 L25 28 L23 28 Z" opacity="0.9"/><path fill="none" stroke="#ff9800" stroke-width="1.2" d="M18 8 Q24 4 30 8 M16 14 Q24 6 32 14" opacity="0.85"/><circle cx="24" cy="36" r="3" fill="#5d4037"/>`,
     gota_azul: `<path fill="none" stroke="#1565c0" stroke-width="2" d="M24 8v8"/><path fill="#42a5f5" stroke="#0d47a1" stroke-width="0.8" d="M24 14 C18 22 14 28 14 32 C14 38 18 42 24 42 C30 42 34 38 34 32 C34 28 30 22 24 14"/><path fill="#90caf9" d="M20 30h8v6a4 4 0 0 1-8 0v-6" opacity="0.9"/>`,
     raiz_vida: `<circle cx="24" cy="24" r="4" fill="#ffcdd2" stroke="#b71c1c" stroke-width="1.2"/><path fill="none" stroke="#c62828" stroke-width="2.2" stroke-linecap="round" d="M24 10v6M24 32v6M10 24h6M32 24h6M14 14l5 5M29 29l5 5M34 14l-5 5M19 29l-5 5"/><path fill="#e53935" d="M24 18l3 6-3 4-3-4z" opacity="0.85"/>`,
     fel_simples: `<path fill="#558b2f" d="M6 38c4-2 8-1 10 2 2-4 6-6 10-4 2-3 7-4 10-1 1-4-2-7-6-6-3 3-8 8-8 12-3-2-8 0-10 3-4-1-8 1-10 4z"/><path fill="#7cb342" d="M8 36c6-8 14-10 22-6-2 4-8 6-14 6-4 4-10 3-8 0z"/><path fill="#aed581" d="M14 32 Q18 28 22 30 Q20 34 16 34z" opacity="0.9"/>`,
