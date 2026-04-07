@@ -35,6 +35,59 @@ export function buildEnemyBody3D(
 ): THREE.Group {
   const root = new THREE.Group();
 
+  if (archetypeId === "ally_shadow") {
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.26, 0.3, 1.0, 10),
+      m(displayColor, {
+        roughness: 0.85,
+        metalness: 0.05,
+        transparent: true,
+        opacity: 0.78,
+        emissive: displayColor,
+        emissiveIntensity: 0.28,
+      }),
+    );
+    body.position.y = 0.5;
+    root.add(body);
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 8, 6),
+      m(displayColor, {
+        transparent: true,
+        opacity: 0.68,
+        emissive: 0x1a1a2e,
+        emissiveIntensity: 0.45,
+      }),
+    );
+    head.position.y = 1.08;
+    root.add(head);
+    return root;
+  }
+
+  if (archetypeId === "ally_golem") {
+    const legH = 0.38;
+    const torso = new THREE.Mesh(
+      new THREE.BoxGeometry(0.78, 0.92, 0.56),
+      m(displayColor, { roughness: 0.88 }),
+    );
+    torso.position.y = legH + 0.46;
+    root.add(torso);
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.44, 0.38, 0.42),
+      m(0x4e342e, { roughness: 0.9 }),
+    );
+    head.position.y = legH + 0.92 + 0.22;
+    root.add(head);
+    for (let sx = -1; sx <= 1; sx += 2) {
+      const legM = new THREE.Mesh(
+        new THREE.BoxGeometry(0.24, legH, 0.26),
+        m(0x3e2723, { roughness: 0.92 }),
+      );
+      legM.position.set(sx * 0.24, legH / 2, 0);
+      root.add(legM);
+    }
+    return root;
+  }
+
   if (archetypeId === "escravo") {
     const skin = 0x8d6e63;
     const rag = 0x5c4a3e;

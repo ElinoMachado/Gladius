@@ -28,11 +28,11 @@ export interface ArtifactDef {
 export const ARTIFACT_POOL: ArtifactDef[] = [
   /* ——— Comuns (12) ——— */
   {
-    id: "tonico",
-    name: "Tônico",
+    id: "imagem_residual",
+    name: "Imagem residual",
     rarity: "common",
     description:
-      "Receba {valor} de regeneração de mana adicional, equivalente a {pct}% da sua regeneração de vida.",
+      "No início de cada wave invoca sombra(s) ao teu lado: 20 PV, 10 de dano, 10 movimento, 1 alcance, 0 defesa; o dano conta como habilidade. Morrem após o turno delas na fase de invocações. A cada 2 acúmulos surge mais uma sombra (máx. 6 acúmulos). Vida e dano aumentam com os acúmulos.",
   },
   {
     id: "maos_venenosas",
@@ -183,8 +183,8 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     id: "pacto_rubro",
     name: "Pacto rubro",
     rarity: "uncommon",
-    description: "+2% de roubo de vida por acúmulo.",
-    pickBonusPerStack: { lifesteal: 2 },
+    description: "+5% de roubo de vida por acúmulo.",
+    pickBonusPerStack: { lifesteal: 5 },
   },
   {
     id: "instinto",
@@ -252,6 +252,13 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
       "No início de cada wave: +50 de escudo azul por acúmulo (máx. 6). Ao ganhares um acúmulo durante a run, recebes já +50 de escudo.",
   },
   {
+    id: "potencializar_invocacao",
+    name: "Potencializar invocação",
+    rarity: "rare",
+    description:
+      "+1 cópia de cada uma das tuas invocações (sombras, espada flamejante, Mega Golem) e +40% de vida e +40% de dano delas por acúmulo (máx. 3).",
+  },
+  {
     id: "passo_gigante",
     name: "Ira do sobrevivente",
     rarity: "rare",
@@ -276,10 +283,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
   },
   {
     id: "martelo_juiz",
-    name: "Martelo do juiz",
+    name: "Mega Golem",
     rarity: "legendary",
-    description: "+7 de dano por acúmulo (máx. 3).",
-    pickBonusPerStack: { dano: 7 },
+    description:
+      "No início de cada wave invoca um Mega Golem ao teu lado: 1000 PV, 100 defesa, 3 movimento, 1 alcance, 60 de dano; 1 ataque por turno que atinge todos os inimigos adjacentes; o dano conta como habilidade. Enquanto viver no bioma, os inimigos desse bioma priorizam-no como alvo. Por acúmulo: +100 PV e +100 defesa (máx. 3).",
   },
   {
     id: "manto_espectral",
@@ -292,8 +299,8 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     id: "anel_dragao",
     name: "Anel do dragão adormecido",
     rarity: "legendary",
-    description: "+0,12 ao multiplicador de dano crítico por acúmulo.",
-    pickBonusPerStack: { danoCritico: 0.12 },
+    description:
+      "Ao ganhares um acúmulo e no início de cada turno: invoca 1 bola de Ar por ataque básico disponível nesse turno. No fim do teu turno, as bolas atingem o inimigo mais distante no teu bioma (no hub, qualquer inimigo). Dano por bola: 100 + 50% do dano do ataque básico; +50 de dano fixo e +25 pontos percentuais na parte do dano do herói por acúmulo (máx. 5).",
   },
   {
     id: "crystal_extra",
@@ -303,11 +310,10 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
       "Sempre que um cristal cair por eliminação, recebe +1 cristal adicional por acúmulo (máx. 4).",
   },
   {
-    id: "lua_benta",
-    name: "Lua benta",
-    rarity: "legendary",
-    description: "+4 de regen de mana por acúmulo.",
-    pickBonusPerStack: { regenMana: 4 },
+    id: "furacao_ouro",
+    name: "Furacão de moedas",
+    rarity: "mythic",
+    description: "+5 de ouro na bolsa por eliminação por acúmulo.",
   },
   {
     id: "espinhos_reais",
@@ -361,10 +367,11 @@ export const ARTIFACT_POOL: ArtifactDef[] = [
     pickBonusPerStack: { acertoCritico: 25, danoCritico: 0.15 },
   },
   {
-    id: "furacao_ouro",
-    name: "Furacão de moedas",
-    rarity: "mythic",
-    description: "+5 de ouro na bolsa por eliminação por acúmulo.",
+    id: "lua_benta",
+    name: "Lua benta",
+    rarity: "legendary",
+    description: "+4 de regen de mana por acúmulo.",
+    pickBonusPerStack: { regenMana: 4 },
   },
 ];
 

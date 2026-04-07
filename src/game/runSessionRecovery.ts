@@ -11,7 +11,8 @@ export function runPhaseAllowsRunSessionPersistence(phase: GamePhase): boolean {
     phase === "combat" ||
     phase === "wave_summary" ||
     phase === "level_up_pick" ||
-    phase === "ultimate_pick"
+    phase === "ultimate_pick" ||
+    phase === "coliseum_cleared"
   );
 }
 

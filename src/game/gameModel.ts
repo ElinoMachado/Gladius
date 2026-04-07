@@ -19,6 +19,8 @@ import {
   CRYSTAL_SHOP_ALCANCE_MAX,
   CRYSTAL_SHOP_EXTRA_BASIC_COST,
   CRYSTAL_SHOP_EXTRA_BASIC_MAX,
+  CRYSTAL_SHOP_SORTE_COST,
+  CRYSTAL_SHOP_SORTE_MAX,
   META_TRACK_MAX_LEVEL,
 } from "./types";
 import {
@@ -58,9 +60,18 @@ import {
   forgeSynergyTier,
   getForgeLevel,
   pantanoHelmoXpBonusPercent,
+  randomForgeEssenceForHubDeath,
   resolveEquippedForgeLoadoutForMeta,
 } from "./forge";
-import { createEnemyUnit, createHeroUnit, xpCurve, biomeAt } from "./unitFactory";
+import { artifactAffectsInvocationSync } from "./invocationArtifacts";
+import {
+  createAllyShadowSummon,
+  createEnemyUnit,
+  createHeroUnit,
+  createMegaGolemSummon,
+  xpCurve,
+  biomeAt,
+} from "./unitFactory";
 import {
   ateMorteCooldownWaves,
   ateMorteDamageMult,
@@ -103,6 +114,13 @@ import {
   pickGruntForWave,
   waveConfigFromIndex,
 } from "./data/enemies";
+import {
+  type ColiseumTierId,
+  coliseumDefinition,
+  coliseumPhaseProgressEnemyMultiplier,
+  coliseumTierEnemyMultiplier,
+  FORMA_FINAL_LEVEL,
+} from "./data/coliseums";
 import { COMBAT_BIOMES, BIOME_LABELS } from "./data/biomes";
 import { goldDrainPerTurn } from "./data/shops";
 import { loadMeta, permPercent, saveMeta } from "./metaStore";
@@ -124,7 +142,12 @@ import {
   DEV_TEST_CROWD_UI,
   DEV_TEST_WAVE1_ENEMY_COUNT,
 } from "./devTestFlags";
-import { GOLD_SHOP } from "./data/shops";
+import {
+  GOLD_SHOP,
+  goldShopBatchAffordable,
+  goldShopUnitCost,
+  type GoldShopBatchSize,
+} from "./data/shops";
 import { computePartyBonus } from "./colorSynergy";
 import {
   addBravuraInstances,
@@ -211,7 +234,7 @@ export type CombatVfxHint =
       kind: "basic_projectile";
       fromId: string;
       toId: string;
-      style: "bullet" | "magic";
+      style: "bullet" | "magic" | "air";
       /** Duração do projétil / alinhamento ao gesto (ms). */
       flightMs?: number;
     }
@@ -230,6 +253,19 @@ export type CombatVfxHint =
       attackerId: string;
       targetId: string;
       archetypeId: string | undefined;
+    }
+  | {
+      kind: "flaming_sword_strike";
+      /** Dono da invocação (`flamingSwordByHeroId` no render). */
+      heroOwnerId: string;
+      targetId: string;
+    }
+  | {
+      kind: "ally_summon_strike";
+      summonId: string;
+      targetId: string;
+      /** Mesmo papel que a espada flamejante: escolhe o traço no render. */
+      summonKind?: "shadow" | "mega_golem";
     }
   | {
       kind: "weapon_ult_furacao";
@@ -258,6 +294,68 @@ export const BUNKER_COMBAT_FLOAT_ID = "__bunker__";
 /** Teto do A* na aproximação inimiga. `movimento * 2` impedia caminhos longos (mapa raio ~25), fazendo-os “parados” até o herói chegar perto. */
 const ENEMY_APPROACH_PATHFIND_MAX = 100;
 
+/** Pausa entre golpes da espada flamejante na fase de invocação (legibilidade). */
+const FLAMING_SWORD_STRIKE_GAP_MS = 280;
+/** Bolas de Ar do Anel do dragão adormecido (fim de turno). */
+const ANEL_DRAGAO_ORB_STAGGER_MS = 95;
+
+export type PendingMoveAnimation =
+  | {
+      kind: "unit";
+      unitId: string;
+      cells: { q: number; r: number }[];
+      segmentMs?: number;
+      playHeroRunAnim?: boolean;
+    }
+  | {
+      kind: "flamingSword";
+      heroId: string;
+      cells: { q: number; r: number }[];
+      segmentMs?: number;
+    };
+
+function normalizePendingMoveAnimation(
+  raw: unknown,
+): PendingMoveAnimation | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (
+    o.kind === "flamingSword" &&
+    typeof o.heroId === "string" &&
+    Array.isArray(o.cells)
+  ) {
+    return {
+      kind: "flamingSword",
+      heroId: o.heroId,
+      cells: o.cells as { q: number; r: number }[],
+      segmentMs: typeof o.segmentMs === "number" ? o.segmentMs : undefined,
+    };
+  }
+  if (
+    o.kind === "unit" &&
+    typeof o.unitId === "string" &&
+    Array.isArray(o.cells)
+  ) {
+    return {
+      kind: "unit",
+      unitId: o.unitId,
+      cells: o.cells as { q: number; r: number }[],
+      segmentMs: typeof o.segmentMs === "number" ? o.segmentMs : undefined,
+      playHeroRunAnim: o.playHeroRunAnim === true,
+    };
+  }
+  if (typeof o.unitId === "string" && Array.isArray(o.cells)) {
+    return {
+      kind: "unit",
+      unitId: o.unitId,
+      cells: o.cells as { q: number; r: number }[],
+      segmentMs: typeof o.segmentMs === "number" ? o.segmentMs : undefined,
+      playHeroRunAnim: o.playHeroRunAnim === true,
+    };
+  }
+  return null;
+}
+
 /** Artefato Escudo residual: teto do escudo vindo de roubo com vida cheia (acúmulos 1–6). */
 const ESCUDO_RESIDUAL_CAP_BY_STACK = [100, 250, 400, 600, 900, 1500] as const;
 
@@ -279,6 +377,8 @@ export interface RunSetup {
    * e de `colors`). Mesma ordem que a lista densa de heróis escolhidos.
    */
   partySlotByHero: (0 | 1 | 2)[];
+  /** Coliseu escolhido antes dos heróis: escala a dificuldade base dos inimigos. */
+  coliseumTier: ColiseumTierId;
 }
 
 /** Resumo ao fechar wave (ouro base vs bónus meta, cristais e essências da wave). */
@@ -358,6 +458,16 @@ export function heroDanoPlusRoninFromBaseline(b: {
   artifacts: Record<string, number>;
 }): number {
   return b.dano + roninOverflowFlatDamage(b.acertoCritico, b.artifacts);
+}
+
+/** Dano bruto extra da Garra de ferro (30% defesa × acúmulos, máx. 6). */
+export function garraFerroRawBonusFromDefesaAndStacks(
+  defesa: number,
+  artifacts: Record<string, number>,
+): number {
+  const s = Math.min(6, artifacts["garra_ferro"] ?? 0);
+  if (s <= 0) return 0;
+  return defesa * 0.3 * s;
 }
 
 type ShopHeroSnapshot = {
@@ -465,6 +575,17 @@ function migrateGotaAzulRaizVidaOldPickBonuses(units: Unit[]): void {
   }
 }
 
+/** Legado: `tonico` → `imagem_residual` (efeito antigo removido). */
+function migrateTonicoToImagemResidual(units: Unit[]): void {
+  for (const u of units) {
+    if (!u.isPlayer) continue;
+    const t = u.artifacts["tonico"];
+    if (t == null || t <= 0) continue;
+    u.artifacts["imagem_residual"] = (u.artifacts["imagem_residual"] ?? 0) + t;
+    delete u.artifacts["tonico"];
+  }
+}
+
 /** Save antigo: `alcance_mistico` → `aura_tita` e reverte alcance do bônus antigo. */
 function migrateAlcanceMisticoToAuraTita(units: Unit[]): void {
   for (const u of units) {
@@ -528,12 +649,31 @@ export class GameModel {
   partyXpBonusPct = 0;
   /** Bioma inicial por herói (spawn de inimigos restrito a estes + presença do jogador). */
   runHeroBiomes: BiomeId[] = [];
+  /** Coliseu escolhido no arranque (1–5). */
+  coliseumTier: ColiseumTierId = 1;
+  /**
+   * Após “Continuar” no marco da onda 20: inimigos escalam ×2 por cada bloco de 5 ondas (21–25, 26–30, …).
+   */
+  postColiseuContinueEnemyScaling = false;
   /** Um bunker por bioma de combate (hex próprio). */
   bunkers: Partial<Record<BiomeId, BunkerState>> = {};
-  /** Após resumo de wave: loja ou ecrã de vitória. */
-  private pendingWaveSummaryNext: "shop" | "victory" | null = null;
+  /** Após resumo de wave: loja, vitória final ou fim de coliseu (onda 20). */
+  private pendingWaveSummaryNext:
+    | "shop"
+    | "victory"
+    | "coliseu_run_end"
+    | null = null;
+
+  /** Mensagem curta após vencer o 1.º coliseu (onda 20); ecrã `coliseum_cleared`. */
+  coliseuClearedTitle: string | null = null;
   /** Fase inimiga em curso (turnos escalonados no tempo). */
   inEnemyPhase = false;
+  /** Fase de invocações aliadas em curso (após heróis, antes dos inimigos). */
+  inSummonPhase = false;
+  /** Dono da invocação atualmente a agir (para UI de ordem de turnos). */
+  currentSummonOwnerId: string | null = null;
+  /** Unidade de grid invocada a agir (sombra / Mega Golem); espada usa só `currentSummonOwnerId`. */
+  currentSummonActorId: string | null = null;
   /** Nova wave: aguardar overlay da UI antes de iniciar a fase inimiga. */
   private blockEnemyPhaseForWaveIntro = false;
   /**
@@ -557,14 +697,7 @@ export class GameModel {
   /** Estado lógico do turno do herói atual (início/principal/fim/ocioso). */
   turnStage: TurnStage = "idle";
   /** Consumido pelo render: animação hex-a-hex no canvas. */
-  pendingMoveAnim: {
-    unitId: string;
-    cells: { q: number; r: number }[];
-    /** Se definido, substitui `UNIT_MOVE_SEGMENT_MS` (ex.: inimigos acelerados). */
-    segmentMs?: number;
-    /** Herói: animação de corrida durante o deslocamento. */
-    playHeroRunAnim?: boolean;
-  } | null = null;
+  pendingMoveAnim: PendingMoveAnimation | null = null;
   /** 1 = normal; menor que 1 acelera movimento/pausa na fase inimiga (muitos inimigos). */
   private enemyPhaseTimingMult = 1;
   /** Sinergia rochosa nv3: último herói com forja que se moveu — inimigos priorizam-no. */
@@ -865,11 +998,93 @@ export class GameModel {
       this.victoryWave20 = true;
       this.meta.crystals += this.crystalsRun + 5;
       this.saveMeta();
+    } else if (next === "coliseu_run_end") {
+      this.meta.crystals += this.crystalsRun;
+      this.crystalsRun = 0;
+      this.metaEssencesAtRunStart = null;
+      this.coliseuClearedTitle = `Venceste o ${coliseumDefinition(this.coliseumTier).title}!`;
+      this.enterColiseumClearedScreenKeepingRun();
     } else if (next === "shop") {
       this.teleportPartyToHub();
       this.phase = "shop_wave";
       this.captureShopSnapshot();
     }
+    this.emit();
+  }
+
+  /**
+   * Ecrã “Venceste o N.º coliseu”: mantém party, onda e bunkers para “Continuar” ou reset no menu.
+   */
+  private enterColiseumClearedScreenKeepingRun(): void {
+    this.waveCrystalsGained = 0;
+    this.waveEssencesGained = {};
+    this.waveXpGained = 0;
+    this.runPlaySessionPerfMsStart = null;
+    this.playerTurnJustStarted = false;
+    this.turnStage = "idle";
+    this.inEnemyPhase = false;
+    this.inSummonPhase = false;
+    this.currentSummonOwnerId = null;
+    this.currentSummonActorId = null;
+    this.lastEnemyActedId = null;
+    this.enemyTurnQueue = [];
+    this.rochosoTauntHeroId = null;
+    this.blockEnemyPhaseForWaveIntro = false;
+    this.clearCombatSchedule();
+    this.pendingCombatVfxQueue = [];
+    clearCombatOutcomeQueue();
+    this.cancelLevelUpFloatHoldTimer();
+    this.pendingSentencaPartyHeal = null;
+    this.duel = null;
+    this.duelNextIsGladiatorStrike = true;
+    this.killLevelUpFlushSuppressed = false;
+    this.pendingKillLevelUpFlushHeroIds.clear();
+    this.pendingCombatLevelUpHeroIds.clear();
+    this.pendingArtifacts = null;
+    this.pendingUltimate = null;
+    this.pendingBunkerHint = null;
+    this.pendingMoveBlockedHint = null;
+    this.pendingMoveAnim = null;
+    this.victoryWave20 = false;
+    this.basicAttacksSpentThisTurn = 0;
+    this.selectedUnitId = null;
+    this.logLines = [];
+    this.phase = "coliseum_cleared";
+    this.saveMeta();
+  }
+
+  /** Descarta o estado de jogo ao sair do ecrã de coliseu concluído para o menu principal. */
+  private finalizeColiseuClearedRunToMainMenu(): void {
+    this.artifactBannedThisRun.clear();
+    this.units = [];
+    this.bunkers = {};
+    this.partyOrder = [];
+    this.wave = 0;
+    this.currentHeroIndex = 0;
+    this.movementLeft = 0;
+    this.basicLeft = 0;
+    this.coliseumTier = 1;
+    this.postColiseuContinueEnemyScaling = false;
+    clearRunSessionCheckpoint();
+    this.saveMeta();
+  }
+
+  dismissColiseumClearedScreen(): void {
+    if (this.phase !== "coliseum_cleared") return;
+    this.coliseuClearedTitle = null;
+    this.finalizeColiseuClearedRunToMainMenu();
+    this.phase = "main_menu";
+    this.emit();
+  }
+
+  /** Após o marco da onda 20: segue para a loja e ondas 21+ com escalagem extra de inimigos. */
+  continueRunAfterColiseuMilestone(): void {
+    if (this.phase !== "coliseum_cleared") return;
+    this.coliseuClearedTitle = null;
+    this.postColiseuContinueEnemyScaling = true;
+    this.teleportPartyToHub();
+    this.phase = "shop_wave";
+    this.captureShopSnapshot();
     this.emit();
   }
 
@@ -887,6 +1102,7 @@ export class GameModel {
     this.waveEssencesGained = {};
     this.waveLootSummaryPending = null;
     this.pendingWaveSummaryNext = null;
+    this.coliseuClearedTitle = null;
     this.waveXpGained = 0;
     this.runPlaySessionPerfMsStart = null;
     this.artifactBannedThisRun.clear();
@@ -894,6 +1110,9 @@ export class GameModel {
     this.playerTurnJustStarted = false;
     this.turnStage = "idle";
     this.inEnemyPhase = false;
+    this.inSummonPhase = false;
+    this.currentSummonOwnerId = null;
+    this.currentSummonActorId = null;
     this.lastEnemyActedId = null;
     this.enemyTurnQueue = [];
     this.rochosoTauntHeroId = null;
@@ -930,6 +1149,8 @@ export class GameModel {
     this.basicLeft = 0;
     this.selectedUnitId = null;
     this.logLines = [];
+    this.coliseumTier = 1;
+    this.postColiseuContinueEnemyScaling = false;
 
     this.saveMeta();
     this.emit();
@@ -943,7 +1164,7 @@ export class GameModel {
     if (!runPhaseAllowsRunSessionPersistence(this.phase)) return null;
     try {
       const payload = {
-        v: 3 as const,
+        v: 5 as const,
         phase: this.phase,
         meta: JSON.parse(JSON.stringify(this.meta)) as MetaProgress,
         units: JSON.parse(JSON.stringify(this.units)) as Unit[],
@@ -972,6 +1193,9 @@ export class GameModel {
         partyXpBonusPct: this.partyXpBonusPct,
         runHeroBiomes: [...this.runHeroBiomes],
         inEnemyPhase: this.inEnemyPhase,
+        inSummonPhase: this.inSummonPhase,
+        currentSummonOwnerId: this.currentSummonOwnerId,
+        currentSummonActorId: this.currentSummonActorId,
         lastEnemyActedId: this.lastEnemyActedId,
         pendingBunkerHint: this.pendingBunkerHint
           ? { ...this.pendingBunkerHint }
@@ -1017,6 +1241,8 @@ export class GameModel {
         pendingCombatVfxQueue: JSON.parse(
           JSON.stringify(this.pendingCombatVfxQueue),
         ) as CombatVfxHint[],
+        coliseumTier: this.coliseumTier,
+        postColiseuContinueEnemyScaling: this.postColiseuContinueEnemyScaling,
       };
       return JSON.stringify(payload);
     } catch {
@@ -1059,16 +1285,18 @@ export class GameModel {
         partyXpBonusPct?: number;
         runHeroBiomes?: BiomeId[];
         inEnemyPhase?: boolean;
+        inSummonPhase?: boolean;
+        currentSummonOwnerId?: string | null;
+        currentSummonActorId?: string | null;
         lastEnemyActedId?: string | null;
         pendingBunkerHint?: { text: string; q: number; r: number } | null;
         pendingMoveBlockedHint?: { text: string; unitId: string } | null;
-        pendingMoveAnim?: {
-          unitId: string;
-          cells: { q: number; r: number }[];
-          segmentMs?: number;
-          playHeroRunAnim?: boolean;
-        } | null;
-        pendingWaveSummaryNext?: "shop" | "victory" | null;
+        pendingMoveAnim?: unknown;
+        pendingWaveSummaryNext?:
+          | "shop"
+          | "victory"
+          | "coliseu_run_end"
+          | null;
         blockEnemyPhaseForWaveIntro?: boolean;
         pendingCometaArcanoWithoutIntro?: boolean;
         skipDeslumbroDecayAfterCometaOnce?: boolean;
@@ -1097,14 +1325,26 @@ export class GameModel {
         shopRestoreSnapshot?: ShopRestoreSnapshot | null;
         runShopRefundUses?: number;
         artifactBannedThisRun?: string[];
+        coliseumTier?: ColiseumTierId;
+        postColiseuContinueEnemyScaling?: boolean;
       };
-      if ((o.v !== 1 && o.v !== 2 && o.v !== 3) || !o.phase || !Array.isArray(o.units) || !o.meta)
+      if (
+        (o.v !== 1 &&
+          o.v !== 2 &&
+          o.v !== 3 &&
+          o.v !== 4 &&
+          o.v !== 5) ||
+        !o.phase ||
+        !Array.isArray(o.units) ||
+        !o.meta
+      )
         return false;
       if (!runPhaseAllowsRunSessionPersistence(o.phase)) return false;
 
       this.meta = o.meta;
       this.units = o.units;
       migrateAlcanceMisticoToAuraTita(this.units);
+      migrateTonicoToImagemResidual(this.units);
       if (o.v === 1) migrateGotaAzulRaizVidaOldPickBonuses(this.units);
       if (o.v < 3) migrateArtifactStatRebalanceV3(this.units);
       this.bunkers = o.bunkers ?? {};
@@ -1126,12 +1366,26 @@ export class GameModel {
       this.runColors = o.runColors ?? [];
       this.partyXpBonusPct = o.partyXpBonusPct ?? 0;
       this.runHeroBiomes = o.runHeroBiomes ?? [];
+      {
+        const ct = o.coliseumTier;
+        this.coliseumTier =
+          typeof ct === "number" && ct >= 1 && ct <= 5
+            ? (ct as ColiseumTierId)
+            : 1;
+      }
+      this.postColiseuContinueEnemyScaling =
+        o.postColiseuContinueEnemyScaling === true;
       this.phase = o.phase;
       this.inEnemyPhase = o.inEnemyPhase ?? false;
+      this.inSummonPhase = o.inSummonPhase ?? false;
+      this.currentSummonOwnerId = o.currentSummonOwnerId ?? null;
+      this.currentSummonActorId = o.currentSummonActorId ?? null;
       this.lastEnemyActedId = o.lastEnemyActedId ?? null;
       this.pendingBunkerHint = o.pendingBunkerHint ?? null;
       this.pendingMoveBlockedHint = o.pendingMoveBlockedHint ?? null;
-      this.pendingMoveAnim = o.pendingMoveAnim ?? null;
+      this.pendingMoveAnim = normalizePendingMoveAnimation(
+        o.pendingMoveAnim,
+      );
       this.pendingWaveSummaryNext = o.pendingWaveSummaryNext ?? null;
       this.blockEnemyPhaseForWaveIntro = o.blockEnemyPhaseForWaveIntro ?? false;
       this.pendingCometaArcanoWithoutIntro =
@@ -1175,6 +1429,9 @@ export class GameModel {
       this.combatFloats = [];
       this.pendingMoveAnim = null;
       this.inEnemyPhase = false;
+      this.inSummonPhase = false;
+      this.currentSummonOwnerId = null;
+      this.currentSummonActorId = null;
       this.blockEnemyPhaseForWaveIntro = false;
       this.playerTurnJustStarted = false;
       this.turnStage = "idle";
@@ -1306,19 +1563,108 @@ export class GameModel {
     return add;
   }
 
-  /** Sorte efetiva (ex.: sinergia floresta nv3 dobra). */
+  /**
+   * Sorte para drops / raridade: tudo o que está em `u.sorte` (classe, loja de cristais,
+   * sinergia de cores, artefatos ganhos na run), depois ×2 com sinergia floresta nv3.
+   * Usa o loadout do slot na meta (progresso global + equipado) para o tier não desincronizar.
+   */
   effectiveSorte(u: Unit): number {
-    let s = u.sorte;
-    if (forgeSynergyTier(u.forgeLoadout, "floresta") >= 3) s *= 2;
+    let s = Math.max(0, Math.floor(Number(u.sorte)));
+    let ft: 0 | 1 | 2 | 3 = 0;
+    if (u.isPlayer && u.partySlotIndex != null) {
+      ft = forgeSynergyTier(
+        resolveEquippedForgeLoadoutForMeta(this.meta, u.partySlotIndex),
+        "floresta",
+      );
+    } else {
+      ft = forgeSynergyTier(u.forgeLoadout, "floresta");
+    }
+    if (ft >= 3) s *= 2;
     return s;
   }
 
-  takePendingMoveAnimation(): {
-    unitId: string;
-    cells: { q: number; r: number }[];
-    segmentMs?: number;
-    playHeroRunAnim?: boolean;
-  } | null {
+  private anelDragaoStacks(h: Unit): number {
+    return Math.min(5, Math.max(0, h.artifacts["anel_dragao"] ?? 0));
+  }
+
+  private anelDragaoDamagePerOrb(h: Unit): number {
+    const s = this.anelDragaoStacks(h);
+    if (s <= 0) return 0;
+    const flat = 100 + 50 * (s - 1);
+    const pct = (50 + 25 * (s - 1)) / 100;
+    const basic = this.computeBasicAttackRawDamage(h);
+    return Math.floor(flat + basic * pct);
+  }
+
+  /** Inimigo vivo mais afastado do herói no mesmo bioma (hub: qualquer inimigo). */
+  private farthestEnemyInHeroBiome(hero: Unit): Unit | null {
+    const heroBio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
+    let best: Unit | null = null;
+    let bestD = -1;
+    for (const e of this.enemies()) {
+      if (e.hp <= 0) continue;
+      if (heroBio !== "hub") {
+        const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
+        if (eb !== heroBio) continue;
+      }
+      const d = hexDistance({ q: hero.q, r: hero.r }, { q: e.q, r: e.r });
+      if (d > bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  /** Agenda N bolas = ataques básicos disponíveis neste turno (início do turno ou ao ganhar acúmulo). */
+  private queueAnelDragaoOrbsForEndOfTurn(h: Unit): void {
+    if (this.anelDragaoStacks(h) <= 0) {
+      delete h.anelDragaoOrbsEndTurn;
+      return;
+    }
+    h.anelDragaoOrbsEndTurn = this.maxBasicAttacksForHero(h);
+  }
+
+  /** Dispara bolas de Ar no fim do turno (fila de combate com pequeno stagger). */
+  private fireAnelDragaoOrbsAtEndOfTurn(h: Unit): void {
+    const n = h.anelDragaoOrbsEndTurn ?? 0;
+    delete h.anelDragaoOrbsEndTurn;
+    if (n <= 0 || h.hp <= 0) return;
+    if (this.anelDragaoStacks(h) <= 0) return;
+    const rawPer = this.anelDragaoDamagePerOrb(h);
+    if (rawPer <= 0) return;
+    const skipFx = getSkipCombatAnimations();
+    const stagger = skipFx ? 0 : ANEL_DRAGAO_ORB_STAGGER_MS;
+    for (let i = 0; i < n; i++) {
+      const delay = i * stagger;
+      this.queueCombat(delay, () => {
+        const att = this.units.find((x) => x.id === h.id);
+        if (!att || att.hp <= 0 || this.phase !== "combat") return;
+        const tgt = this.farthestEnemyInHeroBiome(att);
+        if (!tgt || tgt.hp <= 0) return;
+        if (!skipFx) {
+          this.pendingCombatVfxQueue.push({
+            kind: "basic_projectile",
+            fromId: att.id,
+            toId: tgt.id,
+            style: "air",
+            flightMs: BASIC_MAGIC_FLIGHT_MS,
+          });
+        }
+        const crit = rollCrit(att.acertoCritico + roninCritBonus(att));
+        this.dealDamage(att, tgt, rawPer, crit, true, false, {
+          suppressOnHitArtifacts: true,
+          suppressLifesteal: true,
+        });
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
+      });
+    }
+  }
+
+  takePendingMoveAnimation(): PendingMoveAnimation | null {
     const p = this.pendingMoveAnim;
     this.pendingMoveAnim = null;
     return p;
@@ -1529,9 +1875,13 @@ export class GameModel {
 
   startNewRun(setup: RunSetup): void {
     clearRunSessionCheckpoint();
+    this.coliseuClearedTitle = null;
     this.playerTurnJustStarted = false;
     this.turnStage = "idle";
     this.inEnemyPhase = false;
+    this.inSummonPhase = false;
+    this.currentSummonOwnerId = null;
+    this.currentSummonActorId = null;
     this.lastEnemyActedId = null;
     this.enemyTurnQueue = [];
     this.units = [];
@@ -1560,6 +1910,7 @@ export class GameModel {
     this.runColors = [...colors];
     this.partyXpBonusPct = computePartyBonus(colors).xpGainPct;
     this.runHeroBiomes = [...setup.biomes];
+    this.coliseumTier = setup.coliseumTier;
     this.bunkers = {};
     this.pendingBunkerHint = null;
     const spawnTaken = new Set<string>();
@@ -1644,10 +1995,14 @@ export class GameModel {
     this.waveEssencesGained = {};
     this.wave = n;
     this.inEnemyPhase = false;
+    this.inSummonPhase = false;
+    this.currentSummonOwnerId = null;
+    this.currentSummonActorId = null;
     this.lastEnemyActedId = null;
     this.rochosoTauntHeroId = null;
     this.enemyTurnQueue = [];
     this.clearDead();
+    this.units = this.units.filter((u) => u.isPlayer || !u.isAllySummon);
     for (const u of this.units) {
       if (!u.isPlayer) continue;
       u.ouroWave = 100;
@@ -1658,7 +2013,30 @@ export class GameModel {
         u.hp = Math.min(u.hp, u.maxHp);
         u.mana = Math.min(u.mana, u.maxMana);
       }
+      const savedSkillCd: Record<string, number> = {};
+      for (const k of [
+        "ate_a_morte",
+        "pisotear",
+        "tiro_destruidor",
+        "sentenca",
+        "atirar_todo_lado",
+        "atirar",
+      ] as const) {
+        const v = u.skillCd[k];
+        if (typeof v === "number" && v > 0) savedSkillCd[k] = v;
+      }
+      const ultMeter = u.weaponUltMeter;
+      const ultHeal = u.weaponUltHealAcc ?? 0;
+      const ultHit = u.weaponUltHitAcc ?? 0;
+      const ultTaken = u.weaponUltTakenAcc ?? 0;
       u.skillCd = {};
+      for (const [k, v] of Object.entries(savedSkillCd)) {
+        u.skillCd[k] = v;
+      }
+      u.weaponUltMeter = ultMeter;
+      u.weaponUltHealAcc = ultHeal;
+      u.weaponUltHitAcc = ultHit;
+      u.weaponUltTakenAcc = ultTaken;
       u.pistoleiroBonusDanoWave = 0;
       u.curandeiroDanoWave = 0;
       u.sacrificioResilienteWaveDef = 0;
@@ -1685,6 +2063,7 @@ export class GameModel {
     }
     this.placePartyOnChosenBiomeFirstHexes();
     this.spawnEnemiesForWave();
+    this.spawnAllySummonsForWave();
     this.ensureBunkersPlaced();
     for (const bi of COMBAT_BIOMES) {
       const bk = this.bunkers[bi];
@@ -1906,6 +2285,18 @@ export class GameModel {
   }
 
   /** Escravo #1, #2… quando o nome base se repete. */
+  /** Coliseu escolhido + fase atual (blocos de 20 ondas) nos stats dos inimigos. */
+  runEnemyChallengeMultiplier(): number {
+    let m =
+      coliseumTierEnemyMultiplier(this.coliseumTier) *
+      coliseumPhaseProgressEnemyMultiplier(this.wave);
+    if (this.postColiseuContinueEnemyScaling && this.wave > 20) {
+      const blocks = Math.floor((this.wave - 21) / 5) + 1;
+      m *= Math.pow(2, blocks);
+    }
+    return m;
+  }
+
   private disambiguateEnemyDisplayNames(): void {
     const strip = (s: string) => s.replace(/ #\d+$/, "");
     const groups = new Map<string, Unit[]>();
@@ -1947,6 +2338,7 @@ export class GameModel {
             pos.q,
             pos.r,
             spawnBio,
+            this.runEnemyChallengeMultiplier(),
           );
           this.units.push(e);
           taken.add(axialKey(pos.q, pos.r));
@@ -1971,6 +2363,7 @@ export class GameModel {
             pos.q,
             pos.r,
             homeBiome,
+            this.runEnemyChallengeMultiplier(),
           );
           this.units.push(e);
           taken.add(axialKey(pos.q, pos.r));
@@ -1995,7 +2388,15 @@ export class GameModel {
       for (let i = 0; i < total; i++) {
         const pos = this.randomSpawnEnemy(taken);
         const spawnBio = biomeAt(this.grid, pos.q, pos.r) as BiomeId;
-        const e = createEnemyUnit(arch, this.wave, partyN, pos.q, pos.r, spawnBio);
+        const e = createEnemyUnit(
+          arch,
+          this.wave,
+          partyN,
+          pos.q,
+          pos.r,
+          spawnBio,
+          this.runEnemyChallengeMultiplier(),
+        );
         this.units.push(e);
         taken.add(axialKey(pos.q, pos.r));
       }
@@ -2016,6 +2417,7 @@ export class GameModel {
           pos.q,
           pos.r,
           biome,
+          this.runEnemyChallengeMultiplier(),
         ),
       );
       this.disambiguateEnemyDisplayNames();
@@ -2034,7 +2436,15 @@ export class GameModel {
       const refHeroes = this.heroesWithHomeBiome(biome);
       for (let k = 0; k < nEach; k++) {
         const pos = this.randomSpawnEnemyInSingleBiome(taken, biome, refHeroes);
-        const e = createEnemyUnit(arch, this.wave, partyN, pos.q, pos.r, biome);
+        const e = createEnemyUnit(
+          arch,
+          this.wave,
+          partyN,
+          pos.q,
+          pos.r,
+          biome,
+          this.runEnemyChallengeMultiplier(),
+        );
         this.units.push(e);
         taken.add(axialKey(pos.q, pos.r));
       }
@@ -2077,10 +2487,29 @@ export class GameModel {
       const taunt = party.find((u) => u.id === this.rochosoTauntHeroId);
       if (taunt) return taunt;
     }
+    const hereBio = biomeAt(this.grid, e.q, e.r) as BiomeId;
+    if (hereBio !== "hub") {
+      const golems: Unit[] = [];
+      for (const u of this.units) {
+        if (
+          u.hp > 0 &&
+          u.isAllySummon &&
+          u.summonKind === "mega_golem" &&
+          (biomeAt(this.grid, u.q, u.r) as BiomeId) === hereBio
+        ) {
+          const owner = party.find((h) => h.id === u.summonOwnerHeroId);
+          if (owner) golems.push(u);
+        }
+      }
+      if (golems.length > 0) {
+        golems.sort((a, b) => a.hp - b.hp || a.defesa - b.defesa);
+        return golems[0]!;
+      }
+    }
     const bio =
       e.enemySpawnBiome && e.enemySpawnBiome !== "hub"
         ? e.enemySpawnBiome
-        : (biomeAt(this.grid, e.q, e.r) as BiomeId);
+        : hereBio;
     if (bio === "hub") {
       party.sort((a, b) => a.hp - b.hp || a.defesa - b.defesa);
       return party[0]!;
@@ -2251,7 +2680,7 @@ export class GameModel {
     this.movementLeft = mov;
     this.basicAttacksSpentThisTurn = 0;
     this.syncBasicLeftFromSpent(h);
-    this.runFlamingSwordAutonomousTurn(h);
+    this.queueAnelDragaoOrbsForEndOfTurn(h);
     h.immobileThisTurn = true;
     if (h.heroClass === "pistoleiro" && h.ultimateId === "arauto_caos") {
       h.tiroDestruidorUsedThisTurn = false;
@@ -2289,6 +2718,7 @@ export class GameModel {
         },
       },
       { priority: 30, run: () => this.applyEndTurnEffects(h) },
+      { priority: 32, run: () => this.fireAnelDragaoOrbsAtEndOfTurn(h) },
       {
         priority: 40,
         run: () => {
@@ -2325,9 +2755,38 @@ export class GameModel {
     return Math.min(3, Math.max(0, h.artifacts["coroa_ferro"] ?? 0));
   }
 
+  /** Multiplicador de PV/dano das invocações (Potencializar invocação). */
+  private invocationPotencyMult(h: Unit): number {
+    const p = Math.min(
+      3,
+      Math.max(0, h.artifacts["potencializar_invocacao"] ?? 0),
+    );
+    return 1 + 0.4 * p;
+  }
+
+  /** Cópias extra de cada invocação (sombras, espada, golem). */
+  private invocationExtraCopies(h: Unit): number {
+    return Math.min(
+      3,
+      Math.max(0, h.artifacts["potencializar_invocacao"] ?? 0),
+    );
+  }
+
   private flamingSwordMaxHpByStacks(stacks: number): number {
     if (stacks <= 0) return 0;
     return 200 + (stacks - 1) * 100;
+  }
+
+  private flamingSwordMaxHpEffective(h: Unit): number {
+    const stacks = this.coroaFerroStacks(h);
+    if (stacks <= 0) return 0;
+    return Math.max(
+      1,
+      Math.round(
+        this.flamingSwordMaxHpByStacks(stacks) *
+          this.invocationPotencyMult(h),
+      ),
+    );
   }
 
   private ensureFlamingSwordState(h: Unit): boolean {
@@ -2337,8 +2796,7 @@ export class GameModel {
       delete h.flamingSwordPos;
       return false;
     }
-    const maxHp = this.flamingSwordMaxHpByStacks(stacks);
-    h.flamingSwordHp = maxHp;
+    h.flamingSwordHp = this.flamingSwordMaxHpEffective(h);
     if (!h.flamingSwordPos) {
       const occ = this.occupiedHexKeysExcluding(h.id);
       let best: { q: number; r: number } | null = null;
@@ -2360,6 +2818,23 @@ export class GameModel {
     return true;
   }
 
+  /**
+   * Invocações (espada flamejante + sombras + Mega Golem): alinhar ao acúmulo após level-up / sandbox.
+   * Novos artefatos “de invocação”: ver `invocationArtifacts.ts` e registe em `artifactAffectsInvocationSync`.
+   */
+  private syncInvocationArtifactsAfterChange(u: Unit): void {
+    if (!u.isPlayer) return;
+    if (this.coroaFerroStacks(u) > 0) {
+      this.ensureFlamingSwordState(u);
+    } else {
+      delete u.flamingSwordHp;
+      delete u.flamingSwordPos;
+    }
+    if (this.phase === "combat" && !this.duel) {
+      this.reconcileGridInvocationsForHero(u);
+    }
+  }
+
   private farthestEnemyFromPos(pos: { q: number; r: number }): Unit | null {
     let best: Unit | null = null;
     let bestDist = -1;
@@ -2375,7 +2850,7 @@ export class GameModel {
   }
 
   private bestFlamingSwordMove(
-    hero: Unit,
+    mover: Unit,
     from: { q: number; r: number },
     target: Unit,
     movement: number,
@@ -2383,7 +2858,7 @@ export class GameModel {
   ): { q: number; r: number } {
     const d0 = hexDistance(from, { q: target.q, r: target.r });
     if (d0 <= range) return from;
-    const blocked = this.occupiedHexKeysExcluding(hero.id);
+    const blocked = this.occupiedHexKeysExcluding(mover.id);
     blocked.delete(axialKey(from.q, from.r));
     const reach = reachableHexes(
       this.grid,
@@ -2409,74 +2884,707 @@ export class GameModel {
     return best;
   }
 
-  private runFlamingSwordAutonomousTurn(hero: Unit): void {
-    if (this.phase !== "combat" || this.duel) return;
-    if (!this.ensureFlamingSwordState(hero)) return;
+  /**
+   * Caminho visual hex-a-hex até o destino (mesma ideia dos inimigos: não “teleporta” no tabuleiro).
+   */
+  private buildFlamingSwordMoveCells(
+    mover: Unit,
+    from: { q: number; r: number },
+    to: { q: number; r: number },
+  ): { q: number; r: number }[] {
+    if (from.q === to.q && from.r === to.r) return [{ q: from.q, r: from.r }];
+    const blocked = this.occupiedHexKeysExcluding(mover.id);
+    this.addBunkerHexForEnemyPath(blocked);
+    blocked.delete(axialKey(from.q, from.r));
+    const path = findPath(
+      this.grid,
+      from,
+      to,
+      false,
+      false,
+      ENEMY_APPROACH_PATHFIND_MAX,
+      blocked,
+    );
+    if (path && path.length > 0) {
+      return path.map((p) => ({ q: p.q, r: p.r }));
+    }
+    return [
+      { q: from.q, r: from.r },
+      { q: to.q, r: to.r },
+    ];
+  }
+
+  /**
+   * Turno da espada: movimento segmentado + dano após wind-up (como inimigos), encadeado na `combatSchedule`.
+   */
+  private scheduleFlamingSwordTurnForHero(
+    hero: Unit,
+    onDone: () => void,
+  ): void {
+    if (this.phase !== "combat" || this.duel) {
+      onDone();
+      return;
+    }
+    if (!this.ensureFlamingSwordState(hero)) {
+      onDone();
+      return;
+    }
     const stacks = this.coroaFerroStacks(hero);
-    const attacks = 2 + (stacks - 1);
-    const damage = 40 + (stacks - 1) * 20;
+    const pot = this.invocationPotencyMult(hero);
+    const extra = this.invocationExtraCopies(hero);
+    const attacks = 2 + (stacks - 1) + extra;
+    const damage = Math.round((40 + (stacks - 1) * 20) * pot);
     const swordDefense = 100 + (stacks - 1) * 50;
     const swordRange = 3;
     const swordMovement = 7;
-    let pos = hero.flamingSwordPos ?? { q: hero.q, r: hero.r };
     let strikesDone = 0;
-    for (let i = 0; i < attacks; i++) {
-      if (this.phase !== "combat") break;
+
+    const finishLogAndDone = (): void => {
+      if (strikesDone > 0) {
+        this.log(
+          `${hero.name}: Espada flamejante atinge ${strikesDone} alvo(s) na fase de invocação.`,
+        );
+      }
+      onDone();
+    };
+
+    const runAttack = (attackIndex: number): void => {
+      if (this.phase !== "combat" || this.duel) {
+        finishLogAndDone();
+        return;
+      }
+      if (attackIndex >= attacks) {
+        finishLogAndDone();
+        return;
+      }
+      const pos = hero.flamingSwordPos ?? { q: hero.q, r: hero.r };
       const target = this.farthestEnemyFromPos(pos);
-      if (!target) break;
-      pos = this.bestFlamingSwordMove(hero, pos, target, swordMovement, swordRange);
-      if (hexDistance(pos, { q: target.q, r: target.r }) > swordRange) continue;
-      strikesDone++;
-      const prev = {
-        q: hero.q,
-        r: hero.r,
-        dano: hero.dano,
-        defesa: hero.defesa,
-        alcance: hero.alcance,
-        movimento: hero.movimento,
-        penetracao: hero.penetracao,
-        penetracaoEscudo: hero.penetracaoEscudo,
-        lifesteal: hero.lifesteal,
-        heroClass: hero.heroClass,
-        artifacts: hero.artifacts,
-        forgeLoadout: hero.forgeLoadout,
-      };
-      hero.q = pos.q;
-      hero.r = pos.r;
-      hero.dano = damage;
-      hero.defesa = swordDefense;
-      hero.alcance = swordRange;
-      hero.movimento = swordMovement;
-      hero.penetracao = 0;
-      hero.penetracaoEscudo = 0;
-      hero.lifesteal = 0;
-      hero.heroClass = undefined;
-      hero.artifacts = {};
-      hero.forgeLoadout = undefined;
-      const crit = rollCrit(hero.acertoCritico);
-      this.dealDamage(hero, target, damage, crit, false, true, {
-        suppressOnHitArtifacts: true,
-        suppressLifesteal: true,
-      });
-      hero.q = prev.q;
-      hero.r = prev.r;
-      hero.dano = prev.dano;
-      hero.defesa = prev.defesa;
-      hero.alcance = prev.alcance;
-      hero.movimento = prev.movimento;
-      hero.penetracao = prev.penetracao;
-      hero.penetracaoEscudo = prev.penetracaoEscudo;
-      hero.lifesteal = prev.lifesteal;
-      hero.heroClass = prev.heroClass;
-      hero.artifacts = prev.artifacts;
-      hero.forgeLoadout = prev.forgeLoadout;
-    }
-    hero.flamingSwordPos = pos;
-    if (strikesDone > 0) {
-      this.log(
-        `${hero.name}: Espada flamejante atinge ${strikesDone} alvo(s) neste início de turno.`,
+      if (!target) {
+        finishLogAndDone();
+        return;
+      }
+      const best = this.bestFlamingSwordMove(
+        hero,
+        pos,
+        target,
+        swordMovement,
+        swordRange,
       );
+      const cells = this.buildFlamingSwordMoveCells(hero, pos, best);
+      hero.flamingSwordPos = { q: best.q, r: best.r };
+
+      const skipAnim = getSkipCombatAnimations();
+      const moveSegs = Math.max(0, cells.length - 1);
+      const segMs = UNIT_MOVE_SEGMENT_MS;
+      if (moveSegs > 0 && !skipAnim) {
+        this.pendingMoveAnim = {
+          kind: "flamingSword",
+          heroId: hero.id,
+          cells,
+          segmentMs: segMs,
+        };
+      }
+      const moveMs = skipAnim ? 0 : moveSegs * segMs;
+      const atkWind = skipAnim ? 0 : enemyMeleeAttackWindupMs();
+      const targetId = target.id;
+
+      this.emit();
+
+      this.queueCombat(moveMs + atkWind, () => {
+        if (this.phase !== "combat" || this.duel) {
+          finishLogAndDone();
+          return;
+        }
+        const liveTarget = this.units.find((u) => u.id === targetId);
+        const swordPos = hero.flamingSwordPos ?? pos;
+        if (
+          liveTarget &&
+          liveTarget.hp > 0 &&
+          hexDistance(swordPos, {
+            q: liveTarget.q,
+            r: liveTarget.r,
+          }) <= swordRange
+        ) {
+          strikesDone++;
+          const prev = {
+            q: hero.q,
+            r: hero.r,
+            dano: hero.dano,
+            defesa: hero.defesa,
+            alcance: hero.alcance,
+            movimento: hero.movimento,
+            penetracao: hero.penetracao,
+            penetracaoEscudo: hero.penetracaoEscudo,
+            lifesteal: hero.lifesteal,
+          };
+          hero.q = swordPos.q;
+          hero.r = swordPos.r;
+          hero.dano = damage;
+          hero.defesa = swordDefense;
+          hero.alcance = swordRange;
+          hero.movimento = swordMovement;
+          hero.penetracao = 0;
+          hero.penetracaoEscudo = 0;
+          hero.lifesteal = 0;
+          const crit = rollCrit(hero.acertoCritico + roninCritBonus(hero));
+          this.pendingCombatVfxQueue.push({
+            kind: "flaming_sword_strike",
+            heroOwnerId: hero.id,
+            targetId: liveTarget.id,
+          });
+          this.dealDamage(hero, liveTarget, damage, crit, true, false, {
+            suppressOnHitArtifacts: true,
+            suppressLifesteal: true,
+            suppressSourceHitSfx: true,
+          });
+          hero.q = prev.q;
+          hero.r = prev.r;
+          hero.dano = prev.dano;
+          hero.defesa = prev.defesa;
+          hero.alcance = prev.alcance;
+          hero.movimento = prev.movimento;
+          hero.penetracao = prev.penetracao;
+          hero.penetracaoEscudo = prev.penetracaoEscudo;
+          hero.lifesteal = prev.lifesteal;
+        }
+        this.emit();
+        const gap = getSkipCombatAnimations()
+          ? 0
+          : FLAMING_SWORD_STRIKE_GAP_MS;
+        this.queueCombat(gap, () => runAttack(attackIndex + 1));
+      });
+    };
+
+    runAttack(0);
+  }
+
+  private runSummonPhaseAfterHeroes(onComplete: () => void): void {
+    if (this.phase !== "combat" || this.duel) {
+      onComplete();
+      return;
     }
+    const swordOwners = this.getParty().filter((h) => {
+      if (h.hp <= 0) return false;
+      return this.coroaFerroStacks(h) > 0;
+    });
+    const hasShadows = this.units.some(
+      (u) => u.isAllySummon && u.summonKind === "shadow" && u.hp > 0,
+    );
+    const hasGolems = this.units.some(
+      (u) => u.isAllySummon && u.summonKind === "mega_golem" && u.hp > 0,
+    );
+    if (swordOwners.length === 0 && !hasShadows && !hasGolems) {
+      onComplete();
+      return;
+    }
+    this.turnStage = "idle";
+    this.inSummonPhase = true;
+    this.currentSummonOwnerId = null;
+    this.currentSummonActorId = null;
+    this.emit();
+
+    const afterAll = (): void => {
+      this.inSummonPhase = false;
+      this.currentSummonOwnerId = null;
+      this.currentSummonActorId = null;
+      this.emit();
+      if (!this.hasLivingEnemies()) {
+        this.tryResolveWaveClearAfterCombatResume();
+        return;
+      }
+      onComplete();
+    };
+    const afterGolems = (): void => {
+      this.runMegaGolemSummonChain(afterAll);
+    };
+    const afterShadows = (): void => {
+      this.runResidualShadowSummonChain(afterGolems);
+    };
+
+    if (swordOwners.length === 0) {
+      afterShadows();
+    } else {
+      this.startSummonOwnerChain(swordOwners, 0, afterShadows);
+    }
+  }
+
+  private startSummonOwnerChain(
+    owners: Unit[],
+    index: number,
+    onComplete: () => void,
+  ): void {
+    if (index >= owners.length) {
+      onComplete();
+      return;
+    }
+    if (this.phase !== "combat" || this.duel) {
+      this.inSummonPhase = false;
+      this.currentSummonOwnerId = null;
+      this.currentSummonActorId = null;
+      this.emit();
+      onComplete();
+      return;
+    }
+    const hero = owners[index]!;
+    if (hero.hp <= 0) {
+      this.startSummonOwnerChain(owners, index + 1, onComplete);
+      return;
+    }
+    this.currentSummonOwnerId = hero.id;
+    this.currentSummonActorId = null;
+    this.emit();
+    this.scheduleFlamingSwordTurnForHero(hero, () => {
+      this.startSummonOwnerChain(owners, index + 1, onComplete);
+    });
+  }
+
+  private removeAllySummonUnit(id: string): void {
+    this.units = this.units.filter((u) => u.id !== id);
+  }
+
+  /** Hexes livres em BFS a partir do herói (exclui o hex do herói). */
+  private collectSpawnHexesNearHero(
+    hero: Unit,
+    needed: number,
+  ): { q: number; r: number }[] {
+    if (needed <= 0) return [];
+    const occ = new Set<string>();
+    for (const u of this.units) {
+      if (u.hp <= 0) continue;
+      occ.add(axialKey(u.q, u.r));
+    }
+    const out: { q: number; r: number }[] = [];
+    const visited = new Set<string>();
+    const queue: { q: number; r: number; d: number }[] = [
+      { q: hero.q, r: hero.r, d: 0 },
+    ];
+    visited.add(axialKey(hero.q, hero.r));
+    let qi = 0;
+    while (qi < queue.length && out.length < needed) {
+      const cur = queue[qi++]!;
+      const k = axialKey(cur.q, cur.r);
+      if (!this.grid.has(k)) continue;
+      if (cur.d > 0 && !occ.has(k)) {
+        out.push({ q: cur.q, r: cur.r });
+        occ.add(k);
+      }
+      if (cur.d >= 24) continue;
+      for (const n of hexNeighbors(cur.q, cur.r)) {
+        const nk = axialKey(n.q, n.r);
+        if (visited.has(nk)) continue;
+        visited.add(nk);
+        queue.push({ q: n.q, r: n.r, d: cur.d + 1 });
+      }
+    }
+    return out;
+  }
+
+  private countLivingGridSummons(
+    hero: Unit,
+    kind: "shadow" | "mega_golem",
+  ): number {
+    return this.units.filter(
+      (u) =>
+        u.isAllySummon &&
+        u.summonKind === kind &&
+        u.summonOwnerHeroId === hero.id &&
+        u.hp > 0,
+    ).length;
+  }
+
+  private pruneExcessGridSummonsOfKind(
+    hero: Unit,
+    kind: "shadow" | "mega_golem",
+    maxKeep: number,
+  ): void {
+    const list = this.units.filter(
+      (u) =>
+        u.isAllySummon &&
+        u.summonKind === kind &&
+        u.summonOwnerHeroId === hero.id &&
+        u.hp > 0,
+    );
+    while (list.length > maxKeep) {
+      const victim = list.pop()!;
+      this.removeAllySummonUnit(victim.id);
+    }
+  }
+
+  /**
+   * Garante que o tabuleiro reflete `imagem_residual` / `martelo_juiz` / `potencializar_invocacao` deste herói.
+   * Usado no início da wave e ao ganhar acúmulos no combate.
+   */
+  private reconcileGridInvocationsForHero(hero: Unit): void {
+    if (!hero.isPlayer || hero.hp <= 0) return;
+    if (this.phase !== "combat" || this.duel) return;
+    const potMult = this.invocationPotencyMult(hero);
+    const extra = this.invocationExtraCopies(hero);
+
+    const img = Math.min(6, Math.max(0, hero.artifacts["imagem_residual"] ?? 0));
+    const needShadow =
+      img <= 0 ? 0 : Math.floor(img / 2) + 1 + extra;
+    this.pruneExcessGridSummonsOfKind(hero, "shadow", needShadow);
+    if (img > 0) {
+      const baseHp = 20 + (img - 1) * 5;
+      const baseDmg = 10 + (img - 1) * 3;
+      const mhp = Math.max(1, Math.round(baseHp * potMult));
+      const mdmg = Math.max(1, Math.round(baseDmg * potMult));
+      const haveS = this.countLivingGridSummons(hero, "shadow");
+      const addS = needShadow - haveS;
+      if (addS > 0) {
+        const hexes = this.collectSpawnHexesNearHero(hero, addS);
+        for (const h of hexes) {
+          this.units.push(createAllyShadowSummon(hero, h.q, h.r, mhp, mdmg));
+        }
+      }
+    }
+
+    const mj = Math.min(3, Math.max(0, hero.artifacts["martelo_juiz"] ?? 0));
+    const needGolem = mj <= 0 ? 0 : 1 + extra;
+    this.pruneExcessGridSummonsOfKind(hero, "mega_golem", needGolem);
+    if (mj > 0) {
+      const haveG = this.countLivingGridSummons(hero, "mega_golem");
+      const addG = needGolem - haveG;
+      if (addG > 0) {
+        const hexes = this.collectSpawnHexesNearHero(hero, addG);
+        for (let i = 0; i < addG && i < hexes.length; i++) {
+          const h = hexes[i]!;
+          this.units.push(
+            createMegaGolemSummon(hero, h.q, h.r, mj, potMult),
+          );
+        }
+      }
+    }
+  }
+
+  private spawnAllySummonsForWave(): void {
+    for (const hero of this.getParty()) {
+      this.reconcileGridInvocationsForHero(hero);
+    }
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      this.ensureFlamingSwordState(h);
+    }
+  }
+
+  /**
+   * Dano de invocação: conta como habilidade do dono (Vendaval / Lâmina / forja),
+   * sem procs de “ao causar dano” do dono.
+   */
+  private dealSummonSkillDamage(
+    owner: Unit,
+    attackOrigin: { q: number; r: number },
+    rawDamage: number,
+    target: Unit,
+  ): void {
+    const prev = {
+      q: owner.q,
+      r: owner.r,
+      dano: owner.dano,
+      defesa: owner.defesa,
+      alcance: owner.alcance,
+      movimento: owner.movimento,
+      penetracao: owner.penetracao,
+      penetracaoEscudo: owner.penetracaoEscudo,
+      lifesteal: owner.lifesteal,
+    };
+    owner.q = attackOrigin.q;
+    owner.r = attackOrigin.r;
+    owner.dano = rawDamage;
+    owner.defesa = 0;
+    owner.alcance = 1;
+    owner.movimento = 0;
+    owner.penetracao = 0;
+    owner.penetracaoEscudo = 0;
+    owner.lifesteal = 0;
+    const crit = rollCrit(owner.acertoCritico + roninCritBonus(owner));
+    this.dealDamage(owner, target, rawDamage, crit, true, false, {
+      suppressOnHitArtifacts: true,
+      suppressLifesteal: true,
+      suppressSourceHitSfx: true,
+    });
+    owner.q = prev.q;
+    owner.r = prev.r;
+    owner.dano = prev.dano;
+    owner.defesa = prev.defesa;
+    owner.alcance = prev.alcance;
+    owner.movimento = prev.movimento;
+    owner.penetracao = prev.penetracao;
+    owner.penetracaoEscudo = prev.penetracaoEscudo;
+    owner.lifesteal = prev.lifesteal;
+  }
+
+  private scheduleResidualShadowTurn(
+    sh: Unit,
+    owner: Unit,
+    onDone: () => void,
+  ): void {
+    if (this.phase !== "combat" || this.duel) {
+      onDone();
+      return;
+    }
+    const pos = { q: sh.q, r: sh.r };
+    const target = this.farthestEnemyFromPos(pos);
+    if (!target) {
+      if (this.phase === "combat") {
+        this.tryResolveWaveClearAfterCombatResume();
+      }
+      onDone();
+      return;
+    }
+    const best = this.bestFlamingSwordMove(
+      sh,
+      pos,
+      target,
+      sh.movimento,
+      sh.alcance,
+    );
+    const cells = this.buildFlamingSwordMoveCells(sh, pos, best);
+    sh.q = best.q;
+    sh.r = best.r;
+
+    const skipAnim = getSkipCombatAnimations();
+    const moveSegs = Math.max(0, cells.length - 1);
+    const segMs = UNIT_MOVE_SEGMENT_MS;
+    if (moveSegs > 0 && !skipAnim) {
+      this.pendingMoveAnim = {
+        kind: "unit",
+        unitId: sh.id,
+        cells,
+        segmentMs: segMs,
+      };
+    }
+    const moveMs = skipAnim ? 0 : moveSegs * segMs;
+    const atkWind = skipAnim ? 0 : enemyMeleeAttackWindupMs();
+    const targetId = target.id;
+
+    this.emit();
+
+    this.queueCombat(moveMs + atkWind, () => {
+      if (this.phase !== "combat" || this.duel) {
+        onDone();
+        return;
+      }
+      const live = this.units.find((u) => u.id === sh.id);
+      const liveTarget = this.units.find((u) => u.id === targetId);
+      if (
+        live &&
+        live.hp > 0 &&
+        liveTarget &&
+        liveTarget.hp > 0 &&
+        hexDistance(
+          { q: live.q, r: live.r },
+          { q: liveTarget.q, r: liveTarget.r },
+        ) <= live.alcance
+      ) {
+        this.pendingCombatVfxQueue.push({
+          kind: "ally_summon_strike",
+          summonId: live.id,
+          targetId: liveTarget.id,
+          summonKind: "shadow",
+        });
+        this.dealSummonSkillDamage(
+          owner,
+          { q: live.q, r: live.r },
+          live.dano,
+          liveTarget,
+        );
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+      }
+      this.emit();
+      onDone();
+    });
+  }
+
+  private runResidualShadowSummonChain(onDone: () => void): void {
+    const step = (): void => {
+      if (this.phase !== "combat" || this.duel) {
+        onDone();
+        return;
+      }
+      const sh = this.units.find(
+        (u) => u.isAllySummon && u.summonKind === "shadow" && u.hp > 0,
+      );
+      if (!sh) {
+        onDone();
+        return;
+      }
+      const owner = this.units.find((h) => h.id === sh.summonOwnerHeroId);
+      if (!owner || !owner.isPlayer || owner.hp <= 0) {
+        this.removeAllySummonUnit(sh.id);
+        this.emit();
+        this.queueCombat(0, () => step());
+        return;
+      }
+      this.currentSummonOwnerId = owner.id;
+      this.currentSummonActorId = sh.id;
+      this.emit();
+      this.scheduleResidualShadowTurn(sh, owner, () => {
+        this.removeAllySummonUnit(sh.id);
+        this.emit();
+        this.queueCombat(
+          getSkipCombatAnimations() ? 0 : FLAMING_SWORD_STRIKE_GAP_MS,
+          () => step(),
+        );
+      });
+    };
+    step();
+  }
+
+  private scheduleMegaGolemTurn(
+    golem: Unit,
+    owner: Unit,
+    onDone: () => void,
+  ): void {
+    if (this.phase !== "combat" || this.duel) {
+      onDone();
+      return;
+    }
+    const pos = { q: golem.q, r: golem.r };
+    const target = this.farthestEnemyFromPos(pos);
+    if (!target) {
+      if (this.phase === "combat") {
+        this.tryResolveWaveClearAfterCombatResume();
+      }
+      onDone();
+      return;
+    }
+    const best = this.bestFlamingSwordMove(
+      golem,
+      pos,
+      target,
+      golem.movimento,
+      golem.alcance,
+    );
+    const cells = this.buildFlamingSwordMoveCells(golem, pos, best);
+    golem.q = best.q;
+    golem.r = best.r;
+
+    const skipAnim = getSkipCombatAnimations();
+    const moveSegs = Math.max(0, cells.length - 1);
+    const segMs = UNIT_MOVE_SEGMENT_MS;
+    if (moveSegs > 0 && !skipAnim) {
+      this.pendingMoveAnim = {
+        kind: "unit",
+        unitId: golem.id,
+        cells,
+        segmentMs: segMs,
+      };
+    }
+    const moveMs = skipAnim ? 0 : moveSegs * segMs;
+    const atkWind = skipAnim ? 0 : enemyMeleeAttackWindupMs();
+
+    this.emit();
+
+    this.queueCombat(moveMs + atkWind, () => {
+      if (this.phase !== "combat" || this.duel) {
+        onDone();
+        return;
+      }
+      const g = this.units.find((u) => u.id === golem.id);
+      if (!g || g.hp <= 0) {
+        onDone();
+        return;
+      }
+      const adj = this.enemies().filter((e) => {
+        if (e.hp <= 0) return false;
+        return (
+          hexDistance({ q: g.q, r: g.r }, { q: e.q, r: e.r }) === 1
+        );
+      });
+      if (adj.length === 0) {
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        onDone();
+        return;
+      }
+      let i = 0;
+      const gap = getSkipCombatAnimations()
+        ? 0
+        : FLAMING_SWORD_STRIKE_GAP_MS;
+      const hitNext = (): void => {
+        if (this.phase !== "combat" || this.duel) {
+          onDone();
+          return;
+        }
+        const gx = this.units.find((u) => u.id === golem.id);
+        if (!gx || gx.hp <= 0) {
+          onDone();
+          return;
+        }
+        if (i >= adj.length) {
+          onDone();
+          return;
+        }
+        const tg = this.units.find((u) => u.id === adj[i]!.id);
+        i++;
+        if (!tg || tg.hp <= 0) {
+          this.queueCombat(gap, hitNext);
+          return;
+        }
+        this.pendingCombatVfxQueue.push({
+          kind: "ally_summon_strike",
+          summonId: gx.id,
+          targetId: tg.id,
+          summonKind: "mega_golem",
+        });
+        this.dealSummonSkillDamage(
+          owner,
+          { q: gx.q, r: gx.r },
+          gx.dano,
+          tg,
+        );
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
+        this.queueCombat(gap, hitNext);
+      };
+      hitNext();
+    });
+  }
+
+  private runMegaGolemSummonChain(onDone: () => void): void {
+    /** Um golem por ativação na fase de invocação (como a sombra some após o turno). Sem isto, `find` repetia o mesmo golem. */
+    const actedThisSummonPhase = new Set<string>();
+    const step = (): void => {
+      if (this.phase !== "combat" || this.duel) {
+        onDone();
+        return;
+      }
+      const g = this.units.find(
+        (u) =>
+          u.isAllySummon &&
+          u.summonKind === "mega_golem" &&
+          u.hp > 0 &&
+          !actedThisSummonPhase.has(u.id),
+      );
+      if (!g) {
+        onDone();
+        return;
+      }
+      const owner = this.units.find((h) => h.id === g.summonOwnerHeroId);
+      if (!owner || !owner.isPlayer || owner.hp <= 0) {
+        this.removeAllySummonUnit(g.id);
+        this.emit();
+        this.queueCombat(0, () => step());
+        return;
+      }
+      this.currentSummonOwnerId = owner.id;
+      this.currentSummonActorId = g.id;
+      this.emit();
+      this.scheduleMegaGolemTurn(g, owner, () => {
+        actedThisSummonPhase.add(g.id);
+        this.queueCombat(
+          getSkipCombatAnimations() ? 0 : FLAMING_SWORD_STRIKE_GAP_MS,
+          () => step(),
+        );
+      });
+    };
+    step();
   }
 
   advanceHeroOrRound(): void {
@@ -2484,7 +3592,10 @@ export class GameModel {
     if (this.currentHeroIndex >= this.partyOrder.length) {
       this.applyBunkerAutoRepairAfterHeroCycle();
       this.maybeApplyGoldDrainAfterPlayerCycle();
-      this.runEnemyPhase();
+      this.runSummonPhaseAfterHeroes(() => {
+        if (this.phase !== "combat") return;
+        this.runEnemyPhase();
+      });
       return;
     }
     this.beginHeroTurn();
@@ -2514,7 +3625,10 @@ export class GameModel {
     if (this.currentHeroIndex >= this.partyOrder.length) {
       this.applyBunkerAutoRepairAfterHeroCycle();
       this.maybeApplyGoldDrainAfterPlayerCycle();
-      this.runEnemyPhase();
+      this.runSummonPhaseAfterHeroes(() => {
+        if (this.phase !== "combat") return;
+        this.runEnemyPhase();
+      });
       return;
     }
     this.beginHeroTurn();
@@ -2527,7 +3641,9 @@ export class GameModel {
   }
 
   private hasLivingEnemies(): boolean {
-    return this.units.some((u) => !u.isPlayer && u.hp > 0);
+    return this.units.some(
+      (u) => !u.isPlayer && !u.isAllySummon && u.hp > 0,
+    );
   }
 
   /** Garante campos novos em bunkers vindos de saves antigos. */
@@ -2717,6 +3833,9 @@ export class GameModel {
 
   private runEnemyPhase(): void {
     this.turnStage = "idle";
+    this.inSummonPhase = false;
+    this.currentSummonOwnerId = null;
+    this.currentSummonActorId = null;
     this.inEnemyPhase = true;
     this.lastEnemyActedId = null;
     const aliveN = this.enemies().filter((e) => e.hp > 0).length;
@@ -2782,10 +3901,13 @@ export class GameModel {
   private finishEnemyPhaseAfterAllMoves(skipFloatDelay = false): void {
     this.tickDeslumbroEndOfEnemyPhase();
     this.inEnemyPhase = false;
+    this.inSummonPhase = false;
+    this.currentSummonOwnerId = null;
+    this.currentSummonActorId = null;
     this.lastEnemyActedId = null;
     this.enemyTurnQueue = [];
     this.currentHeroIndex = 0;
-    if (this.enemies().every((x) => x.hp <= 0)) {
+    if (!this.hasLivingEnemies()) {
       const waveDelay =
         POST_COMBAT_FLOAT_LEVEL_UP_UI_DELAY_MS +
         POST_COMBAT_FLOAT_WAVE_STAGGER_AFTER_MS;
@@ -2955,7 +4077,9 @@ export class GameModel {
   }
 
   enemies(): Unit[] {
-    return this.units.filter((u) => !u.isPlayer && u.hp > 0);
+    return this.units.filter(
+      (u) => !u.isPlayer && !u.isAllySummon && u.hp > 0,
+    );
   }
 
   /**
@@ -2997,6 +4121,7 @@ export class GameModel {
 
   private onWaveCleared(): void {
     this.applySentencaPartyHeal({ resumeCombat: false });
+    this.clearEndOfWaveUltimateCombatState();
     this.cancelLevelUpFloatHoldTimer();
     if (this.pendingCombatLevelUpHeroIds.size > 0) {
       this.pollPendingCombatLevelUp();
@@ -3016,11 +4141,12 @@ export class GameModel {
     this.duel = null;
     this.duelNextIsGladiatorStrike = true;
     this.blockEnemyPhaseForWaveIntro = false;
-    this.clearEndOfWaveUltimateCombatState();
     this.log(`Wave ${this.wave} vencida!`);
     this.liquidateWaveGoldToShop();
     if (this.wave >= FINAL_VICTORY_WAVE) {
       this.pendingWaveSummaryNext = "victory";
+    } else if (this.wave === 20) {
+      this.pendingWaveSummaryNext = "coliseu_run_end";
     } else {
       this.pendingWaveSummaryNext = "shop";
     }
@@ -3161,6 +4287,7 @@ export class GameModel {
     );
     if (path && path.length > 1 && !getSkipCombatAnimations()) {
       this.pendingMoveAnim = {
+        kind: "unit",
         unitId: h.id,
         cells: path.map((p) => ({ q: p.q, r: p.r })),
         segmentMs: heroRunSegmentMs(),
@@ -3204,9 +4331,7 @@ export class GameModel {
   /** Parcela contínua da Garra de ferro (30% defesa por acúmulo, máx. 6); o total bruto arredonda a 2 casas. */
   tooltipGarraFerroRawPreview(u: Unit): number {
     if (!u.isPlayer) return 0;
-    const s = Math.min(6, u.artifacts["garra_ferro"] ?? 0);
-    if (s <= 0) return 0;
-    return u.defesa * 0.3 * s;
+    return garraFerroRawBonusFromDefesaAndStacks(u.defesa, u.artifacts);
   }
 
   computeBasicAttackRawDamage(h: Unit): number {
@@ -3528,10 +4653,14 @@ export class GameModel {
     if (skillId === "tiro_destruidor") {
       if (h.heroClass !== "pistoleiro" || h.ultimateId !== "arauto_caos")
         return false;
-      if (!this.sandboxNoCdUltEnabled() && (h.skillCd["tiro_destruidor"] ?? 0) > 0)
+      const ch = h.tiroDestruidorCharges ?? 0;
+      if (
+        !this.sandboxNoCdUltEnabled() &&
+        ch < 1 &&
+        (h.skillCd["tiro_destruidor"] ?? 0) > 0
+      )
         return false;
-      if (!this.devSandboxMode && (h.tiroDestruidorCharges ?? 0) < 1)
-        return false;
+      if (!this.devSandboxMode && ch < 1) return false;
       if (!targetId?.startsWith("beam:")) return false;
       const rest = targetId.slice("beam:".length);
       const si = rest.indexOf(":");
@@ -3580,8 +4709,6 @@ export class GameModel {
       }
       h.tiroDestruidorCharges = 0;
       h.tiroDestruidorUsedThisTurn = true;
-      if (!this.sandboxNoCdUltEnabled())
-        h.skillCd["tiro_destruidor"] = atirarCooldownWaves(h.weaponLevel);
       this.log(`${h.name}: Tiro destruidor! (${charges} carga(s))`);
       this.queueCombat(delay + 55, () => {
         const att = this.units.find((u) => u.id === h.id);
@@ -3824,6 +4951,9 @@ export class GameModel {
     }
     if (gladiator) this.flushCombatLevelUp(gladiator);
     this.flushEnemyDeathQueue();
+    if (this.phase === "combat") {
+      this.tryResolveWaveClearAfterCombatResume();
+    }
     if (
       this.phase === "combat" &&
       this.getParty().every((x) => x.hp <= 0)
@@ -4025,36 +5155,21 @@ export class GameModel {
     if (!tgt.isPlayer && deslumbroInstancesCount(tgt) > 0) {
       dmg = roundToCombatDecimals(dmg * 1.5);
     }
-    let shieldAbsorb = 0;
-    if (tgt.shieldGGBlue > 0) {
-      const bypass = Math.max(0, Math.floor(src.penetracaoEscudo));
-      const dmgVsShield = Math.max(0, dmg - bypass);
-      const absorbed = Math.min(tgt.shieldGGBlue, dmgVsShield);
-      shieldAbsorb = absorbed;
-      tgt.shieldGGBlue -= absorbed;
-      this.reduceEscudoResidualTagged(tgt, absorbed);
-      dmg -= absorbed;
-      const stacks = src.artifacts["escudo_sangue"] ?? 0;
-      if (!opts?.fromHeroDeathNova && stacks > 0 && absorbed > 0) {
-        const ret = Math.floor(absorbed * 0.75 * stacks);
-        if (ret > 0) src.hp = Math.max(0, src.hp - ret);
-      }
-    }
-    let dmgToHero = dmg;
-    let bunkerAbsorbed = 0;
     const bk = bunkerHere;
+    let dmgWorking = dmg;
+    let bunkerAbsorbed = 0;
     if (
       tgt.isPlayer &&
       bk &&
       bk.hp > 0 &&
       bk.occupantId === tgt.id &&
-      dmgToHero > 0
+      dmgWorking > 0
     ) {
       const fSh = bk.fortifyShield;
       if (fSh > 0) {
-        const absF = Math.min(dmgToHero, fSh);
+        const absF = Math.min(dmgWorking, fSh);
         bk.fortifyShield = fSh - absF;
-        dmgToHero -= absF;
+        dmgWorking -= absF;
         if (absF > 0) {
           this.pushCombatFloat({
             unitId: BUNKER_COMBAT_FLOAT_ID,
@@ -4065,10 +5180,10 @@ export class GameModel {
           });
         }
       }
-      const absorb = Math.min(dmgToHero, bk.hp);
+      const absorb = Math.min(dmgWorking, bk.hp);
       bunkerAbsorbed = absorb;
       bk.hp -= absorb;
-      dmgToHero -= absorb;
+      dmgWorking -= absorb;
       if (absorb > 0) {
         this.pushCombatFloat({
           unitId: BUNKER_COMBAT_FLOAT_ID,
@@ -4083,6 +5198,23 @@ export class GameModel {
         this.catapultHeroOutOfDestroyedBunker(tgt);
       }
     }
+    const dmgForLifesteal = dmgWorking;
+    let shieldAbsorb = 0;
+    if (tgt.shieldGGBlue > 0 && dmgWorking > 0) {
+      const bypass = Math.max(0, Math.floor(src.penetracaoEscudo));
+      const dmgVsShield = Math.max(0, dmgWorking - bypass);
+      const absorbed = Math.min(tgt.shieldGGBlue, dmgVsShield);
+      shieldAbsorb = absorbed;
+      tgt.shieldGGBlue -= absorbed;
+      this.reduceEscudoResidualTagged(tgt, absorbed);
+      dmgWorking -= absorbed;
+      const stacks = src.artifacts["escudo_sangue"] ?? 0;
+      if (!opts?.fromHeroDeathNova && stacks > 0 && absorbed > 0) {
+        const ret = Math.floor(absorbed * 0.75 * stacks);
+        if (ret > 0) src.hp = Math.max(0, src.hp - ret);
+      }
+    }
+    const dmgToHero = dmgWorking;
     const wasAlive = tgt.hp > 0;
     tgt.hp = Math.max(0, tgt.hp - dmgToHero);
     if (tgt.isPlayer && wasAlive && tgt.hp <= 0) {
@@ -4105,7 +5237,7 @@ export class GameModel {
       }
     }
     if (canProc && !opts?.suppressLifesteal && src.lifesteal > 0) {
-      const ls = roundToCombatDecimals((dmg * src.lifesteal) / 100);
+      const ls = roundToCombatDecimals((dmgForLifesteal * src.lifesteal) / 100);
       if (ls > 0) {
         const h0 = src.hp;
         const erStacks = src.isPlayer ? (src.artifacts["escudo_residual"] ?? 0) : 0;
@@ -4259,10 +5391,20 @@ export class GameModel {
   }
 
   private onEnemyKilled(killer: Unit | null, victim: Unit): void {
+    /** Bioma do hex onde o inimigo morreu (define o tipo de essência; hub/castelo = aleatório). */
     const deathBio = biomeAt(this.grid, victim.q, victim.r) as BiomeId;
     const biomeHeroes = this.heroesHavingChosenBiome(deathBio);
-    const lootHero =
-      killer?.isPlayer ? killer : (biomeHeroes[0] ?? null);
+    let lootHero: Unit | null = killer?.isPlayer ? killer : null;
+    if (!lootHero) {
+      if (deathBio === "hub") {
+        const alive = this.getParty().filter((h) => h.hp > 0);
+        if (alive.length > 0) {
+          lootHero = alive[Math.floor(Math.random() * alive.length)]!;
+        }
+      } else {
+        lootHero = biomeHeroes[0] ?? null;
+      }
+    }
 
     if (killer?.isPlayer && killer.heroClass === "gladiador") {
       killer.gladiadorKills++;
@@ -4314,7 +5456,10 @@ export class GameModel {
         this.log(n > 1 ? `${n} cristais obtidos!` : "Cristal obtido!");
       }
     }
-    const essId = biomeToEssenceId(deathBio);
+    const essId: ForgeEssenceId | null =
+      deathBio === "hub"
+        ? randomForgeEssenceForHubDeath()
+        : biomeToEssenceId(deathBio);
     if (essId && lootHero) {
       const essPct = essenceDropTotalPercent(
         this.wave,
@@ -4486,6 +5631,26 @@ export class GameModel {
     const near = this.nearestEnemyToInHeroBiome(killer, victim.id);
     if (!near) return;
 
+    const bkHere = this.bunkerAtHex(killer.q, killer.r);
+    const inBunker = bkHere && bkHere.occupantId === killer.id;
+    if (inBunker) {
+      const bonusPct = 10 * motor;
+      const delayBeforeStrike = getSkipCombatAnimations()
+        ? 0
+        : GOLPE_RELAMPAGO_WINDUP_MS;
+      this.pendingCombatVfxQueue.push({
+        kind: "golpe_relampago_lightning",
+        heroId: killer.id,
+        targetId: near.id,
+        delayMs: delayBeforeStrike,
+      });
+      this.emit();
+      this.queueCombat(delayBeforeStrike, () => {
+        this.executeGolpeRelampagoBonusStrike(killer.id, near.id, bonusPct);
+      });
+      return;
+    }
+
     const fromQ = killer.q;
     const fromR = killer.r;
     const jump = this.nearestFreeHexAdjacentToUnit(killer, near);
@@ -4508,6 +5673,7 @@ export class GameModel {
       if (movedOnMap) {
         if (!getSkipCombatAnimations()) {
           this.pendingMoveAnim = {
+            kind: "unit",
             unitId: killer.id,
             cells: [
               { q: fromQ, r: fromR },
@@ -4536,6 +5702,7 @@ export class GameModel {
     if (movedOnMap) {
       if (!getSkipCombatAnimations()) {
         this.pendingMoveAnim = {
+          kind: "unit",
           unitId: killer.id,
           cells: [
             { q: fromQ, r: fromR },
@@ -5087,10 +6254,8 @@ export class GameModel {
       }
       u.paraisoRegenBonus = undefined;
       if (u.heroClass === "pistoleiro" && u.ultimateId === "arauto_caos") {
-        u.tiroDestruidorCharges = 0;
         u.tiroDestruidorUsedThisTurn = false;
       }
-      this.resetWeaponUltCharge(u);
     }
   }
 
@@ -5310,10 +6475,6 @@ export class GameModel {
       Math.floor(rvFromRegen * regenMult) +
       allyDesertHp +
       rulerDesertRegenFlat;
-    const ton = u.artifacts["tonico"] ?? 0;
-    if (ton > 0) {
-      u.mana = Math.min(u.maxMana, u.mana + Math.floor(rv * 0.5 * ton));
-    }
     u.hp = Math.min(u.maxHp, u.hp + rv);
     const manaGain = u.mana - mana0;
     if (manaGain > 0) {
@@ -5399,6 +6560,7 @@ export class GameModel {
 
   private enqueueEnemyDeath(killer: Unit | null, victim: Unit): void {
     if (victim.isPlayer) return;
+    if (victim.isAllySummon) return;
     this.pendingEnemyDeathQueue.push({
       killerId: killer?.id ?? null,
       victimId: victim.id,
@@ -5466,6 +6628,7 @@ export class GameModel {
     hero.r = dest.r;
     if (!getSkipCombatAnimations()) {
       this.pendingMoveAnim = {
+        kind: "unit",
         unitId: hero.id,
         cells: [
           { q: fromQ, r: fromR },
@@ -5593,6 +6756,7 @@ export class GameModel {
     const skipAnim = getSkipCombatAnimations();
     if (cells.length > 1 && !skipAnim) {
       this.pendingMoveAnim = {
+        kind: "unit",
         unitId: e.id,
         cells,
         segmentMs: segMs,
@@ -5929,7 +7093,7 @@ export class GameModel {
       }
     }
     this.log(`${u.name} sobe para nível ${u.level}!`);
-    if (u.level >= 60 && !u.ultimateId) {
+    if (u.level >= FORMA_FINAL_LEVEL && !u.ultimateId) {
       this.pendingUltimate = { unitId: u.id };
       this.phase = "ultimate_pick";
       this.turnStage = "idle";
@@ -6161,6 +7325,16 @@ export class GameModel {
         u.shieldGGBlue + AURA_TITA_SHIELD_PER_STACK,
       );
     }
+    if (
+      artifactId === "anel_dragao" &&
+      u.isPlayer &&
+      this.phase === "combat" &&
+      !this.inEnemyPhase &&
+      !this.duel
+    ) {
+      const ch = this.currentHero();
+      if (ch && ch.id === u.id) this.queueAnelDragaoOrbsForEndOfTurn(u);
+    }
     return true;
   }
 
@@ -6207,8 +7381,8 @@ export class GameModel {
       const ch = this.currentHero();
       if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
     }
-    if (artifactId === "coroa_ferro") {
-      this.ensureFlamingSwordState(u);
+    if (artifactAffectsInvocationSync(artifactId)) {
+      this.syncInvocationArtifactsAfterChange(u);
     }
     this.emit();
     return true;
@@ -6243,15 +7417,16 @@ export class GameModel {
 
   /**
    * Modo sandbox: +1 nível como no jogo normal — `checkLevelUp` abre escolha de
-   * artefato ou forma final (nível 60) em vez de só alterar o número.
+   * artefato ou forma final (`FORMA_FINAL_LEVEL`) em vez de só alterar o número.
    */
   /**
-   * HUD: com nv. ≥60 e sem forma final, abre o menu de escolha (combate).
+   * HUD: com nv. ≥ forma final e sem ultimate, abre o menu de escolha (combate).
    */
   tryOpenFormaFinalPickFromHud(): boolean {
     if (this.phase !== "combat") return false;
     const h = this.currentHero();
-    if (!h?.isPlayer || h.hp <= 0 || h.level < 60 || h.ultimateId) return false;
+    if (!h?.isPlayer || h.hp <= 0 || h.level < FORMA_FINAL_LEVEL || h.ultimateId)
+      return false;
     this.cancelLevelUpFloatHoldTimer();
     this.pendingArtifacts = null;
     this.pendingUltimate = { unitId: h.id };
@@ -6274,8 +7449,8 @@ export class GameModel {
   }
 
   /**
-   * Modo sandbox: abre já o menu de escolha de forma final (nível 60) para este herói.
-   * Repõe ultimate/forma se já existirem, sobe para nv. 60 se for preciso e muda a fase para `ultimate_pick`.
+   * Modo sandbox: abre já o menu de escolha de forma final para este herói.
+   * Repõe ultimate/forma se já existirem, sobe para `FORMA_FINAL_LEVEL` se for preciso e muda a fase para `ultimate_pick`.
    */
   sandboxOpenFormaFinalPick(heroId: string): void {
     if (!this.devSandboxMode) return;
@@ -6288,8 +7463,8 @@ export class GameModel {
     delete u.ultimateId;
     u.formaFinal = false;
     u.flying = false;
-    if (u.level < 60) {
-      u.level = 60;
+    if (u.level < FORMA_FINAL_LEVEL) {
+      u.level = FORMA_FINAL_LEVEL;
       u.xpToNext = xpCurve(u.level);
       u.xp = 0;
       this.syncWeaponPassivesOnLevelUp(u);
@@ -6348,12 +7523,8 @@ export class GameModel {
       const ch = this.currentHero();
       if (ch && u.id === ch.id) this.syncBasicLeftFromSpent(ch);
     }
-    if (artifactId === "coroa_ferro") {
-      this.ensureFlamingSwordState(u);
-      if (this.coroaFerroStacks(u) <= 0) {
-        delete u.flamingSwordHp;
-        delete u.flamingSwordPos;
-      }
+    if (artifactAffectsInvocationSync(artifactId)) {
+      this.syncInvocationArtifactsAfterChange(u);
     }
     this.checkLevelUp(u);
     this.pollPendingCombatLevelUp();
@@ -6500,18 +7671,20 @@ export class GameModel {
   }
 
 
-  buyGoldItem(heroId: string, itemId: string): boolean {
+  buyGoldItem(
+    heroId: string,
+    itemId: string,
+    times: GoldShopBatchSize = 1,
+  ): boolean {
     const u = this.units.find((x) => x.id === heroId);
     if (!u || !u.isPlayer) return false;
     const item = GOLD_SHOP.find((i) => i.id === itemId);
     if (!item) return false;
-    if (item.id === "xp_pct" && (u.artifacts["_xp_shop"] ?? 0) >= 60)
-      return false;
-    let cost = item.cost;
-    if (u.ultimateId === "estrategista_nato") cost = Math.ceil(cost * 0.5);
-    if (u.ouro < cost) return false;
-    u.ouro -= cost;
-    item.apply(u);
+    if (times !== 1 && times !== 5 && times !== 10) return false;
+    if (!goldShopBatchAffordable(item, u, times)) return false;
+    const uc = goldShopUnitCost(item, u);
+    u.ouro -= uc * times;
+    for (let i = 0; i < times; i++) item.apply(u);
     this.emit();
     return true;
   }
@@ -6730,6 +7903,16 @@ export class GameModel {
     if (this.meta.crystals < CRYSTAL_SHOP_ALCANCE_COST) return false;
     this.meta.crystals -= CRYSTAL_SHOP_ALCANCE_COST;
     this.meta.crystalAlcance = cur + 1;
+    this.saveMeta();
+    return true;
+  }
+
+  buyCrystalShopSorte(): boolean {
+    const cur = this.meta.crystalSorte ?? 0;
+    if (cur >= CRYSTAL_SHOP_SORTE_MAX) return false;
+    if (this.meta.crystals < CRYSTAL_SHOP_SORTE_COST) return false;
+    this.meta.crystals -= CRYSTAL_SHOP_SORTE_COST;
+    this.meta.crystalSorte = cur + 1;
     this.saveMeta();
     return true;
   }

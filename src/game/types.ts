@@ -130,7 +130,7 @@ export interface Unit extends CoreStats {
   artifacts: Record<string, number>;
   /** Cooldowns skill por id (turnos restantes) */
   skillCd: Record<string, number>;
-  /** Ultimate escolhida (nível 60 — forma final). */
+  /** Ultimate escolhida (nível da forma final na run — ver FORMA_FINAL_LEVEL). */
   ultimateId?: string;
   formaFinal: boolean;
   /** Pistoleiro: dano extra na rodada/wave */
@@ -158,6 +158,11 @@ export interface Unit extends CoreStats {
   /** Espada flamejante invocada pela Coroa de ferro (estado persistente por herói). */
   flamingSwordHp?: number;
   flamingSwordPos?: { q: number; r: number };
+  /** Invocação aliada (sombra, Mega Golem): não é inimigo nem herói da party. */
+  isAllySummon?: boolean;
+  summonKind?: "shadow" | "mega_golem";
+  /** Id do herói dono (party). */
+  summonOwnerHeroId?: string;
   /**
    * **Instâncias de dano** (DoT): veneno, queimadura, sangramento — filas de ticks de dano;
    * Amplicador de onda / Dobra temporal alteram quantas entram ou saem por turno.
@@ -236,11 +241,14 @@ export interface Unit extends CoreStats {
   forgeLoadout?: ForgeHeroLoadout;
   /** Slot de party 0–2 na formação inicial (= índice em `forgeByHeroSlot` e cor no triângulo). */
   partySlotIndex?: 0 | 1 | 2;
+  /** Anel do dragão adormecido: bolas de Ar a disparar no fim deste turno. */
+  anelDragaoOrbsEndTurn?: number;
 }
 
 export type GamePhase =
   | "main_menu"
   | "crystal_shop"
+  | "setup_coliseum"
   | "setup_heroes"
   | "setup_biomes"
   | "setup_colors"
@@ -251,7 +259,8 @@ export type GamePhase =
   | "level_up_pick"
   | "ultimate_pick"
   | "victory"
-  | "defeat";
+  | "defeat"
+  | "coliseum_cleared";
 
 /**
  * Estado lógico do turno do herói em combate.
@@ -298,6 +307,8 @@ export interface MetaProgress {
   crystalExtraBasic: number;
   /** 0–2: +N alcance base (loja de cristais). */
   crystalAlcance: number;
+  /** 0–12: compras de +5 sorte (loja de cristais; 2 💎 cada). */
+  crystalSorte: number;
 }
 
 /** Nível máximo por trilho de meta na loja de cristais (dano, vida, etc.). */
@@ -307,6 +318,11 @@ export const CRYSTAL_SHOP_EXTRA_BASIC_COST = 25;
 export const CRYSTAL_SHOP_EXTRA_BASIC_MAX = 2;
 export const CRYSTAL_SHOP_ALCANCE_COST = 50;
 export const CRYSTAL_SHOP_ALCANCE_MAX = 2;
+
+export const CRYSTAL_SHOP_SORTE_COST = 2;
+export const CRYSTAL_SHOP_SORTE_MAX = 12;
+/** Sorte adicionada ao herói por cada compra na loja de cristais. */
+export const CRYSTAL_SHOP_SORTE_PER_BUY = 5;
 
 export const INITIAL_CARD_COSTS = [2, 5, 9] as const;
 

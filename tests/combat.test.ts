@@ -143,6 +143,7 @@ describe("GameModel startNewRun", () => {
       biomes: ["floresta"],
       colors: ["vermelho", "azul", "verde"],
       partySlotByHero: [0],
+      coliseumTier: 1,
     });
     expect(m.partyOrder.length).toBe(1);
     expect(m.getParty().length).toBe(1);

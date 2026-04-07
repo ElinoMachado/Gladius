@@ -207,7 +207,7 @@ export class GameRenderer {
     y: number;
     t: number;
     T: number;
-    style: "bullet" | "magic";
+    style: "bullet" | "magic" | "air";
   }[] = [];
   /** Efeito estilo HQ (POW) no impacto da bala do pistoleiro. */
   private readonly comicPowBursts: {
@@ -239,6 +239,16 @@ export class GameRenderer {
   }[] = [];
   private readonly duelFlameByUnit = new Map<string, THREE.Group>();
   private readonly flamingSwordByHeroId = new Map<string, THREE.Group>();
+  /** Deslocamento hex-a-hex da espada flamejante (fase de invocação). */
+  private readonly flamingSwordMoveAnims = new Map<
+    string,
+    {
+      cells: Axial[];
+      segIndex: number;
+      t: number;
+      segSeconds: number;
+    }
+  >();
   /** Salto visual (ultimate pistoleiro): Y animado em `tick`; XZ atualizados em `syncUnits`. */
   private readonly heroUltJumpById = new Map<
     string,
@@ -918,6 +928,22 @@ export class GameRenderer {
     }
   }
 
+  queueFlamingSwordMoveAlongCells(
+    heroId: string,
+    cells: { q: number; r: number }[],
+    segmentMs?: number,
+  ): void {
+    if (cells.length < 2) return;
+    const ms = segmentMs ?? UNIT_MOVE_SEGMENT_MS;
+    const segSeconds = Math.min(0.75, ms / 1000);
+    this.flamingSwordMoveAnims.set(heroId, {
+      cells: cells.map((c) => ({ q: c.q, r: c.r })),
+      segIndex: 0,
+      t: 0,
+      segSeconds,
+    });
+  }
+
   isUnitMoveAnimating(unitId?: string): boolean {
     if (unitId === undefined) return this.unitMoveAnims.size > 0;
     return this.unitMoveAnims.has(unitId);
@@ -1061,6 +1087,82 @@ export class GameRenderer {
     mesh.lookAt(bx, py + 0.72, bz);
     this.arenaRoot.add(mesh);
     this.meleeSlashFx.push({ mesh, until: performance.now() + 145 });
+  }
+
+  /**
+   * Traço de corte entre a espada flamejante (invocação) e o inimigo — mesmo papel que
+   * `triggerMeleeSlashBetween` na fase inimiga.
+   */
+  triggerFlamingSwordSlash(heroOwnerId: string, targetId: string): void {
+    const sword = this.flamingSwordByHeroId.get(heroOwnerId);
+    const b = this.unitMeshes.get(targetId);
+    if (!sword || !b) return;
+    const ax = sword.position.x;
+    const az = sword.position.z;
+    const bx = b.position.x;
+    const bz = b.position.z;
+    const dx = bx - ax;
+    const dz = bz - az;
+    const len = Math.hypot(dx, dz) || 0.01;
+    const midX = (ax + bx) * 0.5;
+    const midZ = (az + bz) * 0.5;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(Math.min(2.8, len * 0.92), 0.09, 0.48),
+      new THREE.MeshBasicMaterial({
+        color: 0xff4400,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    const py = this.playSurfaceYOffset();
+    mesh.position.set(midX, py + 0.78, midZ);
+    mesh.lookAt(bx, py + 0.78, bz);
+    this.arenaRoot.add(mesh);
+    this.meleeSlashFx.push({ mesh, until: performance.now() + 168 });
+  }
+
+  /**
+   * Traço de invocação em grade (sombra / mega golem): mesmo padrão visual que a espada flamejante,
+   * usando a posição do modelo da unidade invocada.
+   */
+  triggerGridSummonSlash(
+    summonId: string,
+    targetId: string,
+    summonKind: "shadow" | "mega_golem",
+  ): void {
+    const a = this.unitMeshes.get(summonId);
+    const b = this.unitMeshes.get(targetId);
+    if (!a || !b) return;
+    const ax = a.position.x;
+    const az = a.position.z;
+    const bx = b.position.x;
+    const bz = b.position.z;
+    const dx = bx - ax;
+    const dz = bz - az;
+    const len = Math.hypot(dx, dz) || 0.01;
+    const midX = (ax + bx) * 0.5;
+    const midZ = (az + bz) * 0.5;
+    const py = this.playSurfaceYOffset();
+    const isGolem = summonKind === "mega_golem";
+    const depth = isGolem ? 0.52 : 0.44;
+    const thick = isGolem ? 0.1 : 0.085;
+    const color = isGolem ? 0xff4400 : 0xaa66ff;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(Math.min(2.8, len * 0.92), thick, depth),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: isGolem ? 0.9 : 0.88,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    mesh.position.set(midX, py + (isGolem ? 0.78 : 0.76), midZ);
+    mesh.lookAt(bx, py + (isGolem ? 0.78 : 0.76), bz);
+    this.arenaRoot.add(mesh);
+    this.meleeSlashFx.push({ mesh, until: performance.now() + 168 });
   }
 
   worldUnitHeadToScreen(
@@ -1837,6 +1939,45 @@ export class GameRenderer {
             if (body) stopHeroUnitClips(body, 0.1);
           }
           this.unitMoveAnims.delete(id);
+        }
+      }
+    }
+  }
+
+  private updateFlamingSwordMoveAnims(dt: number): void {
+    const y = this.playSurfaceYOffset() + 1.18;
+    for (const heroId of [...this.flamingSwordMoveAnims.keys()]) {
+      const a = this.flamingSwordMoveAnims.get(heroId);
+      if (!a) continue;
+      const root = this.flamingSwordByHeroId.get(heroId);
+      if (!root) {
+        this.flamingSwordMoveAnims.delete(heroId);
+        continue;
+      }
+      const i = a.segIndex;
+      if (i >= a.cells.length - 1) {
+        this.flamingSwordMoveAnims.delete(heroId);
+        continue;
+      }
+      const u = a.cells[i]!;
+      const v = a.cells[i + 1]!;
+      const p0 = axialToWorld(u.q, u.r, HEX_SIZE);
+      const p1 = axialToWorld(v.q, v.r, HEX_SIZE);
+      a.t += dt;
+      const p = Math.min(1, a.t / a.segSeconds);
+      const x = THREE.MathUtils.lerp(p0.x, p1.x, p);
+      const z = THREE.MathUtils.lerp(p0.z, p1.z, p);
+      root.position.set(x, y, z);
+      const dx = p1.x - p0.x;
+      const dz = p1.z - p0.z;
+      if (Math.hypot(dx, dz) > 1e-5) {
+        root.rotation.y = -Math.atan2(dz, dx);
+      }
+      if (p >= 1) {
+        a.segIndex++;
+        a.t = 0;
+        if (a.segIndex >= a.cells.length - 1) {
+          this.flamingSwordMoveAnims.delete(heroId);
         }
       }
     }
@@ -2675,8 +2816,16 @@ export class GameRenderer {
         typeof layoutActorSc === "number" && Number.isFinite(layoutActorSc)
           ? THREE.MathUtils.clamp(layoutActorSc, 0.02, 48)
           : 1;
+      const summonSc =
+        u.isAllySummon && u.summonKind === "mega_golem"
+          ? 1.22
+          : u.isAllySummon && u.summonKind === "shadow"
+            ? 0.9
+            : 1;
       const unitSc =
-        u.id.startsWith("layout-") ? furyScale * layoutSc : furyScale;
+        u.id.startsWith("layout-")
+          ? furyScale * layoutSc
+          : furyScale * summonSc;
       g.scale.setScalar(unitSc);
       g.userData.unitId = u.id;
       this.ensureUnitBars(g, u);
@@ -2742,6 +2891,7 @@ export class GameRenderer {
         const root = this.flamingSwordByHeroId.get(id)!;
         this.arenaRoot.remove(root);
         this.disposeObject3D(root);
+        this.flamingSwordMoveAnims.delete(id);
         this.flamingSwordByHeroId.delete(id);
       }
     }
@@ -2785,12 +2935,15 @@ export class GameRenderer {
       }
       const nowRoot = this.flamingSwordByHeroId.get(u.id)!;
       nowRoot.scale.setScalar(1 + (stacks - 1) * 0.12);
-      const w = axialToWorld(pos.q, pos.r, HEX_SIZE);
-      nowRoot.position.set(w.x, this.playSurfaceYOffset() + 1.18, w.z);
+      if (!this.flamingSwordMoveAnims.has(u.id)) {
+        const w = axialToWorld(pos.q, pos.r, HEX_SIZE);
+        nowRoot.position.set(w.x, this.playSurfaceYOffset() + 1.18, w.z);
+      }
       seen.add(u.id);
     }
     for (const [id, root] of [...this.flamingSwordByHeroId]) {
       if (seen.has(id)) continue;
+      this.flamingSwordMoveAnims.delete(id);
       this.arenaRoot.remove(root);
       this.disposeObject3D(root);
       this.flamingSwordByHeroId.delete(id);
@@ -3472,14 +3625,22 @@ export class GameRenderer {
   queueDamageProjectile(
     fromId: string,
     toId: string,
-    opts: { style: "bullet" | "magic"; durationSec: number },
+    opts: { style: "bullet" | "magic" | "air"; durationSec: number },
   ): void {
     const a = this.unitMeshes.get(fromId);
     const b = this.unitMeshes.get(toId);
     if (!a || !b) return;
-    const geo = new THREE.SphereGeometry(opts.style === "bullet" ? 0.13 : 0.2, 10, 10);
+    const r =
+      opts.style === "bullet" ? 0.13 : opts.style === "air" ? 0.19 : 0.2;
+    const geo = new THREE.SphereGeometry(r, 10, 10);
+    const col =
+      opts.style === "bullet"
+        ? 0x4a3020
+        : opts.style === "air"
+          ? 0x26c6da
+          : 0xaa66ff;
     const mat = new THREE.MeshBasicMaterial({
-      color: opts.style === "bullet" ? 0x4a3020 : 0xaa66ff,
+      color: col,
       transparent: true,
       opacity: 0.95,
     });
@@ -4241,9 +4402,11 @@ export class GameRenderer {
       if (!ug) {
         this.arenaRoot.remove(root);
         this.disposeObject3D(root);
+        this.flamingSwordMoveAnims.delete(id);
         this.flamingSwordByHeroId.delete(id);
         continue;
       }
+      if (this.flamingSwordMoveAnims.has(id)) continue;
       root.rotation.y += dt * 3.4;
       root.position.y += Math.sin(now * 0.006 + root.id) * 0.0009;
     }
@@ -4444,6 +4607,7 @@ export class GameRenderer {
     const dt = this.clock.getDelta();
     const cometOn = this.cometaArcanoCinematic !== null;
     this.updateUnitMoveAnims(dt);
+    this.updateFlamingSwordMoveAnims(dt);
     for (const g of this.unitMeshes.values()) {
       const body = g.children.find((c) => c.userData?.role === "body");
       if (body) updateHeroUnitAnimations(body, dt);

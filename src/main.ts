@@ -3,6 +3,7 @@ import { APP_VERSION_LABEL } from "./version";
 import {
   BUNKER_COMBAT_FLOAT_ID,
   GameModel,
+  garraFerroRawBonusFromDefesaAndStacks,
   heroDanoPlusRoninFromBaseline,
   heroDanoPlusRoninOverflow,
   type CombatFloatEvent,
@@ -39,6 +40,9 @@ import {
   CRYSTAL_SHOP_ALCANCE_MAX,
   CRYSTAL_SHOP_EXTRA_BASIC_COST,
   CRYSTAL_SHOP_EXTRA_BASIC_MAX,
+  CRYSTAL_SHOP_SORTE_COST,
+  CRYSTAL_SHOP_SORTE_MAX,
+  CRYSTAL_SHOP_SORTE_PER_BUY,
   META_TRACK_MAX_LEVEL,
   type GamePhase,
   type HeroClassId,
@@ -50,7 +54,15 @@ import {
 import type { SkillDef } from "./game/data/heroes";
 import { HEROES } from "./game/data/heroes";
 import { BIOME_DESCRIPTIONS, BIOME_LABELS } from "./game/data/biomes";
-import { GOLD_SHOP, goldDrainPerTurn, type GoldShopId } from "./game/data/shops";
+import {
+  GOLD_SHOP,
+  goldDrainPerTurn,
+  goldShopBatchAffordable,
+  goldShopBatchLabel,
+  goldShopUnitCost,
+  type GoldShopBatchSize,
+  type GoldShopId,
+} from "./game/data/shops";
 import { ARTIFACT_POOL, artifactDefById } from "./game/data/artifacts";
 import {
   ARTIFACT_RARITY_LABELS,
@@ -88,6 +100,7 @@ import {
   nextInitialCardCost,
   clearAllLocalProgressForFreshStart,
 } from "./game/metaStore";
+import { buildHeroSetupStatPreview } from "./game/unitFactory";
 import {
   clearRunSessionCheckpoint,
   readRunSessionCheckpointJson,
@@ -115,6 +128,16 @@ import {
   partyScaleMultiplier,
   waveMultiplier,
 } from "./game/data/enemies";
+import {
+  COLISEUMS,
+  coliseumDefinition,
+  coliseumRunWaveTaglinePt,
+  coliseumTierEnemyMultiplier,
+  coliseumTitleAtRunWave,
+  FORMA_FINAL_LEVEL,
+  type ColiseumTierId,
+  waveIndexWithinColiseumPhase,
+} from "./game/data/coliseums";
 import {
   biomeToEssenceId,
   FORGE_COST_CREATE,
@@ -380,12 +403,14 @@ type Setup = {
   biomes: BiomeId[];
   /** Sempre 3 cores (sinergia do grupo), independentemente do nº de heróis. */
   colors: TeamColor[];
+  coliseumTier: ColiseumTierId;
 };
 
 const setup: Setup = {
   slots: [null, null, null],
   biomes: [],
   colors: ["azul", "verde", "vermelho"],
+  coliseumTier: 1,
 };
 
 /** Um preview por slot (0–2); `render()` no select apagava o `ui-root` inteiro → flash / preview escuro. */
@@ -569,6 +594,18 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
         view.playHeroHitReact(h.targetId);
       }
       break;
+    case "flaming_sword_strike":
+      playSwordHit();
+      view.triggerFlamingSwordSlash(h.heroOwnerId, h.targetId);
+      break;
+    case "ally_summon_strike":
+      playSwordHit();
+      view.triggerGridSummonSlash(
+        h.summonId,
+        h.targetId,
+        h.summonKind ?? "mega_golem",
+      );
+      break;
     case "weapon_ult_furacao": {
       view.triggerWeaponUltFuracaoJump(h.heroId, FURACAO_ULT_JUMP_MS);
       view.triggerRadialShotVfx(h.heroId, {
@@ -661,8 +698,11 @@ function enemyAttrBlockHtml(mult: number): string {
 }
 
 function heroSetupDifficultyBannerHtml(heroCount: number): string {
+  const col = coliseumDefinition(setup.coliseumTier);
+  const colLine = `<div class="hero-setup-difficulty__coliseum"><strong>${escapeHtml(col.title)}</strong> — força inimiga base ×${formatEnemyMultPt(coliseumTierEnemyMultiplier(setup.coliseumTier))}</div>`;
   if (heroCount <= 0) {
     return `<div class="hero-setup-difficulty" role="status">
+      ${colLine}
       <div class="hero-setup-difficulty__title"><strong>Dificuldade e tamanho do grupo</strong></div>
       <div class="hero-setup-difficulty__attrs hero-setup-difficulty__attrs--preview">
         <div class="hero-setup-difficulty__attrs-head">Exemplos — atributos inimigos</div>
@@ -674,7 +714,9 @@ function heroSetupDifficultyBannerHtml(heroCount: number): string {
       </div>
     </div>`;
   }
-  const mult = partyScaleMultiplier(heroCount);
+  const mult =
+    partyScaleMultiplier(heroCount) *
+    coliseumTierEnemyMultiplier(setup.coliseumTier);
   const warn =
     heroCount >= 3
       ? "hero-setup-difficulty--warn"
@@ -683,7 +725,8 @@ function heroSetupDifficultyBannerHtml(heroCount: number): string {
         : "";
   if (heroCount === 1) {
     return `<div class="hero-setup-difficulty ${warn}" role="status">
-      <div class="hero-setup-difficulty__title"><strong>1 herói — dificuldade base.</strong></div>
+      ${colLine}
+      <div class="hero-setup-difficulty__title"><strong>1 herói — dificuldade base (tamanho do grupo).</strong></div>
       ${enemyAttrBlockHtml(mult)}
     </div>`;
   }
@@ -692,6 +735,7 @@ function heroSetupDifficultyBannerHtml(heroCount: number): string {
       ? "2 heróis — Dificuldade moderada."
       : "3 heróis — Dificuldade Alta.";
   return `<div class="hero-setup-difficulty ${warn}" role="status">
+    ${colLine}
     <div class="hero-setup-difficulty__title"><strong>${title}</strong></div>
     ${enemyAttrBlockHtml(mult)}
   </div>`;
@@ -709,7 +753,7 @@ function fillHeroSlotCard(card: HTMLElement, i: 0 | 1 | 2): void {
     const headHtml = `<div class="hero-slot-card__head">
         <span class="hero-slot-card__class hero-slot-card__class--${hid}">${className}</span>
       </div>`;
-    card.innerHTML = `${headHtml}${templateStatsStripHtml(hid)}
+    card.innerHTML = `${headHtml}${templateStatsStripHtml(hid, i)}
         <div class="hero-slot-weapon-row" tabindex="0" role="img" aria-label="Arma principal nível ${wl} de 5. Paira para ver skill e ultimate da arma.">
           <span class="hero-slot-weapon-row__lbl">Arma principal</span>
           <span class="hero-slot-weapon-row__nv">nv <strong>${wl}</strong>/5</span>
@@ -799,39 +843,76 @@ function colorHintToDisplayColor(hint: string): number {
   return Number.isFinite(n) ? n : 0x888888;
 }
 
-function templateStatsStripHtml(cls: HeroClassId): string {
-  const t = HEROES[cls];
-  const critPct =
-    cls === "sacerdotisa" ? "0%" : cls === "gladiador" ? "10%" : "25%";
-  const critMultStr =
-    cls === "sacerdotisa" ? "150%" : cls === "gladiador" ? "175%" : "200%";
+function templateStatsStripHtml(
+  cls: HeroClassId,
+  slotIndex: 0 | 1 | 2,
+): string {
+  const meta = model.meta;
+  while (setup.colors.length < 3) setup.colors.push("azul");
+  const partyTri = setup.colors.slice(0, 3) as [
+    TeamColor,
+    TeamColor,
+    TeamColor,
+  ];
+  const forgeL = resolveEquippedForgeLoadoutForMeta(meta, slotIndex);
+  const p = buildHeroSetupStatPreview(
+    cls,
+    slotIndex,
+    meta,
+    partyTri,
+    forgeL,
+  );
   const items: { icon: StatIconId; label: string; value: string }[] = [
-    { icon: "max_hp", label: "Vida máxima", value: formatTooltipNumber(t.maxHp) },
-    { icon: "max_mana", label: "Mana máxima", value: formatTooltipNumber(t.maxMana) },
+    {
+      icon: "max_hp",
+      label: "Vida máxima",
+      value: formatTooltipNumber(p.maxHp),
+    },
+    {
+      icon: "max_mana",
+      label: "Mana máxima",
+      value: formatTooltipNumber(p.maxMana),
+    },
     {
       icon: "regen_hp",
       label: "Regeneração de vida",
-      value: formatTooltipNumber(t.regenVida),
+      value: formatTooltipNumber(p.regenVida),
     },
     {
       icon: "regen_mp",
       label: "Regeneração de mana",
-      value: formatTooltipNumber(t.regenMana),
+      value: formatTooltipNumber(p.regenMana),
     },
-    { icon: "dmg", label: "Dano", value: formatTooltipNumber(t.dano) },
+    { icon: "dmg", label: "Dano", value: formatTooltipNumber(p.dano) },
     {
       icon: "crit_hit",
       label: "Acerto crítico",
-      value: `${formatTooltipNumber(parseFloat(critPct.replace("%", "").replace(",", ".")) || 0)}%`,
+      value: `${formatTooltipNumber(p.acertoCritico)}%`,
     },
     {
       icon: "crit_dmg",
       label: "Multiplicador de crítico",
-      value: `${formatTooltipNumber(parseFloat(critMultStr.replace("%", "").replace(",", ".")) || 0)}%`,
+      value: `${formatTooltipNumber(Math.round(p.danoCritico * 100))}%`,
     },
-    { icon: "def", label: "Defesa", value: formatTooltipNumber(t.defesa) },
-    { icon: "mov", label: "Movimento", value: formatTooltipNumber(t.movimento) },
+    { icon: "def", label: "Defesa", value: formatTooltipNumber(p.defesa) },
+    {
+      icon: "mov",
+      label: "Movimento",
+      value: formatTooltipNumber(p.movimento),
+    },
   ];
+  if (cls === "sacerdotisa") {
+    items.push({
+      icon: "pot",
+      label: "Potencial cura/escudo",
+      value: formatTooltipNumber(p.potencialCuraEscudo),
+    });
+  }
+  items.push({
+    icon: "range",
+    label: "Alcance",
+    value: formatTooltipNumber(p.alcance),
+  });
   const cellHtml = (
     it: { icon: StatIconId; label: string; value: string },
     si: number,
@@ -1013,6 +1094,7 @@ function lolViewedHero(m: GameModel): Unit | null {
 }
 /** Índice do herói na loja de ouro; `render()` reabre a loja após `emit()` (ex.: compra), sem resetar. */
 let goldShopHeroIndex = 0;
+let goldShopBatchSize: GoldShopBatchSize = 1;
 /** Qual painel 3D está em primeiro plano na loja (com bunker no bioma). */
 let goldShopVizFocus: "hero" | "bunker" = "hero";
 /** Ao mudar de bolsa de herói, volta a mostrar o herói em primeiro plano. */
@@ -1793,6 +1875,131 @@ function el(html: string): HTMLElement {
   return t.content.firstElementChild as HTMLElement;
 }
 
+/** Máximo de acúmulos por artefato na party (consulta em combate). */
+function bindArtifactMiniCardStackHover(root: HTMLElement, h: Unit): void {
+  root.querySelectorAll(".artifact-mini-card").forEach((node) => {
+    const card = node as HTMLElement;
+    const aid = card.dataset.artifactId;
+    if (!aid) return;
+    const cnt = card.querySelector(".artifact-mini-card__cnt") as HTMLElement;
+    if (!cnt) return;
+    const stacks = h.artifacts[aid] ?? 0;
+    const max = getArtifactMaxStacks(aid);
+    if (max >= 900 || stacks >= max) return;
+    const base = artifactStackCounterLabel(aid, stacks);
+    const preview = artifactStackCounterLabel(aid, stacks + 1);
+    const enter = (): void => {
+      cnt.textContent = preview;
+      cnt.classList.add("artifact-mini-card__cnt--preview");
+    };
+    const leave = (): void => {
+      cnt.textContent = base;
+      cnt.classList.remove("artifact-mini-card__cnt--preview");
+    };
+    card.addEventListener("mouseenter", enter);
+    card.addEventListener("mouseleave", leave);
+  });
+}
+
+function partyArtifactStackTotals(m: GameModel): Record<string, number> {
+  const o: Record<string, number> = {};
+  for (const h of m.getParty()) {
+    if (h.hp <= 0) continue;
+    for (const [k, v] of Object.entries(h.artifacts)) {
+      if (!v || k.startsWith("_")) continue;
+      o[k] = Math.max(o[k] ?? 0, v);
+    }
+  }
+  return o;
+}
+
+function mountArtifactCodexCardsInto(
+  body: HTMLElement,
+  partyStacks: Record<string, number> | null = null,
+): void {
+  body.replaceChildren();
+  for (const r of ARTIFACT_RARITY_ORDER) {
+    const sub = ARTIFACT_POOL.filter((a) => a.rarity === r);
+    if (sub.length === 0) continue;
+    const sec = el(`<section class="artifact-codex-sec">
+      <h2 class="artifact-codex-sec-title">${escapeHtml(ARTIFACT_RARITY_LABELS[r])} · ${sub.length}</h2>
+      <div class="artifact-codex-grid"></div>
+    </section>`);
+    const grid = sec.querySelector(".artifact-codex-grid")!;
+    for (const a of sub) {
+      const max = getArtifactMaxStacks(a.id);
+      const cur0 =
+        partyStacks != null
+          ? Math.min(max, Math.max(0, partyStacks[a.id] ?? 0))
+          : null;
+      const cntLine =
+        cur0 != null
+          ? `<div class="artifact-codex-card__cnt" data-art-cnt="${escapeHtml(a.id)}">${cur0}/${max}</div>`
+          : "";
+      const card = el(
+        `<div class="artifact-codex-card ${artifactRarityClass(a.rarity)}" tabindex="0" role="img" aria-label="${escapeHtml(a.name)}">
+          <div class="artifact-codex-card__art">${artifactCardInnerHtml(a.id)}</div>
+          <div class="artifact-codex-card__name">${escapeHtml(a.name)}</div>${cntLine}
+        </div>`,
+      ) as HTMLElement;
+      bindGameTooltip(card, () => artifactCodexAllTiersHtml(a.id));
+      if (partyStacks != null && cur0 != null && max < 900) {
+        const cntEl = card.querySelector("[data-art-cnt]") as HTMLElement;
+        const onEnter = (): void => {
+          if (cur0 >= max) return;
+          cntEl.textContent = `${cur0 + 1}/${max}`;
+          cntEl.classList.add("artifact-codex-card__cnt--preview");
+        };
+        const onLeave = (): void => {
+          cntEl.textContent = `${cur0}/${max}`;
+          cntEl.classList.remove("artifact-codex-card__cnt--preview");
+        };
+        card.addEventListener("mouseenter", onEnter);
+        card.addEventListener("mouseleave", onLeave);
+        card.addEventListener("focus", onEnter);
+        card.addEventListener("blur", onLeave);
+      }
+      grid.appendChild(card);
+    }
+    body.appendChild(sec);
+  }
+}
+
+/** Sobre o combate: consulta só leitura (tecla A). */
+function openCombatArtifactReferenceOverlay(): void {
+  if (document.getElementById("combat-artifact-ref-overlay")) return;
+  const ov = el(`<div class="combat-artifact-ref-overlay" id="combat-artifact-ref-overlay" role="dialog" aria-modal="true" aria-label="Consulta de artefatos">
+    <div class="combat-artifact-ref-panel">
+      <header class="artifact-codex-header combat-artifact-ref-head">
+        <h2 class="hero-setup-main-title">Artefatos</h2>
+        <p class="artifact-codex-sub">Consulta — paira nas cartas para ver efeitos e o próximo acúmulo (verde). Fecha com Esc ou o botão.</p>
+        <button type="button" class="btn btn-primary" id="combat-artifact-ref-close">Fechar</button>
+      </header>
+      <div class="artifact-codex-scroll combat-artifact-ref-scroll" id="combat-artifact-ref-body"></div>
+    </div>
+  </div>`);
+  document.body.appendChild(ov);
+  mountArtifactCodexCardsInto(
+    ov.querySelector("#combat-artifact-ref-body")!,
+    partyArtifactStackTotals(model),
+  );
+  const close = (): void => {
+    document.removeEventListener("keydown", onKey, true);
+    ov.remove();
+  };
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.code === "Escape") {
+      e.preventDefault();
+      close();
+    }
+  };
+  document.addEventListener("keydown", onKey, true);
+  ov.querySelector("#combat-artifact-ref-close")!.addEventListener("click", close);
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+}
+
 function showArtifactCodex(): void {
   hideGameTooltip();
   removeEquipmentModal();
@@ -1813,27 +2020,7 @@ function showArtifactCodex(): void {
   const bgHost = shell.querySelector(".artifact-codex-bg") as HTMLElement;
   artifactCodex3d = new ArtifactCodex3D(bgHost);
   artifactCodex3d.start();
-  const body = shell.querySelector("#codex-body")!;
-  for (const r of ARTIFACT_RARITY_ORDER) {
-    const sub = ARTIFACT_POOL.filter((a) => a.rarity === r);
-    if (sub.length === 0) continue;
-    const sec = el(`<section class="artifact-codex-sec">
-      <h2 class="artifact-codex-sec-title">${escapeHtml(ARTIFACT_RARITY_LABELS[r])} · ${sub.length}</h2>
-      <div class="artifact-codex-grid"></div>
-    </section>`);
-    const grid = sec.querySelector(".artifact-codex-grid")!;
-    for (const a of sub) {
-      const card = el(
-        `<div class="artifact-codex-card ${artifactRarityClass(a.rarity)}" tabindex="0" role="img" aria-label="${escapeHtml(a.name)}">
-          <div class="artifact-codex-card__art">${artifactCardInnerHtml(a.id)}</div>
-          <div class="artifact-codex-card__name">${escapeHtml(a.name)}</div>
-        </div>`,
-      ) as HTMLElement;
-      bindGameTooltip(card, () => artifactCodexAllTiersHtml(a.id));
-      grid.appendChild(card);
-    }
-    body.appendChild(sec);
-  }
+  mountArtifactCodexCardsInto(shell.querySelector("#codex-body")!);
   shell.querySelector("#codex-back")!.addEventListener("click", () => {
     disposeMenu3dPreviews();
     showMainMenu();
@@ -2774,19 +2961,21 @@ function showMainMenu(): void {
           break;
         case "new":
           model.devSandboxMode = false;
-          model.phase = "setup_heroes";
+          model.phase = "setup_coliseum";
           setup.slots = [null, null, null];
           setup.biomes = [];
           setup.colors = ["azul", "verde", "vermelho"];
+          setup.coliseumTier = 1;
           render();
           break;
         case "dev-sandbox":
           if (!import.meta.env.DEV) break;
           model.devSandboxMode = true;
-          model.phase = "setup_heroes";
+          model.phase = "setup_coliseum";
           setup.slots = [null, null, null];
           setup.biomes = [];
           setup.colors = ["azul", "verde", "vermelho"];
+          setup.coliseumTier = 1;
           render();
           break;
         case "arena-layout":
@@ -2845,7 +3034,7 @@ function showWaveSummaryOverlay(): void {
   const lines: string[] = [];
   lines.push(`<div class="wave-summary-overlay__title">Vitória!</div>`);
   lines.push(
-    `<p class="wave-summary-overlay__wave-tag">Wave ${summary.wave}</p>`,
+    `<p class="wave-summary-overlay__wave-tag">${escapeHtml(coliseumRunWaveTaglinePt(summary.wave, model.coliseumTier))}</p>`,
   );
   lines.push(`<p class="wave-summary-overlay__xp">XP total (wave): <strong>${summary.xpTotal}</strong></p>`);
   lines.push(
@@ -2956,6 +3145,23 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
   grid.appendChild(alcDiv);
   alcDiv.querySelector("#btn-crystal-alcance")!.addEventListener("click", () => {
     if (model.buyCrystalShopAlcance()) render();
+  });
+
+  const sorteN = m.crystalSorte ?? 0;
+  const sorteCost =
+    sorteN < CRYSTAL_SHOP_SORTE_MAX ? CRYSTAL_SHOP_SORTE_COST : null;
+  const sorteCanBuy = sorteCost != null && m.crystals >= sorteCost;
+  const sorteBtn = sorteCost != null ? `${sorteCost} 💎` : "—";
+  const sorteAria =
+    sorteCost != null
+      ? `Comprar sorte por ${sorteCost} cristais`
+      : "Limite máximo";
+  const sorteDiv = el(
+    `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Sorte: +${CRYSTAL_SHOP_SORTE_PER_BUY} · ${sorteN}/${CRYSTAL_SHOP_SORTE_MAX}${sorteCost != null ? "" : " — máx."}</span><button type="button" class="btn crystal-shop-buy-btn" id="btn-crystal-sorte" ${!sorteCanBuy ? "disabled" : ""} aria-label="${escapeHtml(sorteAria)}">${sorteBtn}</button></div>`,
+  );
+  grid.appendChild(sorteDiv);
+  sorteDiv.querySelector("#btn-crystal-sorte")!.addEventListener("click", () => {
+    if (model.buyCrystalShopSorte()) render();
   });
 
   const ic = m.initialCards;
@@ -3073,6 +3279,47 @@ function showCrystalShop(): void {
   });
 }
 
+function showColiseumSetup(): void {
+  hideGameTooltip();
+  removeEquipmentModal();
+  disposeMenu3dPreviews();
+  uiRoot.innerHTML = "";
+  const cards = COLISEUMS.map((c) => {
+    const m = formatEnemyMultPt(coliseumTierEnemyMultiplier(c.tier));
+    return `<button type="button" class="coliseum-pick-card" data-tier="${c.tier}">
+      <span class="coliseum-pick-card__title">${escapeHtml(c.title)}</span>
+      <span class="coliseum-pick-card__blurb">${escapeHtml(c.blurb)}</span>
+      <span class="coliseum-pick-card__meta" aria-hidden="true">Força inimiga base ×${m} · a dificuldade sobe a cada coliseu ao longo da run</span>
+    </button>`;
+  }).join("");
+  const s = el(`
+    <div class="screen screen--new-run-setup screen--coliseum-setup">
+      <div class="coliseum-setup-screen">
+        <h1 class="hero-setup-main-title">Escolhe o coliseu</h1>
+        <p class="hero-setup-hint">Começas na arena que escolheres; depois avanças por arenas cada vez maiores até ao <strong>Quinto coliseu</strong>, onde o imperador te espera na última onda.</p>
+        <div class="coliseum-pick-grid" role="group" aria-label="Coliseus">${cards}</div>
+        <div class="hero-setup-actions new-run-setup-actions">
+          <button type="button" class="btn" id="coliseum-btn-back">Voltar ao menu</button>
+        </div>
+      </div>
+    </div>
+  `);
+  uiRoot.appendChild(s);
+  s.querySelector("#coliseum-btn-back")!.addEventListener("click", () => {
+    model.phase = "main_menu";
+    render();
+  });
+  s.querySelectorAll<HTMLButtonElement>(".coliseum-pick-card").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const t = Number(btn.dataset.tier);
+      if (t < 1 || t > 5) return;
+      setup.coliseumTier = t as ColiseumTierId;
+      model.phase = "setup_heroes";
+      render();
+    });
+  });
+}
+
 function showHeroSetup(): void {
   disposeHeroSetupPreviews();
   hideGameTooltip();
@@ -3088,7 +3335,7 @@ function showHeroSetup(): void {
         <h1 id="hero-setup-main-title" class="hero-setup-main-title">Escolha até 3 heróis (${heroes.length}/${max})</h1>
         <div class="hero-slots-grid" id="hero-slots"></div>
         <div class="hero-setup-actions new-run-setup-actions">
-          <button type="button" class="btn" id="btn-back">Voltar ao menu</button>
+          <button type="button" class="btn" id="btn-back">Voltar</button>
           <button type="button" class="btn btn-primary" id="hero-setup-btn-next" ${heroes.length < 1 ? "disabled" : ""}>Selecionar</button>
         </div>
       </div>
@@ -3160,7 +3407,7 @@ function showHeroSetup(): void {
     render();
   });
   s.querySelector("#btn-back")!.addEventListener("click", () => {
-    model.phase = "main_menu";
+    model.phase = "setup_coliseum";
     render();
   });
 }
@@ -3343,6 +3590,7 @@ function showColorSetup(): void {
       biomes: setup.biomes.slice(0, heroes.length),
       colors: [...setup.colors],
       partySlotByHero: partySlotByHeroFromSlots(),
+      coliseumTier: setup.coliseumTier,
     });
     render();
   });
@@ -3401,7 +3649,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
       <div class="combat-sandbox-hero-row__actions">
         <button type="button" class="btn combat-sandbox-fly-btn" data-sandbox-toggle-fly="${escapeHtml(p.id)}" aria-pressed="${p.flying ? "true" : "false"}">${p.flying ? "Aterrar" : "Voar"}</button>
         <button type="button" class="btn combat-sandbox-level-btn" data-sandbox-level-up="${escapeHtml(p.id)}">Nv+1</button>
-        <button type="button" class="btn combat-sandbox-forma-btn" data-sandbox-forma-final="${escapeHtml(p.id)}" title="Abre o menu de forma final (nv. 60)">Forma final</button>
+        <button type="button" class="btn combat-sandbox-forma-btn" data-sandbox-forma-final="${escapeHtml(p.id)}" title="Abre o menu de forma final (nv. ${FORMA_FINAL_LEVEL})">Forma final</button>
         <button type="button" class="btn combat-sandbox-kill-btn" data-sandbox-kill-hero="${escapeHtml(p.id)}">Matar</button>
       </div>
     </div>`,
@@ -3421,7 +3669,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     <p class="combat-sandbox-panel__hero-hint">Herói: <strong>${heroLabelText}</strong> (turno ou primeiro vivo)</p>
     <section class="combat-sandbox-heroes" aria-label="Heróis sandbox">
       <h3 class="shop-sandbox-artifacts__title">Heróis</h3>
-      <p class="shop-sandbox-artifacts__hint">Voar / Aterrar altera o estado de voo (combate + modelo 3D). Nv+1 concede XP até subir um nível e abre o menu de artefato ou, no nível 60, o de forma final. Forma final abre esse menu já (nv. 60 se preciso, remove forma anterior). Matar remove o herói do combate (como morte).</p>
+      <p class="shop-sandbox-artifacts__hint">Voar / Aterrar altera o estado de voo (combate + modelo 3D). Nv+1 concede XP até subir um nível e abre o menu de artefato ou, no nível ${FORMA_FINAL_LEVEL}, o de forma final. Forma final abre esse menu já (nv. ${FORMA_FINAL_LEVEL} se preciso, remove forma anterior). Matar remove o herói do combate (como morte).</p>
       ${
         partyKillRows
           ? `<div class="combat-sandbox-heroes__list" role="group">${partyKillRows}</div>`
@@ -3632,10 +3880,9 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
         const cur = hNow?.artifacts[artId] ?? 0;
         const cap = getArtifactMaxStacks(artId);
         const state = `<p class="artifact-tt-sandbox-state"><strong>Acúmulos:</strong> ${cur}/${cap}</p>`;
-        const flavor =
-          def?.description && artId !== "tonico"
-            ? `<p class="artifact-tt-sandbox-flavor">${escapeHtml(def.description)}</p>`
-            : "";
+        const flavor = def?.description
+          ? `<p class="artifact-tt-sandbox-flavor">${escapeHtml(def.description)}</p>`
+          : "";
         return `<div class="game-ui-tooltip-inner game-ui-tooltip-inner--wide-artifact">${state}${flavor}${artifactCodexAllTiersHtml(artId, hNow ?? hero)}</div>`;
       });
     });
@@ -3717,6 +3964,7 @@ function mountGoldShopArtifactStrip(panel: HTMLElement, h: Unit): void {
       artifactTooltipHtml(aid, h.artifacts[aid] ?? 0, h, { showNext: true }),
     );
   });
+  bindArtifactMiniCardStackHover(strip, h);
 }
 
 function showGoldShop(isInitial: boolean): void {
@@ -3730,6 +3978,7 @@ function showGoldShop(isInitial: boolean): void {
   cancelGoldShopLayoutRaf();
   goldShopArtifactPage = 0;
   goldShopArtifactSig = "";
+  goldShopBatchSize = 1;
   refreshGoldShop = null;
   hideGameTooltip();
   goldShopBunker3d?.dispose();
@@ -3859,22 +4108,43 @@ function showGoldShop(isInitial: boolean): void {
       goldShopVizFocus = "hero";
       goldShopVizLastHeroId = h.id;
     }
+    const bunkerShop = model.bunkerForHeroHomeBiome(h);
+    const heroGridHidden =
+      bunkerShop && goldShopVizFocus === "bunker" ? " hidden" : "";
+    const heroGridAria =
+      bunkerShop && goldShopVizFocus === "bunker"
+        ? ' aria-hidden="true"'
+        : "";
+    const batch = goldShopBatchSize;
+    const goldBatchSegHtml = ([1, 5, 10] as const)
+      .map((n) => {
+        const active = batch === n ? " shop-gold-batch-btn--active" : "";
+        return `<button type="button" class="shop-gold-batch-btn${active}" data-gold-batch="${n}" aria-pressed="${batch === n ? "true" : "false"}">×${n}</button>`;
+      })
+      .join("");
+    const goldBatchWrapHtml = `<div id="shop-gold-batch-wrap" class="shop-gold-batch-wrap${heroGridHidden}"${heroGridAria}>
+      <span class="shop-gold-batch-wrap__label">Comprar</span>
+      <div class="shop-gold-batch-wrap__seg" role="group" aria-label="Quantidade por clique">${goldBatchSegHtml}</div>
+    </div>`;
     const list = GOLD_SHOP.map((it, si) => {
       const xpFull =
         it.id === "xp_pct" && (h.artifacts["_xp_shop"] ?? 0) >= 60;
-      const cant = h.ouro < it.cost || xpFull;
+      const okBuy = goldShopBatchAffordable(it, h, batch);
+      const cant = !okBuy || xpFull;
+      const totalCost = goldShopUnitCost(it, h) * batch;
+      const batchLabel = goldShopBatchLabel(it.id, batch);
       const ico = statIconWrap(goldShopStatIcon(it.id), si);
       const ariaBuy = cant
         ? xpFull
-          ? `${it.label}: limite de melhoria atingido`
-          : `${it.label}: ouro insuficiente (${it.cost} ouro)`
-        : `Comprar ${it.label} por ${it.cost} ouro`;
+          ? `${batchLabel}: limite de melhoria atingido`
+          : `${batchLabel}: ouro insuficiente ou lote maior que o permitido (${totalCost} ouro)`
+        : `Comprar ${batchLabel} por ${totalCost} ouro`;
       return `<button type="button" class="shop-item shop-item--gold-buy" data-gold-shop-item="${escapeHtml(it.id)}" ${cant ? "disabled" : ""} aria-label="${escapeHtml(ariaBuy)}">
         <span class="shop-item__row">
           <span class="shop-item__ico">${ico}</span>
           <span class="shop-item__meta">
-            <span class="shop-item__label">${escapeHtml(it.label)}</span>
-            <span class="shop-item__cost">${it.cost} ouro</span>
+            <span class="shop-item__label">${escapeHtml(batchLabel)}</span>
+            <span class="shop-item__cost">${totalCost} ouro</span>
           </span>
         </span>
       </button>`;
@@ -3912,7 +4182,6 @@ function showGoldShop(isInitial: boolean): void {
         </button>`;
       })
       .join("");
-    const bunkerShop = model.bunkerForHeroHomeBiome(h);
     const heroStatsColHtml = `
               <p class="shop-hero-stats-head">Atributos atuais</p>
               <div id="gold-shop-hero-stats" class="lol-stats-list gold-shop-hero-stats-grid"></div>
@@ -3923,9 +4192,13 @@ function showGoldShop(isInitial: boolean): void {
               <div class="shop-hero-artifacts-section">
                 <p class="shop-hero-stats-head">Artefatos</p>
                 <div class="shop-hero-artifacts-wrap" id="shop-hero-artifacts-wrap">
-                  <button type="button" class="shop-hero-artifacts-pager shop-hero-artifacts-pager--up" id="shop-artifacts-up" aria-label="Artefatos anteriores" hidden>▲</button>
-                  <div id="shop-hero-artifacts-strip" class="shop-hero-artifacts-strip" aria-label="Artefatos do herói"></div>
-                  <button type="button" class="shop-hero-artifacts-pager shop-hero-artifacts-pager--down" id="shop-artifacts-down" aria-label="Artefatos seguintes" hidden>▼</button>
+                  <div class="shop-hero-artifacts-main">
+                    <div id="shop-hero-artifacts-strip" class="shop-hero-artifacts-strip" aria-label="Artefatos do herói"></div>
+                    <div class="shop-hero-artifacts-pager-stack">
+                      <button type="button" class="shop-hero-artifacts-pager shop-hero-artifacts-pager--up" id="shop-artifacts-up" aria-label="Artefatos anteriores" hidden>▲</button>
+                      <button type="button" class="shop-hero-artifacts-pager shop-hero-artifacts-pager--down" id="shop-artifacts-down" aria-label="Artefatos seguintes" hidden>▼</button>
+                    </div>
+                  </div>
                 </div>
               </div>`;
     const vizAndGridBlock = bunkerShop
@@ -3934,9 +4207,7 @@ function showGoldShop(isInitial: boolean): void {
             goldShopVizFocus === "bunker"
               ? " shop-viz-turntable-inner--bunker"
               : "";
-          const heroGridHidden = goldShopVizFocus === "bunker" ? " hidden" : "";
           const bunkMidHidden = goldShopVizFocus === "hero" ? " hidden" : "";
-          const heroGridAria = goldShopVizFocus === "bunker" ? ' aria-hidden="true"' : "";
           const bunkMidAria = goldShopVizFocus === "hero" ? ' aria-hidden="true"' : "";
           return `<div class="shop-viz-flip-wrap">
         <div class="shop-viz-flip-row">
@@ -3968,6 +4239,7 @@ function showGoldShop(isInitial: boolean): void {
       </div>
         <div class="shop-mid-row">
           <div class="shop-mid-cell shop-mid-cell--gold">
+            ${goldBatchWrapHtml}
             <div id="shop-grid-hero-gold" class="shop-grid"${heroGridHidden}${heroGridAria}>${list}</div>
             <div id="shop-bunker-mid-block" class="shop-bunker-mid-block shop-bunker-mid-block--buys-only"${bunkMidHidden}${bunkMidAria}>
               <div id="shop-grid-bunker-gold" class="shop-grid shop-grid--bunker-buy">${goldShopBunkerBuyGridHtml(bunkerShop, h)}</div>
@@ -3984,6 +4256,7 @@ function showGoldShop(isInitial: boolean): void {
         </div>
         <div class="shop-mid-row">
           <div class="shop-mid-cell shop-mid-cell--gold">
+            ${goldBatchWrapHtml}
             <div id="shop-grid-hero-gold" class="shop-grid">${list}</div>
           </div>
         </div>`;
@@ -4023,6 +4296,15 @@ function showGoldShop(isInitial: boolean): void {
         applyGoldShopVizFocus(panel, true);
       });
     }
+    panel.querySelectorAll("[data-gold-batch]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const v = Number((btn as HTMLElement).dataset.goldBatch);
+        if (v === 1 || v === 5 || v === 10) {
+          goldShopBatchSize = v as GoldShopBatchSize;
+          queueRenderShop();
+        }
+      });
+    });
     panel.querySelectorAll("[data-gold-shop-item]").forEach((b) => {
       b.addEventListener("click", () => {
         const id = (b as HTMLElement).dataset.goldShopItem as GoldShopId;
@@ -4030,7 +4312,7 @@ function showGoldShop(isInitial: boolean): void {
         if (id && id in GOLD_SHOP_TAB_FOR_ITEM) {
           goldShopHeroStatsTabRef.current = GOLD_SHOP_TAB_FOR_ITEM[id];
         }
-        const ok = model.buyGoldItem(h.id, id);
+        const ok = model.buyGoldItem(h.id, id, goldShopBatchSize);
         if (!ok && id && id in GOLD_SHOP_TAB_FOR_ITEM) {
           goldShopHeroStatsTabRef.current = prevTab;
         }
@@ -4566,6 +4848,7 @@ function killWaveIntroTimers(): void {
 /** Após sair da loja (inicial ou entre waves): destaque da wave; `onFullyClosed` após fade + remoção do DOM. */
 function showWaveIntroOverlay(
   waveNum: number,
+  chosenColiseumTier: ColiseumTierId,
   onFullyClosed?: () => void,
 ): void {
   killWaveIntroTimers();
@@ -4573,8 +4856,11 @@ function showWaveIntroOverlay(
   const overlay = document.createElement("div");
   overlay.className = "wave-intro-overlay";
   overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-label", `Wave ${waveNum}`);
-  overlay.innerHTML = `<div class="wave-intro-inner game-ui-tooltip-inner"><div class="wave-intro-title">Wave ${waveNum}</div></div>`;
+  overlay.setAttribute(
+    "aria-label",
+    coliseumRunWaveTaglinePt(waveNum, chosenColiseumTier),
+  );
+  overlay.innerHTML = `<div class="wave-intro-inner game-ui-tooltip-inner"><div class="wave-intro-title">${escapeHtml(coliseumRunWaveTaglinePt(waveNum, chosenColiseumTier))}</div></div>`;
   const host = document.getElementById("app") ?? document.body;
   host.appendChild(overlay);
   const close = (): void => {
@@ -4885,6 +5171,34 @@ function formaFinalWeaponIconSvg(
     return `<svg class="lol-weapon-svg lol-weapon-svg--forma" viewBox="0 0 32 32" aria-hidden="true"><path fill="#4a2060" d="M16 4l3 8h7l-6 5 2 9-6-4-6 4 2-9-6-5h7z"/><circle cx="16" cy="24" r="4" fill="#220030" stroke="#aa66cc"/></svg>`;
   }
   return hudWeaponIconSvg(cls);
+}
+
+/** Silhueta humanoide + raios (aura explosiva) — progresso até forma final. */
+function formaFinalHumanoidAuraSvg(): string {
+  return `<svg class="lol-forma-final-silhouette-svg" viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <defs>
+    <radialGradient id="ffAuraGrad" cx="50%" cy="38%" r="58%">
+      <stop offset="0%" stop-color="#fff8e1" stop-opacity="0.95"/>
+      <stop offset="28%" stop-color="#ff7043" stop-opacity="0.72"/>
+      <stop offset="55%" stop-color="#b388ff" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#1a0f28" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="ffGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g class="lol-forma-final-burst" fill="none" stroke-linecap="round" filter="url(#ffGlow)">
+    <path stroke="#ffca28" stroke-width="2.2" d="M28 4v8M28 60v8M6 28h8M42 28h8"/>
+    <path stroke="#ff7043" stroke-width="1.6" opacity="0.9" d="M10 10l7 7M46 10l-7 7M10 62l7-7M46 62l-7-7"/>
+    <path stroke="#ea80fc" stroke-width="1.4" opacity="0.85" d="M28 2l4 10h-8zM54 28l-10 4v-8zM28 70l-4-10h8zM2 28l10-4v8z"/>
+  </g>
+  <ellipse cx="28" cy="36" rx="23" ry="28" fill="url(#ffAuraGrad)"/>
+  <circle cx="28" cy="24" r="8" fill="#ede7f6" stroke="#5e35b1" stroke-width="1.2"/>
+  <path d="M28 32 L18 54 L23 54 L28 42 L33 54 L38 54 Z" fill="#7e57c2" stroke="#311b92" stroke-width="1.1" stroke-linejoin="round"/>
+  <path d="M16 34 L10 44" stroke="#ede7f6" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M40 34 L46 44" stroke="#ede7f6" stroke-width="3.2" stroke-linecap="round"/>
+</svg>`;
 }
 
 function combatPassiveDescription(h: Unit): string {
@@ -5730,7 +6044,8 @@ function tooltipFormaFinalHudSlot(
   m: GameModel,
   isViewingActive: boolean,
 ): string {
-  const cur = Math.min(60, h.level);
+  const cap = FORMA_FINAL_LEVEL;
+  const cur = Math.min(cap, h.level);
   const ultNm =
     h.heroClass && h.ultimateId
       ? HEROES[h.heroClass].ultimates.find((x) => x.id === h.ultimateId)
@@ -5740,12 +6055,12 @@ function tooltipFormaFinalHudSlot(
     h.ultimateId && h.formaFinal && ultNm
       ? `Arma evoluída — ${ultNm}. O teu herói usa esta forma na arena (modelo 3D mais imponente).`
       : h.ultimateId
-        ? `Progresso ${tipInt(cur)}/60. Já escolheste uma forma final.`
-        : cur < 60
-          ? `${tipInt(cur)}/60 — a barra prismática enche quando sobem de nível.`
+        ? `Progresso ${tipInt(cur)}/${cap}. Já escolheste uma forma final.`
+        : cur < cap
+          ? `${tipInt(cur)}/${cap} — a barra prismática enche quando sobem de nível.`
           : isViewingActive && m.phase === "combat"
-            ? `60/60 — clica para escolher a tua forma final.`
-            : `60/60 — na tua vez em combate, clica aqui para escolher a forma final.`;
+            ? `${cap}/${cap} — clica para escolher a tua forma final.`
+            : `${cap}/${cap} — na tua vez em combate, clica aqui para escolher a forma final.`;
   return tooltipPassiveHtml("Níveis até a forma final", body);
 }
 
@@ -6079,7 +6394,7 @@ function unitCloneComFormaFinal(u: Unit, ultId: string): Unit {
   return { ...u, ultimateId: ultId };
 }
 
-/** Skill principal (W) / básico conforme a forma — para o menu nível 60. */
+/** Skill principal (W) / básico conforme a forma — para o menu da forma final. */
 function formaFinalPrimarySkillTooltip(u: Unit, m: GameModel): string {
   const cls = u.heroClass;
   if (!cls) return tooltipPassiveHtml("—", "—");
@@ -6319,10 +6634,14 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       "defense",
     );
     {
-      const effDmg = heroDanoPlusRoninOverflow(h);
-      const dmgDelta =
-        effDmg - heroDanoPlusRoninFromBaseline(b) + waveExtra;
-      const roninFlat = effDmg - h.dano;
+      const effDmg = m.computeBasicAttackRawDamage(h);
+      const baseRaw = roundToCombatDecimals(
+        heroDanoPlusRoninFromBaseline(b) +
+          waveExtra +
+          garraFerroRawBonusFromDefesaAndStacks(b.defesa, b.artifacts),
+      );
+      const dmgDelta = effDmg - baseRaw;
+      const roninFlat = heroDanoPlusRoninOverflow(h) - h.dano;
       const dmgDisp = formatTooltipNumber(effDmg);
       const dmgPair = valWithDelta(dmgDisp, dmgDelta, "int");
       let dmgPlain = dmgPair.plain;
@@ -6795,11 +7114,11 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
     cells.push({
       icon: "luck",
       label: "Sorte",
-      value: formatTooltipNumber(h.sorte),
+      value: formatTooltipNumber(m.effectiveSorte(h)),
       statCategory: "utility",
       tooltipHtml: combatHeroStatTooltip({
         stat: "luck",
-        display: formatTooltipNumber(h.sorte),
+        display: formatTooltipNumber(m.effectiveSorte(h)),
       }),
     });
     const flyDE = h.flying ? "Sim" : "Não";
@@ -7027,9 +7346,13 @@ function showCombatHUD(): void {
   const combatAboveBar = el(`<div class="combat-above-bar-actions">
       <div class="combat-above-bar-left">
         <div class="combat-artifacts-wrap" id="combat-artifacts-wrap">
-          <button type="button" class="combat-artifacts-pager combat-artifacts-pager--up" id="combat-artifacts-up" aria-label="Artefatos anteriores">▲</button>
-          <div class="combat-artifacts-strip" id="combat-artifacts-strip" aria-label="Artefatos"></div>
-          <button type="button" class="combat-artifacts-pager combat-artifacts-pager--down" id="combat-artifacts-down" aria-label="Artefatos seguintes">▼</button>
+          <div class="combat-artifacts-main">
+            <div class="combat-artifacts-strip" id="combat-artifacts-strip" aria-label="Artefatos"></div>
+            <div class="combat-artifacts-pager-stack">
+              <button type="button" class="combat-artifacts-pager combat-artifacts-pager--up" id="combat-artifacts-up" aria-label="Artefatos anteriores">▲</button>
+              <button type="button" class="combat-artifacts-pager combat-artifacts-pager--down" id="combat-artifacts-down" aria-label="Artefatos seguintes">▼</button>
+            </div>
+          </div>
         </div>
         <div class="combat-above-rarity combat-rarity-hint" id="combat-rarity-hint" aria-live="polite"></div>
       </div>
@@ -7079,7 +7402,6 @@ function showCombatHUD(): void {
           <div class="lol-loadout">
           <div class="lol-col lol-col-passive">
             <div class="lol-weapon-passive-row">
-              <div class="lol-weapon-slot" id="lol-weapon-slot" role="img" tabindex="0"></div>
               <div class="lol-skill-slot lol-skill-slot--passive" id="lol-passive-slot">P</div>
             </div>
           </div>
@@ -7183,7 +7505,12 @@ function showCombatHUD(): void {
       </div>
     </div>
   `);
+  const combatArtifactsDock = el(
+    `<div class="combat-hud-artifacts-dock"><button type="button" class="btn btn-combat-hud-artifacts" id="combat-corner-artifact-btn" title="Consulta de artefatos (A)">Artefatos</button></div>`,
+  ) as HTMLElement;
   const combatDockStack = el(`<div class="combat-bottom-stack"></div>`);
+  /* Artefatos: imediatamente acima da barra escura (Encerrar turno / raridade), não por cima do painel LOL. */
+  combatDockStack.appendChild(combatArtifactsDock);
   combatDockStack.appendChild(combatAboveBar);
   combatDockStack.appendChild(bottom);
   const combatCornerLayer = el(`<div class="combat-corner-layer" id="combat-corner-layer" hidden>
@@ -7209,10 +7536,9 @@ function showCombatHUD(): void {
     "#combat-corner-mov",
   ) as HTMLElement;
   const syncCombatCornerStackOffset = (): void => {
-    combatCornerLayer.style.setProperty(
-      "--combat-stack-h",
-      `${Math.ceil(combatDockStack.getBoundingClientRect().height)}px`,
-    );
+    const h = `${Math.ceil(combatDockStack.getBoundingClientRect().height)}px`;
+    combatCornerLayer.style.setProperty("--combat-stack-h", h);
+    uiRoot.style.setProperty("--combat-stack-h", h);
   };
   combatCornerResizeObserver = new ResizeObserver(syncCombatCornerStackOffset);
   combatCornerResizeObserver.observe(combatDockStack);
@@ -7224,6 +7550,10 @@ function showCombatHUD(): void {
   uiRoot.appendChild(enemyInspectPanel);
   uiRoot.appendChild(turnOrderWrap);
   uiRoot.appendChild(combatCornerLayer);
+  const lolFormaFinalDock = el(
+    `<div id="lol-forma-final-dock" class="lol-forma-final-dock" hidden aria-hidden="true"></div>`,
+  ) as HTMLElement;
+  uiRoot.appendChild(lolFormaFinalDock);
   uiRoot.appendChild(combatDockStack);
   requestAnimationFrame(() => syncCombatCornerStackOffset());
   mountCombatSandboxDevtools(combatInputSignal);
@@ -7231,7 +7561,6 @@ function showCombatHUD(): void {
   const lolBravuraBadge = bottom.querySelector(
     "#lol-bravura-badge",
   ) as HTMLElement | null;
-  const lolWeaponSlot = bottom.querySelector("#lol-weapon-slot") as HTMLElement;
   const lolPassiveSlot = bottom.querySelector("#lol-passive-slot") as HTMLElement;
   const actionRow = bottom.querySelector("#action-row")!;
   const lolStatsGrid = bottom.querySelector("#lol-stats-grid") as HTMLElement;
@@ -7397,7 +7726,7 @@ function showCombatHUD(): void {
           <span class="wave-stipend-bar" style="--wave-tick:0.5"></span>
           <span class="wave-stipend-bar" style="--wave-tick:0.32"></span>
         </div>
-        <div class="wave-stipend-count" role="status" aria-label="Wave atual">Wave <strong id="combat-wave-num">${model.wave}</strong></div>
+        <div class="wave-stipend-count" role="status" aria-label="Onda atual">${escapeHtml(coliseumTitleAtRunWave(model.wave, model.coliseumTier))} · onda <strong id="combat-wave-num">${waveIndexWithinColiseumPhase(model.wave)}</strong>/20</div>
       </div>`;
     }
     const oddsEl = combatAboveBar.querySelector("#combat-rarity-hint");
@@ -7484,7 +7813,7 @@ function showCombatHUD(): void {
       bindGameTooltip(el, () =>
         tooltipPassiveHtml(
           FORGE_ESSENCE_LABELS[id],
-          `Quantidade: ${model.meta.essences[id] ?? 0}. Dropa ao derrotar inimigos no bioma correspondente.`,
+          `Quantidade: ${model.meta.essences[id] ?? 0}. O tipo segue o bioma do hex onde o inimigo morre; no castelo (centro) o tipo é aleatório entre os biomas de combate.`,
         ),
       );
     });
@@ -7553,6 +7882,7 @@ function showCombatHUD(): void {
             }),
           );
         });
+        bindArtifactMiniCardStackHover(artStrip, h);
       }
     } else {
       combatArtifactStripSig = "";
@@ -7616,7 +7946,63 @@ function showCombatHUD(): void {
           `<div class="turn-order-row"><span class="turn-order-idx">${seq}</span><span class="turn-order-tile-wrap"><span class="${cls}" style="${escapeHtml(bgSt)}" data-unit-id="${escapeHtml(uid)}" role="button" tabindex="0" title="${escapeHtml(heroDisp)}" aria-label="${escapeHtml(heroDisp)}"></span>${bravBadge}</span></div>`,
       });
     }
-    const focusKey = `${model.inEnemyPhase ? "E" : "P"}:${model.inEnemyPhase ? (model.lastEnemyActedId ?? "") : (model.currentHero()?.id ?? "")}`;
+    for (const id of order) {
+      const u = model.units.find((x) => x.id === id);
+      if (!u || u.hp <= 0 || !u.isPlayer) continue;
+      const stacks = Math.min(3, Math.max(0, u.artifacts["coroa_ferro"] ?? 0));
+      if (stacks <= 0) continue;
+      let cls = "turn-tile turn-chip turn-summon";
+      if (
+        model.inSummonPhase &&
+        model.currentSummonOwnerId === u.id &&
+        !model.currentSummonActorId
+      ) {
+        cls += " turn-active";
+      }
+      const bgSt = turnTileBackgroundStyle(
+        true,
+        heroSplashDataUrl(u.heroClass!),
+      );
+      const disp = `Espada flamejante (${u.name})`;
+      const summonKey = `summon:${u.id}`;
+      turnEntries.push({
+        unitId: summonKey,
+        rowHtml: (seq: number) =>
+          `<div class="turn-order-row"><span class="turn-order-idx">${seq}</span><span class="turn-order-tile-wrap"><span class="${cls}" style="${escapeHtml(bgSt)}" data-unit-id="${escapeHtml(summonKey)}" role="button" tabindex="0" title="${escapeHtml(disp)}" aria-label="${escapeHtml(disp)}"></span><span class="turn-order-summon-badge" role="img" aria-label="Invocação">Inv</span></span></div>`,
+      });
+    }
+    for (const su of model.units) {
+      if (!su.isAllySummon || su.hp <= 0) continue;
+      const own = model.units.find((x) => x.id === su.summonOwnerHeroId);
+      if (!own || !own.isPlayer || own.hp <= 0 || !own.heroClass) continue;
+      let cls = "turn-tile turn-chip turn-summon";
+      if (model.inSummonPhase && model.currentSummonActorId === su.id) {
+        cls += " turn-active";
+      }
+      const bgSt = turnTileBackgroundStyle(
+        true,
+        heroSplashDataUrl(own.heroClass),
+      );
+      const isGolem = su.summonKind === "mega_golem";
+      const disp = isGolem
+        ? `Mega golem (${own.name})`
+        : `Sombra (${own.name})`;
+      const badge = isGolem ? "Gol" : "Som";
+      const badgeAria = isGolem ? "Mega golem" : "Sombra";
+      const uid = su.id;
+      turnEntries.push({
+        unitId: uid,
+        rowHtml: (seq: number) =>
+          `<div class="turn-order-row"><span class="turn-order-idx">${seq}</span><span class="turn-order-tile-wrap"><span class="${cls}" style="${escapeHtml(bgSt)}" data-unit-id="${escapeHtml(uid)}" role="button" tabindex="0" title="${escapeHtml(disp)}" aria-label="${escapeHtml(disp)}"></span><span class="turn-order-summon-badge" role="img" aria-label="${escapeHtml(badgeAria)}">${escapeHtml(badge)}</span></span></div>`,
+      });
+    }
+    const focusKey = model.inEnemyPhase
+      ? `E:${model.lastEnemyActedId ?? ""}`
+      : model.inSummonPhase
+        ? model.currentSummonActorId
+          ? `A:${model.currentSummonActorId}`
+          : `S:${model.currentSummonOwnerId ?? ""}`
+        : `P:${model.currentHero()?.id ?? ""}`;
     if (focusKey !== combatLastTurnFocusKey) {
       combatLastTurnFocusKey = focusKey;
       combatTurnOrderUserAdjusted = false;
@@ -7628,6 +8014,18 @@ function showCombatHUD(): void {
         if (id) {
           const ix = turnEntries.findIndex((t) => t.unitId === id);
           if (ix >= 0) currentTurnIdx = ix;
+        }
+      } else if (model.inSummonPhase) {
+        const aid = model.currentSummonActorId;
+        if (aid) {
+          const ix = turnEntries.findIndex((t) => t.unitId === aid);
+          if (ix >= 0) currentTurnIdx = ix;
+        } else {
+          const id = model.currentSummonOwnerId;
+          if (id) {
+            const ix = turnEntries.findIndex((t) => t.unitId === `summon:${id}`);
+            if (ix >= 0) currentTurnIdx = ix;
+          }
         }
       } else {
         const ch = model.currentHero();
@@ -7678,12 +8076,19 @@ function showCombatHUD(): void {
     (turnEl as HTMLElement).onclick = (ev: MouseEvent) => {
       const t = (ev.target as HTMLElement).closest("[data-unit-id]");
       if (!t) return;
-      const id = t.getAttribute("data-unit-id");
-      if (!id) return;
+      const rowId = t.getAttribute("data-unit-id");
+      if (!rowId) return;
+      const summonOwnerId = rowId.startsWith("summon:")
+        ? rowId.slice("summon:".length)
+        : null;
+      const id = summonOwnerId ?? rowId;
       const u = model.units.find((x) => x.id === id);
       if (!u || u.hp <= 0) return;
       view.focusOnAxial(u.q, u.r, u.isPlayer);
-      if (u.isPlayer) {
+      if (u.isAllySummon) {
+        combatInspectEnemyId = null;
+        combatLolInspectHeroId = null;
+      } else if (u.isPlayer) {
         combatInspectEnemyId = null;
         const ch = model.currentHero();
         combatLolInspectHeroId =
@@ -7695,12 +8100,15 @@ function showCombatHUD(): void {
     };
     const btnEnd = combatAboveBar.querySelector("#btn-end") as HTMLButtonElement;
     btnEnd.disabled =
-      model.inEnemyPhase || model.hasPendingCombatSchedule();
+      model.inEnemyPhase ||
+      model.inSummonPhase ||
+      model.hasPendingCombatSchedule();
     const btnCancel = combatAboveBar.querySelector(
       "#btn-cancel-sel",
     ) as HTMLButtonElement;
     const showCancel =
       !model.inEnemyPhase &&
+      !model.inSummonPhase &&
       (movePreviewActive || pendingCombat != null) &&
       !!(activeHero && activeHero.heroClass);
     btnCancel.classList.toggle("combat-btn--hidden", !showCancel);
@@ -7918,29 +8326,32 @@ function showCombatHUD(): void {
       combatHeroStatsTabRef,
     );
     if (h.heroClass) {
-      clearGameTooltipHandlers(lolWeaponSlot);
-      lolWeaponSlot.removeAttribute("aria-label");
-      const barPct = Math.min(1, Math.min(h.level, 60) / 60);
+      clearGameTooltipHandlers(lolFormaFinalDock);
+      lolFormaFinalDock.removeAttribute("aria-label");
+      const formaCap = FORMA_FINAL_LEVEL;
+      const barPct = Math.min(1, Math.min(h.level, formaCap) / formaCap);
       const formaReady =
         model.phase === "combat" &&
         isViewingActive &&
-        h.level >= 60 &&
+        h.level >= formaCap &&
         !h.ultimateId &&
         !bunkHud;
       const readyCls = formaReady ? " lol-forma-final-slot--ready" : "";
       const formaEvolved = !!(h.ultimateId && h.formaFinal);
-      const slotWeaponIco = formaEvolved
-        ? formaFinalWeaponIconSvg(h.heroClass, h.ultimateId!)
-        : hudWeaponIconSvg(h.heroClass);
+      const evolvedBadge = formaEvolved
+        ? `<span class="lol-forma-final-evolved-badge" aria-hidden="true">${formaFinalWeaponIconSvg(h.heroClass, h.ultimateId!)}</span>`
+        : "";
       const slotTitle = "Forma final";
-      lolWeaponSlot.innerHTML = `<button type="button" class="lol-forma-final-slot${formaEvolved ? " lol-forma-final-slot--evolved" : ""}${readyCls}" style="--forma-pct:${barPct}" ${formaReady ? "" : "disabled"} aria-label="Forma final">
-<span class="lol-forma-final-ico-wrap" aria-hidden="true">${slotWeaponIco}</span>
+      const lvShow = Math.min(formaCap, h.level);
+      lolFormaFinalDock.innerHTML = `<button type="button" class="lol-forma-final-slot lol-forma-final-slot--dock-vertical${formaEvolved ? " lol-forma-final-slot--evolved" : ""}${readyCls}" style="--forma-pct:${barPct}" ${formaReady ? "" : "disabled"} aria-label="Forma final — nível ${lvShow} de ${formaCap}">
 <span class="lol-forma-final-title">${escapeHtml(slotTitle)}</span>
-<span class="lol-forma-final-track" aria-hidden="true"><span class="lol-forma-final-fill"></span></span>
-<span class="lol-forma-final-meta" aria-hidden="true">${Math.min(60, h.level)}/60</span>
+<span class="lol-forma-final-ico-wrap lol-forma-final-ico-wrap--humanoid" aria-hidden="true">${formaFinalHumanoidAuraSvg()}${evolvedBadge}</span>
+<span class="lol-forma-final-track-v" aria-hidden="true"><span class="lol-forma-final-fill-v"></span></span>
+<span class="lol-forma-final-meta" aria-hidden="true">${lvShow}/${formaCap}</span>
 </button>`;
-      lolWeaponSlot.style.display = "";
-      const formaBtn = lolWeaponSlot.querySelector(
+      lolFormaFinalDock.hidden = false;
+      lolFormaFinalDock.removeAttribute("aria-hidden");
+      const formaBtn = lolFormaFinalDock.querySelector(
         "button.lol-forma-final-slot",
       ) as HTMLButtonElement | null;
       if (formaBtn) {
@@ -7955,10 +8366,11 @@ function showCombatHUD(): void {
         });
       }
     } else {
-      clearGameTooltipHandlers(lolWeaponSlot);
-      lolWeaponSlot.removeAttribute("aria-label");
-      lolWeaponSlot.innerHTML = "";
-      lolWeaponSlot.style.display = "none";
+      clearGameTooltipHandlers(lolFormaFinalDock);
+      lolFormaFinalDock.removeAttribute("aria-label");
+      lolFormaFinalDock.innerHTML = "";
+      lolFormaFinalDock.hidden = true;
+      lolFormaFinalDock.setAttribute("aria-hidden", "true");
     }
     bindGameTooltip(lolPassiveSlot, () =>
       tooltipPassiveHtml("Passiva", combatPassiveDescription(h)),
@@ -8225,10 +8637,14 @@ function showCombatHUD(): void {
             const tiroCharges = h.tiroDestruidorCharges ?? 0;
             const tiroNoCharges =
               !model.devSandboxMode && tiroCharges < 1;
+            const tiroCdShow =
+              model.sandboxNoCdUltEnabled() || tiroCharges >= 1
+                ? 0
+                : h.skillCd["tiro_destruidor"] ?? 0;
             addSkillBtn(
               "tiro_destruidor",
               tiroSk.name,
-              h.skillCd["tiro_destruidor"] ?? 0,
+              tiroCdShow,
               tiroNoCharges,
               tiroSk,
             );
@@ -8434,6 +8850,11 @@ function showCombatHUD(): void {
     combatTurnOrderPage = combatTurnOrderPage + 1;
     update();
   });
+  document
+    .getElementById("combat-corner-artifact-btn")
+    ?.addEventListener("click", () => {
+      openCombatArtifactReferenceOverlay();
+    });
 
   document.addEventListener(
     "keydown",
@@ -8449,6 +8870,13 @@ function showCombatHUD(): void {
       )
         return;
       if (runPauseOpen) return;
+      if (ev.code === "KeyA") {
+        if (model.phase === "combat" && !model.inEnemyPhase) {
+          ev.preventDefault();
+          openCombatArtifactReferenceOverlay();
+        }
+        return;
+      }
       if (model.phase !== "combat" || model.inEnemyPhase) return;
       if (model.hasPendingCombatSchedule()) return;
       if (view.isUnitMoveAnimating()) return;
@@ -8849,9 +9277,35 @@ function showLevelPick(): void {
       ? 0
       : ARTIFACT_PICK_PAID_CRYSTAL_COST;
   const banBtnActive = p.banMode ? " artifact-pick-ban-btn--active" : "";
+  const ownedChips =
+    hero != null
+      ? Object.entries(hero.artifacts)
+          .filter(([id, n]) => n > 0 && !id.startsWith("_"))
+          .sort(([a], [b]) => a.localeCompare(b))
+      : [];
+  const ownedBlock =
+    hero != null
+      ? ownedChips.length === 0
+        ? `<div class="artifact-pick-owned" aria-label="Artefatos atuais"><p class="artifact-pick-owned__title">Os teus artefatos</p><p class="artifact-pick-owned__empty">Ainda sem artefatos neste herói.</p></div>`
+        : `<div class="artifact-pick-owned" aria-label="Artefatos atuais"><p class="artifact-pick-owned__title">Os teus artefatos</p><div class="artifact-pick-owned__chips" role="list">${ownedChips
+            .map(([id, n]) => {
+              const nm = pickChoiceDisplayName(id);
+              const rare = pickChoiceRarity(id);
+              const rCls = rare
+                ? artifactRarityClass(rare)
+                : "artifact-rarity--common";
+              const label = `${nm} ${artifactStackCounterLabel(id, n)}`;
+              return `<div class="artifact-pick-owned-card ${rCls}" role="listitem" tabindex="0" data-artifact-owned-id="${escapeHtml(id)}" aria-label="${escapeHtml(label)}">
+                <div class="artifact-pick-owned-card__art">${artifactCardInnerHtml(id)}</div>
+                <span class="artifact-pick-owned-card__badge">${escapeHtml(artifactStackCounterLabel(id, n))}</span>
+              </div>`;
+            })
+            .join("")}</div></div>`
+      : "";
   const s = el(`<div class="modal modal--crystal"><div class="modal-inner modal-inner--artifact-pick">
     <h2 class="crystal-modal-title">Escolha um artefato — ${heroLine}</h2>
-    <p class="artifact-pick-hint">Passe o rato sobre a carta para ver o próximo nível. Ative <strong>Banir</strong>, paira num artefato (fica vermelho) e clica para retirá-lo da run.</p>
+    <p class="artifact-pick-hint">Passe o rato sobre a carta para ver o <strong>efeito atual</strong> (e o que ganhas se escolheres). Ative <strong>Banir</strong>, paira num artefato (fica vermelho) e clica para retirá-lo da run.</p>
+    ${ownedBlock}
     <div id="opts" class="artifact-pick-grid"></div>
     <div class="artifact-pick-actions artifact-pick-actions--split">
       <button type="button" class="btn artifact-pick-ban-btn${banBtnActive}" id="btn-artifact-ban-mode" aria-pressed="${p.banMode ? "true" : "false"}">
@@ -8873,6 +9327,16 @@ function showLevelPick(): void {
     </div>
   </div></div>`);
   uiRoot.appendChild(s);
+  if (hero) {
+    s.querySelectorAll<HTMLElement>("[data-artifact-owned-id]").forEach((node) => {
+      const aid = node.dataset.artifactOwnedId;
+      if (!aid) return;
+      const stacks = hero.artifacts[aid] ?? 0;
+      bindGameTooltip(node, () =>
+        artifactTooltipHtml(aid, stacks, hero, { showNext: false }),
+      );
+    });
+  }
   const btnBan = s.querySelector("#btn-artifact-ban-mode") as HTMLButtonElement;
   btnBan.addEventListener("click", () => {
     model.toggleArtifactPickBanMode();
@@ -8888,11 +9352,9 @@ function showLevelPick(): void {
   const opts = s.querySelector("#opts")!;
   for (const id of p.choices) {
     const stacks = hero?.artifacts[id] ?? 0;
-    const max = id.startsWith("_pick") ? 1 : getArtifactMaxStacks(id);
-    const afterPick = id.startsWith("_pick")
-      ? 1
-      : Math.min(max, stacks + 1);
-    const tier = id.startsWith("_pick") ? "—" : `${afterPick}/${max}`;
+    const tier = id.startsWith("_pick")
+      ? "—"
+      : artifactStackCounterLabel(id, stacks);
     const dispName = pickChoiceDisplayName(id);
     const rare = pickChoiceRarity(id);
     const rCls = rare
@@ -8904,9 +9366,9 @@ function showLevelPick(): void {
     const b = el(
       `<button type="button" class="artifact-pick-card ${rCls}" data-artifact="${escapeHtml(id)}">
         <span class="artifact-pick-card__rarity">${escapeHtml(rarityLine)}</span>
-        <span class="artifact-pick-card__tier">${tier}</span>
         <div class="artifact-pick-card__art">${artifactCardInnerHtml(id)}</div>
         <span class="artifact-pick-card__name">${escapeHtml(dispName)}</span>
+        <span class="artifact-pick-card__badge" aria-hidden="true">${escapeHtml(tier)}</span>
       </button>`,
     );
     if (hero) {
@@ -8996,6 +9458,32 @@ function showUltimatePick(): void {
   });
 }
 
+function showColiseumCleared(): void {
+  hideGameTooltip();
+  removeEquipmentModal();
+  uiRoot.innerHTML = "";
+  const title = escapeHtml(model.coliseuClearedTitle ?? "Coliseu concluído!");
+  const s = el(`
+    <div class="screen screen--crystal-veil screen--coliseum-cleared">
+      <h1 class="hero-setup-main-title">${title}</h1>
+      <p class="crystal-endgame-copy">Cristais da run foram adicionados à tua conta. Podes continuar para ondas mais difíceis ou voltar ao menu.</p>
+      <p class="crystal-endgame-copy crystal-endgame-copy--sub">Se continuar, os inimigos ficam <strong>2× mais fortes</strong> a cada 5 ondas (21–25, 26–30, …).</p>
+      <div class="coliseum-cleared-actions">
+        <button type="button" class="btn btn-primary" id="coliseum-cleared-continue">Continuar</button>
+        <button type="button" class="btn" id="coliseum-cleared-ok">Menu principal</button>
+      </div>
+    </div>`);
+  uiRoot.appendChild(s);
+  s.querySelector("#coliseum-cleared-continue")!.addEventListener("click", () => {
+    model.continueRunAfterColiseuMilestone();
+    render();
+  });
+  s.querySelector("#coliseum-cleared-ok")!.addEventListener("click", () => {
+    model.dismissColiseumClearedScreen();
+    render();
+  });
+}
+
 function showVictory(): void {
   hideGameTooltip();
   removeEquipmentModal();
@@ -9003,7 +9491,7 @@ function showVictory(): void {
   const s = el(`
     <div class="screen screen--crystal-veil screen--victory-end">
       <h1 class="hero-setup-main-title">Vitória!</h1>
-      <p class="crystal-endgame-copy">Zeraste a arena — wave ${FINAL_VICTORY_WAVE}.</p>
+      <p class="crystal-endgame-copy">Venceste o Quinto coliseu: o imperador caiu. Run completa (${FINAL_VICTORY_WAVE} ondas).</p>
       <button class="btn btn-primary" id="ok">Menu</button>
     </div>`);
   uiRoot.appendChild(s);
@@ -9159,6 +9647,9 @@ function render(): void {
   } else if (model.phase === "crystal_shop") {
     canvas.style.opacity = "0.35";
     showCrystalShop();
+  } else if (model.phase === "setup_coliseum") {
+    canvas.style.opacity = "0.62";
+    showColiseumSetup();
   } else if (model.phase === "setup_heroes") {
     canvas.style.opacity = "0.62";
     showHeroSetup();
@@ -9199,13 +9690,20 @@ function render(): void {
     }
     if (prevPhase === "shop_initial" || prevPhase === "shop_wave") {
       requestAnimationFrame(() =>
-        showWaveIntroOverlay(model.wave, releaseEnemyPhaseAfterWaveIntroOrCometa),
+        showWaveIntroOverlay(
+          model.wave,
+          model.coliseumTier,
+          releaseEnemyPhaseAfterWaveIntroOrCometa,
+        ),
       );
     }
   } else if (model.phase === "level_up_pick") {
     showLevelPick();
   } else if (model.phase === "ultimate_pick") {
     showUltimatePick();
+  } else if (model.phase === "coliseum_cleared") {
+    canvas.style.opacity = "0.4";
+    showColiseumCleared();
   } else if (model.phase === "victory") {
     canvas.style.opacity = "0.4";
     showVictory();
@@ -9230,32 +9728,43 @@ function render(): void {
   );
   if (mv) {
     const segMs = mv.segmentMs ?? UNIT_MOVE_SEGMENT_MS;
-    view.queueUnitMoveAlongCells(mv.unitId, mv.cells, mv.segmentMs, {
-      playHeroRun: mv.playHeroRunAnim === true,
-    });
-    const segs = Math.max(0, mv.cells.length - 1);
-    const totalMs = segs * segMs;
-    const dest = mv.cells[mv.cells.length - 1];
-    if (dest && model.phase === "combat") {
-      const b = model.bunkerAtHex(dest.q, dest.r);
-      if (b && b.hp > 0) {
-        view.scheduleHeroHideInBunkerAfterMove(mv.unitId, totalMs);
-        // SFX deve tocar quando a animação realmente chegar ao bunker.
+    if (mv.kind === "flamingSword") {
+      view.queueFlamingSwordMoveAlongCells(mv.heroId, mv.cells, mv.segmentMs);
+      const segs = Math.max(0, mv.cells.length - 1);
+      const totalMs = segs * segMs;
+      if (totalMs > 0) {
         window.setTimeout(() => {
-          if (model.phase !== "combat") return;
-          const hero = model.units.find((u) => u.id === mv.unitId);
-          const bunk = model.bunkerAtHex(dest.q, dest.r);
-          if (!hero || hero.hp <= 0) return;
-          if (!bunk || bunk.hp <= 0) return;
-          if (hero.q !== dest.q || hero.r !== dest.r) return;
-          playWeaponsCock();
-        }, totalMs + 10);
+          render();
+        }, totalMs + 20);
       }
-    }
-    if (totalMs > 0) {
-      window.setTimeout(() => {
-        render();
-      }, totalMs + 20);
+    } else {
+      view.queueUnitMoveAlongCells(mv.unitId, mv.cells, mv.segmentMs, {
+        playHeroRun: mv.playHeroRunAnim === true,
+      });
+      const segs = Math.max(0, mv.cells.length - 1);
+      const totalMs = segs * segMs;
+      const dest = mv.cells[mv.cells.length - 1];
+      if (dest && model.phase === "combat") {
+        const b = model.bunkerAtHex(dest.q, dest.r);
+        if (b && b.hp > 0) {
+          view.scheduleHeroHideInBunkerAfterMove(mv.unitId, totalMs);
+          // SFX deve tocar quando a animação realmente chegar ao bunker.
+          window.setTimeout(() => {
+            if (model.phase !== "combat") return;
+            const hero = model.units.find((u) => u.id === mv.unitId);
+            const bunk = model.bunkerAtHex(dest.q, dest.r);
+            if (!hero || hero.hp <= 0) return;
+            if (!bunk || bunk.hp <= 0) return;
+            if (hero.q !== dest.q || hero.r !== dest.r) return;
+            playWeaponsCock();
+          }, totalMs + 10);
+        }
+      }
+      if (totalMs > 0) {
+        window.setTimeout(() => {
+          render();
+        }, totalMs + 20);
+      }
     }
   }
   const showBunkers =
@@ -9320,6 +9829,22 @@ model.subscribe(() => {
     if (model.inEnemyPhase && model.lastEnemyActedId) {
       const eu = model.units.find((x) => x.id === model.lastEnemyActedId);
       if (eu && eu.hp > 0) view.focusOnAxial(eu.q, eu.r);
+    } else if (model.inSummonPhase && model.currentSummonActorId) {
+      const su = model.units.find((x) => x.id === model.currentSummonActorId);
+      if (su && su.hp > 0 && su.isAllySummon) {
+        view.focusOnAxial(su.q, su.r);
+      }
+    } else if (model.inSummonPhase && model.currentSummonOwnerId) {
+      const hu = model.units.find((x) => x.id === model.currentSummonOwnerId);
+      const fp = hu?.flamingSwordPos;
+      if (
+        hu &&
+        hu.hp > 0 &&
+        fp &&
+        (hu.artifacts["coroa_ferro"] ?? 0) > 0
+      ) {
+        view.focusOnAxial(fp.q, fp.r);
+      }
     }
   }
   schedulePersistRunSessionCheckpoint();
@@ -9551,7 +10076,8 @@ function isRunPhaseForPauseMenu(phase: GamePhase): boolean {
     phase === "combat" ||
     phase === "wave_summary" ||
     phase === "level_up_pick" ||
-    phase === "ultimate_pick"
+    phase === "ultimate_pick" ||
+    phase === "coliseum_cleared"
   );
 }
 

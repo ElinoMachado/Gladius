@@ -17,7 +17,7 @@ export const HERO_STAT_TIP: Record<StatIconId, string> = {
   regen_hp: "Regeneração de vida por turno.",
   regen_mp: "Regeneração de mana por turno.",
   lifesteal: "Roubo de vida.",
-  pot: "Cura / poção.",
+  pot: "Potencial de cura e escudo (efeito em curas e escudos).",
   luck: "Sorte (drops, efeitos aleatórios).",
   fly: "Voo: ignora terreno e alguns bloqueios.",
   kills: "Abates.",

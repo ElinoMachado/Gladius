@@ -1,9 +1,9 @@
 import type { WaveConfig } from "../types";
+import { XP_FORMA_TOTAL } from "./coliseums";
 
 /** Vitória da run ao limpar esta wave (100 ondas no total). */
 export const FINAL_VICTORY_WAVE = 100;
 
-export const XP_TARGET_TOTAL_LEVEL_60 = 2000;
 export const XP_PACING_DEFAULT_BIOME_COUNT = 3;
 
 export type EnemyTier = "grunt" | "elite" | "boss" | "emperor";
@@ -656,9 +656,9 @@ export function killXpScaleForParty(
   partySize: number,
   biomeCount: number = XP_PACING_DEFAULT_BIOME_COUNT,
 ): number {
-  const s50 = cumulativeKillXpRawThroughWave(50, partySize, biomeCount);
-  if (s50 <= 0) return 1;
-  return XP_TARGET_TOTAL_LEVEL_60 / s50;
+  const cum12 = cumulativeKillXpRawThroughWave(12, partySize, biomeCount);
+  if (cum12 <= 0) return 1;
+  return (partySize * XP_FORMA_TOTAL) / cum12;
 }
 
 export function waveConfigFromIndex(wave: number): WaveConfig {
@@ -700,7 +700,7 @@ export function enemyLootSummaryLines(e: EnemyArchetype): string[] {
     );
   } else {
     lines.push(
-      "Essência: chance por onda + sorte; só se o assassino estiver num bioma de combate.",
+      "Essência: chance por onda + sorte do herói que recebe o loot; o tipo segue o bioma do hex onde o inimigo morre (no castelo/hub, essência aleatória entre os biomas de combate).",
     );
   }
   if (e.flying) lines.push("Voo: atravessa biomas sem passar pelo hub.");

@@ -6,19 +6,20 @@ import {
   partyScaleMultiplier,
   waveMultiplier,
   XP_PACING_DEFAULT_BIOME_COUNT,
-  XP_TARGET_TOTAL_LEVEL_60,
 } from "./data/enemies";
-import type {
-  BiomeId,
-  ForgeHeroLoadout,
-  HeroClassId,
-  HeroStatBaseline,
-  MetaProgress,
-  TeamColor,
-  Unit,
-  WeaponLevel,
+import { FORMA_FINAL_LEVEL, XP_FORMA_TOTAL } from "./data/coliseums";
+import {
+  CRYSTAL_SHOP_SORTE_PER_BUY,
+  type BiomeId,
+  type ForgeHeroLoadout,
+  type HeroClassId,
+  type HeroStatBaseline,
+  type MetaProgress,
+  type TeamColor,
+  type Unit,
+  type WeaponLevel,
 } from "./types";
-import { priestPassivePotencialPoints } from "./weaponData";
+import { normalizeWeaponLevel, priestPassivePotencialPoints } from "./weaponData";
 import { applyForgeGearToUnit } from "./forge";
 import { applyPartyBonusToUnit, computePartyBonus } from "./colorSynergy";
 import {
@@ -129,7 +130,9 @@ export function createHeroUnit(
     alcance: t.alcance + (meta.crystalAlcance ?? 0),
     lifesteal: 0,
     potencialCuraEscudo: mb.potencialCuraEscudo,
-    sorte: baseSorte,
+    sorte:
+      baseSorte +
+      CRYSTAL_SHOP_SORTE_PER_BUY * (meta.crystalSorte ?? 0),
   };
 
   applyPartyBonusToUnit(u, bonus);
@@ -182,30 +185,80 @@ export function createHeroUnit(
   return u;
 }
 
+/** Atributos da strip na seleção de herói: meta + sinergia de cores + forja equipada no slot. */
+export interface HeroSetupStripStats {
+  maxHp: number;
+  maxMana: number;
+  regenVida: number;
+  regenMana: number;
+  dano: number;
+  defesa: number;
+  movimento: number;
+  alcance: number;
+  potencialCuraEscudo: number;
+  acertoCritico: number;
+  danoCritico: number;
+}
+
+export function buildHeroSetupStatPreview(
+  cls: HeroClassId,
+  slotIndex: 0 | 1 | 2,
+  meta: MetaProgress,
+  partyColors: readonly [TeamColor, TeamColor, TeamColor],
+  forgeLoadout: ForgeHeroLoadout | undefined,
+): HeroSetupStripStats {
+  const teamColor = partyColors[slotIndex]!;
+  const wl = normalizeWeaponLevel(meta.weaponLevelByHeroSlot[slotIndex]);
+  const u = createHeroUnit(
+    cls,
+    teamColor,
+    [...partyColors],
+    meta,
+    0,
+    0,
+    forgeLoadout,
+    wl,
+  );
+  return {
+    maxHp: u.maxHp,
+    maxMana: u.maxMana,
+    regenVida: u.regenVida,
+    regenMana: u.regenMana,
+    dano: u.dano,
+    defesa: u.defesa,
+    movimento: u.movimento,
+    alcance: u.alcance,
+    potencialCuraEscudo: u.potencialCuraEscudo,
+    acertoCritico: u.acertoCritico,
+    danoCritico: u.danoCritico,
+  };
+}
+
 const XP_TOTAL_LEVEL_100 = Math.round(
-  (XP_TARGET_TOTAL_LEVEL_60 *
+  (XP_FORMA_TOTAL *
     cumulativeKillXpRawThroughWave(75, 1, XP_PACING_DEFAULT_BIOME_COUNT)) /
-    cumulativeKillXpRawThroughWave(50, 1, XP_PACING_DEFAULT_BIOME_COUNT),
+    cumulativeKillXpRawThroughWave(12, 1, XP_PACING_DEFAULT_BIOME_COUNT),
 );
 
 /**
  * XP total acumulado para **estar** no nível `targetLevel` (nível 1 = 0).
- * Calibrado: sem bônus de XP, ~nível 60 ao fim da wave 50 e ~100 ao fim da 75 (100 ondas).
+ * Até `FORMA_FINAL_LEVEL`: linear; depois interpola até ~nível 100 coerente com onda 75 (curva de kill XP).
  */
 export function totalXpToReachLevel(targetLevel: number): number {
   if (targetLevel <= 1) return 0;
-  const t60 = XP_TARGET_TOTAL_LEVEL_60;
+  const cap = FORMA_FINAL_LEVEL;
+  const tForma = XP_FORMA_TOTAL;
   const t100 = XP_TOTAL_LEVEL_100;
-  if (targetLevel <= 60) {
-    return Math.floor((t60 * (targetLevel - 1)) / 59);
+  if (targetLevel <= cap) {
+    return Math.floor((tForma * (targetLevel - 1)) / (cap - 1));
   }
   if (targetLevel <= 100) {
     return (
-      t60 +
-      Math.floor(((t100 - t60) * (targetLevel - 60)) / 40)
+      tForma +
+      Math.floor(((t100 - tForma) * (targetLevel - cap)) / (100 - cap))
     );
   }
-  const per = (t100 - t60) / 40;
+  const per = (t100 - tForma) / (100 - cap);
   return t100 + Math.floor(per * (targetLevel - 100));
 }
 
@@ -249,10 +302,11 @@ export function createEnemyUnit(
   q: number,
   r: number,
   spawnBiome: BiomeId,
+  runEnemyChallengeMult = 1,
 ): Unit {
   const wm = waveMultiplier(wave);
   const pm = partyScaleMultiplier(partySize);
-  const mult = wm * pm;
+  const mult = wm * pm * runEnemyChallengeMult;
   const hp = Math.round(arch.baseHp * mult);
   const dano = Math.round(arch.baseDano * mult);
   const def = Math.round(effectiveEnemyBaseDefesa(arch) * mult * 0.75);
@@ -303,6 +357,136 @@ export function createEnemyUnit(
     regenVida: 0,
     regenMana: 0,
     alcance: arch.alcance,
+    lifesteal: 0,
+    potencialCuraEscudo: 0,
+    sorte: 0,
+    poison: undefined,
+    hot: undefined,
+    bleed: undefined,
+    burn: undefined,
+    weaponLevel: 1,
+    weaponUltMeter: 0,
+  };
+}
+
+/** Sombra da Imagem residual (invocação aliada). */
+export function createAllyShadowSummon(
+  owner: Pick<Unit, "id" | "name" | "acertoCritico" | "danoCritico">,
+  q: number,
+  r: number,
+  maxHp: number,
+  dano: number,
+): Unit {
+  return {
+    id: nid("ally-shadow"),
+    name: `Sombra (${owner.name})`,
+    isPlayer: false,
+    isAllySummon: true,
+    summonKind: "shadow",
+    summonOwnerHeroId: owner.id,
+    q,
+    r,
+    flying: false,
+    immobileThisTurn: false,
+    shieldGGBlue: 0,
+    goldDrainReduction: 0,
+    ouro: 0,
+    ouroWave: 0,
+    level: 1,
+    xp: 0,
+    xpToNext: 999,
+    artifacts: {},
+    skillCd: {},
+    formaFinal: false,
+    pistoleiroBonusDanoWave: 0,
+    gladiadorKills: 0,
+    curandeiroDanoWave: 0,
+    duroPedraDefStacks: 0,
+    motorMorteNextBasicPct: 0,
+    displayColor: 0x252538,
+    enemyArchetypeId: "gladinio",
+    maxHp,
+    hp: maxHp,
+    maxMana: 0,
+    mana: 0,
+    movimento: 20,
+    dano,
+    defesa: 0,
+    acertoCritico: owner.acertoCritico,
+    danoCritico: owner.danoCritico,
+    penetracao: 0,
+    penetracaoEscudo: 0,
+    regenVida: 0,
+    regenMana: 0,
+    alcance: 1,
+    lifesteal: 0,
+    potencialCuraEscudo: 0,
+    sorte: 0,
+    poison: undefined,
+    hot: undefined,
+    bleed: undefined,
+    burn: undefined,
+    weaponLevel: 1,
+    weaponUltMeter: 0,
+  };
+}
+
+/** Mega Golem (ex-Martelo do juiz). */
+export function createMegaGolemSummon(
+  owner: Pick<Unit, "id" | "name" | "acertoCritico" | "danoCritico">,
+  q: number,
+  r: number,
+  stacks: number,
+  potencyMult: number,
+): Unit {
+  const st = Math.min(3, Math.max(1, stacks));
+  const baseHp = 1000 + (st - 1) * 100;
+  const baseDef = 100 + (st - 1) * 100;
+  const maxHp = Math.max(1, Math.round(baseHp * potencyMult));
+  const def = Math.max(0, baseDef);
+  const dano = Math.max(1, Math.round(60 * potencyMult));
+  return {
+    id: nid("ally-golem"),
+    name: `Mega Golem (${owner.name})`,
+    isPlayer: false,
+    isAllySummon: true,
+    summonKind: "mega_golem",
+    summonOwnerHeroId: owner.id,
+    q,
+    r,
+    flying: false,
+    immobileThisTurn: false,
+    shieldGGBlue: 0,
+    goldDrainReduction: 0,
+    ouro: 0,
+    ouroWave: 0,
+    level: 1,
+    xp: 0,
+    xpToNext: 999,
+    artifacts: {},
+    skillCd: {},
+    formaFinal: false,
+    pistoleiroBonusDanoWave: 0,
+    gladiadorKills: 0,
+    curandeiroDanoWave: 0,
+    duroPedraDefStacks: 0,
+    motorMorteNextBasicPct: 0,
+    displayColor: 0x5d4037,
+    enemyArchetypeId: "gladinio",
+    maxHp,
+    hp: maxHp,
+    maxMana: 0,
+    mana: 0,
+    movimento: 3,
+    dano,
+    defesa: def,
+    acertoCritico: owner.acertoCritico,
+    danoCritico: owner.danoCritico,
+    penetracao: 0,
+    penetracaoEscudo: 0,
+    regenVida: 0,
+    regenMana: 0,
+    alcance: 1,
     lifesteal: 0,
     potencialCuraEscudo: 0,
     sorte: 0,

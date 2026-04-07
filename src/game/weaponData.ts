@@ -141,7 +141,7 @@ export function pisotearDamageMult(w: WeaponLevel): number {
 }
 
 /** Pontos necessários (soma de PV curados + escudo gerado pelas curas da sacerdotisa) para a ultimate da arma. */
-export const WEAPON_ULT_HEAL_THRESHOLD_SACERDOTISA = 30;
+export const WEAPON_ULT_HEAL_THRESHOLD_SACERDOTISA = 50;
 export const WEAPON_ULT_DAMAGE_HITS_PISTOLEIRO = 18;
 export const WEAPON_ULT_DAMAGE_TAKEN_GLADIADOR = 100;
 

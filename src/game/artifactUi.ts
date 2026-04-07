@@ -7,6 +7,7 @@ import {
 import {
   ARTIFACT_RARITY_LABELS,
   ARTIFACT_RARITY_ORDER,
+  artifactRaritiesAllowedForSorte,
   rollArtifactRarity,
   type ArtifactRarity,
 } from "./data/artifactRarity";
@@ -90,6 +91,9 @@ const SPECIAL_MAX: Record<string, number> = {
   penumbra: 3,
   aura_tita: 6,
   coroa_ferro: 3,
+  imagem_residual: 6,
+  potencializar_invocacao: 3,
+  anel_dragao: 5,
 };
 
 export function getArtifactMaxStacks(artifactId: string): number {
@@ -100,6 +104,42 @@ export function getArtifactMaxStacks(artifactId: string): number {
 export function isArtifactVisibleInHud(artifactId: string): boolean {
   if (artifactId.startsWith("_")) return false;
   return ARTIFACT_POOL.some((a) => a.id === artifactId);
+}
+
+function listUpgradeableOwnedArtifactIds(
+  u: Unit,
+  picked: Set<string>,
+  banned: Set<string> | undefined,
+  bypass: boolean,
+): string[] {
+  const ids: string[] = [];
+  for (const id of Object.keys(u.artifacts)) {
+    if (picked.has(id) || banned?.has(id)) continue;
+    if ((u.artifacts[id] ?? 0) <= 0) continue;
+    if (canIncrementArtifactStack(u, id, { bypassRarityCaps: bypass })) {
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+function anyNewArtifactPickableInAllowedRarities(
+  u: Unit,
+  sorte: number,
+  picked: Set<string>,
+  banned: Set<string> | undefined,
+  bypass: boolean,
+): boolean {
+  const allowed = new Set(artifactRaritiesAllowedForSorte(sorte));
+  for (const a of ARTIFACT_POOL) {
+    if (picked.has(a.id) || banned?.has(a.id)) continue;
+    if (!allowed.has(a.rarity)) continue;
+    if ((u.artifacts[a.id] ?? 0) > 0) continue;
+    if (canIncrementArtifactStack(u, a.id, { bypassRarityCaps: bypass })) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function randomArtifactChoicesForHero(
@@ -115,12 +155,23 @@ export function randomArtifactChoicesForHero(
   const banned = opts?.bannedIds;
 
   const tryPickOne = (): string | null => {
+    if (
+      !anyNewArtifactPickableInAllowedRarities(u, sorte, picked, banned, bypass)
+    ) {
+      const ups = listUpgradeableOwnedArtifactIds(u, picked, banned, bypass);
+      if (ups.length > 0) {
+        return ups[Math.floor(Math.random() * ups.length)]!;
+      }
+    }
+
+    const allowedSet = new Set(artifactRaritiesAllowedForSorte(sorte));
     const primary = rollArtifactRarity(sorte);
     const order: ArtifactRarity[] = [
       primary,
       ...ARTIFACT_RARITY_ORDER.filter((r) => r !== primary),
     ];
     for (const tr of order) {
+      if (!allowedSet.has(tr)) continue;
       const pool = ARTIFACT_POOL.filter(
         (a) =>
           a.rarity === tr &&
@@ -131,6 +182,11 @@ export function randomArtifactChoicesForHero(
       if (pool.length > 0) {
         return pool[Math.floor(Math.random() * pool.length)]!.id;
       }
+    }
+
+    const upFallback = listUpgradeableOwnedArtifactIds(u, picked, banned, bypass);
+    if (upFallback.length > 0) {
+      return upFallback[Math.floor(Math.random() * upFallback.length)]!;
     }
     return null;
   };
@@ -195,20 +251,6 @@ export function pickChoiceRarity(id: string): ArtifactRarity | null {
   return defOr(id)?.rarity ?? null;
 }
 
-const TONICO_DESC_FALLBACK =
-  "Receba {valor} de regeneração de mana adicional, equivalente a {pct}% da sua regeneração de vida.";
-
-/** Texto do Tônico na run: `{pct}` = 50%×acúmulos; `{valor}` = mana extra (regen vida × 50% × acúmulos). */
-function describeTonicoForRun(stacks: number, u: Unit | undefined): string {
-  const tpl = defOr("tonico")?.description ?? TONICO_DESC_FALLBACK;
-  const n = Math.max(1, stacks);
-  const pct = 50 * n;
-  let out = tpl.replace("{pct}", String(pct));
-  if (!u) return out;
-  const bonus = Math.floor(u.regenVida * 0.5 * n);
-  return out.replace("{valor}", String(bonus));
-}
-
 /** Efeito resumido no nível de stack `s` (≥1). */
 export function describeArtifactAtStack(
   id: string,
@@ -219,8 +261,6 @@ export function describeArtifactAtStack(
   switch (id) {
     case "trevo":
       return `+${25 * n}% XP recebida (acúmulos somam).`;
-    case "tonico":
-      return describeTonicoForRun(n, u);
     case "motor_morte":
       return `Ao matar: salto ao vizinho do inimigo mais próximo no bioma do teu hex (hub = todos), básico imediato +${10 * n}% dano; se matar, encadeia. Sem alcance após salto: só o próximo básico leva o bônus.`;
     case "maos_venenosas": {
@@ -261,12 +301,30 @@ export function describeArtifactAtStack(
       return `+${15 * n}% de dano com habilidades (não básico).`;
     case "espinhos_reais":
       return `Devolve ${8 * n}% do dano recebido de inimigos ao atacante.`;
+    case "imagem_residual": {
+      const shadows = Math.floor(n / 2) + 1;
+      const hp = 20 + (n - 1) * 5;
+      const dano = 10 + (n - 1) * 3;
+      return `No início da wave: ${shadows} sombra(s); base ${hp} PV e ${dano} dano (multiplica com Potencializar invocação). Movimento 20 na fase de invocação para alcançar alvos. Morrem após o turno delas; dano = habilidade.`;
+    }
+    case "potencializar_invocacao":
+      return `+${n} cópia(s) extra de cada invocação (sombras, espada, Mega Golem) e +${40 * n}% vida e dano delas.`;
+    case "martelo_juiz": {
+      const hp = 1000 + (n - 1) * 100;
+      const def = 100 + (n - 1) * 100;
+      return `Mega Golem: ${hp} PV, ${def} defesa; 3 mov, 1 alcance, 60 dano; 1 ataque em todos os adjacentes; dano = habilidade; prioridade de alvo no bioma.`;
+    }
     case "coroa_ferro": {
       const hp = 200 + (n - 1) * 100;
       const dano = 40 + (n - 1) * 20;
       const def = 100 + (n - 1) * 50;
       const ataques = 2 + (n - 1);
-      return `Invoca espada autônoma: ${hp} PV, ${dano} dano, ${def} defesa, 3 alcance, 7 movimento, ${ataques} ataque(s) por turno. Prioriza inimigos mais distantes. Crítico = do herói.`;
+      return `Invoca espada autônoma: ${hp} PV, ${dano} dano, ${def} defesa, 3 alcance, 7 movimento, ${ataques} ataque(s) base por turno (+cópias com Potencializar). Prioriza inimigos mais distantes. Dano = habilidade; crítico = do herói.`;
+    }
+    case "anel_dragao": {
+      const flat = 100 + 50 * (n - 1);
+      const pct = 50 + 25 * (n - 1);
+      return `No início do turno e ao ganhares acúmulo (como herói ativo): 1 bola de Ar por ataque básico disponível nesse turno. No fim do turno, todas visam o inimigo mais distante no teu bioma (no hub, qualquer inimigo). Dano por bola: ${flat} + ${pct}% do dano do ataque básico (conta como habilidade).`;
     }
     case "guerra_total": {
       const flat = [50, 120, 210][n - 1] ?? 210;
@@ -360,23 +418,6 @@ export function artifactCodexAllTiersHtml(id: string, u?: Unit): string {
   ) {
     return `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(pickChoiceDisplayName(id))}</div><div class="artifact-tt-cur">${escapeHtml(describeArtifactAtStack(id, 1, u))}</div></div>`;
   }
-  if (id === "tonico") {
-    const d = defOr(id);
-    const name = d?.name ?? id;
-    const base = d?.description ?? TONICO_DESC_FALLBACK;
-    const max = getArtifactMaxStacks(id);
-    const parts: string[] = [
-      `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(name)}</div>`,
-    ];
-    for (let s = 1; s <= max; s++) {
-      const line = base.replace("{pct}", String(50 * s));
-      parts.push(
-        `<div class="artifact-tt-next"><strong>${s}/${max}:</strong> ${escapeHtml(line)}</div>`,
-      );
-    }
-    parts.push(`</div>`);
-    return parts.join("");
-  }
   const d = defOr(id);
   const name = d?.name ?? id;
   const max = getArtifactMaxStacks(id);
@@ -400,7 +441,10 @@ export function artifactCardFigureSvg(artifactId: string): string {
     muralha_verdade: `<path fill="none" stroke="#0277bd" stroke-width="2.5" d="M8 28 Q24 12 40 28"/><path fill="none" stroke="#4fc3f7" stroke-width="2" d="M10 32 Q24 20 38 32"/><path fill="none" stroke="#81d4fa" stroke-width="1.6" d="M12 36 Q24 26 36 36"/><circle cx="24" cy="26" r="4" fill="#01579b"/><circle cx="16" cy="30" r="2" fill="#29b6f6"/><circle cx="32" cy="30" r="2" fill="#29b6f6"/>`,
     manto_espectral: `<circle cx="24" cy="24" r="14" fill="none" stroke="#7e57c2" stroke-width="1.5" stroke-dasharray="4 3"/><path fill="none" stroke="#b39ddb" stroke-width="2" d="M12 24h24M24 12v24"/><circle cx="24" cy="24" r="6" fill="#5e35b1" opacity="0.5"/><path fill="none" stroke="#d1c4e9" stroke-width="1.2" d="M18 18 Q24 22 30 18 M18 30 Q24 26 30 30"/>`,
     trevo: `<path fill="#2e7d32" d="M24 8c-2 4-6 6-8 10 4 0 8-2 10-6-4 2-6-1-2-4zm0 0c2 4 6 6 8 10-4 0-8-2-10-6 4 2 6-1 2-4zm-8 12c4 3 4 9 0 12 3-4 9-4 12 0-3-4-1-8-5-8-3 4-7 4-7zm16 0c-4 3-4 9 0 12-3-4-9-4-12 0 3-4 1-8 5-8 3 4 7 4 7z"/><circle cx="24" cy="28" r="3" fill="#66bb6a"/>`,
-    tonico: `<rect x="14" y="12" width="20" height="26" rx="3" fill="#5c6bc0" stroke="#3949ab"/><path fill="#9fa8da" d="M18 18h12v8H18z"/><path fill="#fff" d="M20 22h2v2h-2zm4 0h2v2h-2zm4 0h2v2h-2z"/>`,
+    imagem_residual: `<ellipse cx="18" cy="22" rx="7" ry="12" fill="#37474f" opacity="0.45"/><ellipse cx="30" cy="20" rx="6" ry="11" fill="#263238" opacity="0.55"/><ellipse cx="24" cy="24" rx="8" ry="14" fill="#455a64" stroke="#102027" stroke-width="1"/><path fill="none" stroke="#78909c" stroke-width="1.2" d="M16 30 Q24 34 32 30"/><circle cx="22" cy="20" r="2.5" fill="#b0bec5" opacity="0.7"/><circle cx="28" cy="19" r="2" fill="#90a4ae" opacity="0.6"/>`,
+    potencializar_invocacao: `<circle cx="24" cy="24" r="14" fill="none" stroke="#6a1b9a" stroke-width="2"/><circle cx="24" cy="24" r="8" fill="#ce93d8" opacity="0.35"/><path fill="none" stroke="#4a148c" stroke-width="1.6" d="M24 10v6M24 32v6M10 24h6M32 24h6"/><path fill="#7b1fa2" d="M24 16l2 6h6l-5 4 2 6-5-4-5 4 2-6-5-4h6z"/>`,
+    coroa_ferro: `<path fill="#bf360c" d="M26 8 L38 22 L32 40 L16 40 L10 22 Z" stroke="#3e2723" stroke-width="1"/><path fill="#ff6f00" d="M24 14 L32 22 L28 36 L20 36 L16 22 Z" opacity="0.9"/><path fill="#ffeb3b" d="M24 18 L28 24 L26 32 L22 32 L20 24 Z" opacity="0.85"/><path fill="none" stroke="#fff59d" stroke-width="1.4" d="M12 26 Q24 12 36 26" opacity="0.9"/>`,
+    martelo_juiz: `<rect x="18" y="10" width="12" height="22" rx="2" fill="#5d4037" stroke="#3e2723" stroke-width="1"/><rect x="14" y="28" width="20" height="10" rx="2" fill="#78909c" stroke="#455a64"/><circle cx="24" cy="14" r="3" fill="#ff7043"/><path fill="none" stroke="#bdbdbd" stroke-width="1" d="M20 20h8M22 24h4"/>`,
     motor_morte: `<path fill="#ffee58" stroke="#e65100" stroke-width="1.4" stroke-linejoin="round" d="M30 3 L14 25h11l-7 21 22-26h-10l10-17z"/>`,
     maos_venenosas: `<path fill="#6a1b9a" d="M18 32 Q24 8 30 32 Z"/><circle cx="20" cy="26" r="2" fill="#ce93d8"/><circle cx="28" cy="26" r="2" fill="#ce93d8"/>`,
     alento_morte: `<path fill="none" stroke="#78909c" stroke-width="1.4" d="M24 8v32"/><path fill="#b0bec5" d="M16 18c0-4 4-8 8-8s8 4 8 8v6H16v-6z"/><path fill="#37474f" d="M18 26h12v6H18z"/><circle cx="20" cy="22" r="2" fill="#eceff1"/><circle cx="28" cy="22" r="2" fill="#eceff1"/>`,
@@ -416,6 +460,7 @@ export function artifactCardFigureSvg(artifactId: string): string {
     seda_vampira: `<path fill="#311b92" d="M12 18 Q24 36 36 18 Q24 28 12 18"/><path fill="#fce4ec" d="M16 20 Q24 30 32 20 L30 24 Q24 32 18 24 Z"/><path fill="#fff" d="M17 21 L19 27 L21 21 M23 21 L24 27 L25 21 M27 21 L29 27 L31 21" stroke="#880e4f" stroke-width="0.6"/>`,
     furacao_ouro: `<path fill="none" stroke="#f9a825" stroke-width="1.2" d="M24 10 Q38 24 24 38 Q10 24 24 10" opacity="0.7"/><ellipse cx="18" cy="16" rx="6" ry="3.5" fill="#ffc107" stroke="#f57f17"/><ellipse cx="30" cy="20" rx="5" ry="3" fill="#ffca28" stroke="#f9a825" transform="rotate(25 30 20)"/><ellipse cx="20" cy="30" rx="5" ry="3" fill="#ffd54f" stroke="#ff8f00" transform="rotate(-35 20 30)"/><ellipse cx="28" cy="32" rx="4" ry="2.5" fill="#ffe082" stroke="#ffa000"/>`,
     duro_pedra: `<ellipse cx="24" cy="40" rx="11" ry="3.5" fill="#455a64" opacity="0.45"/><path d="M15 18 Q24 12 33 18 L35 34 Q24 38 13 34 Z" fill="#78909c" stroke="#455a64" stroke-width="1"/><circle cx="20" cy="22" r="2.2" fill="#37474f"/><circle cx="28" cy="22" r="2.2" fill="#37474f"/><path d="M19 28h10" stroke="#37474f" stroke-width="1"/><path d="M17 30l3 5M24 30v6M31 30l-3 5" stroke="#607d8b" stroke-width="1.2"/>`,
+    anel_dragao: `<path fill="#00838f" stroke="#006064" stroke-width="0.8" d="M12 28c4-14 14-22 24-18 6 2 10 8 10 16 0 10-8 16-18 16-6 0-11-2-15-6 4 2 9 3 14 1 8-3 12-12 9-20z"/><path fill="#26c6da" d="M18 22c2-6 8-10 14-8 4 1 7 5 8 10-6-3-12-2-16 2-4-1-6-2-6-4z"/><ellipse cx="19" cy="20" rx="2.2" ry="2.5" fill="#b2ebf2"/><ellipse cx="29" cy="20" rx="2.2" ry="2.5" fill="#b2ebf2"/><path fill="none" stroke="#4dd0e1" stroke-width="1.2" d="M16 26c4 4 16 4 20 0"/><path fill="#00acc1" d="M8 18c0-3 3-6 6-5-1 3-2 7-2 10-2-1-4-3-4-5z"/>`,
     anel_penetrante: `<ellipse cx="24" cy="24" rx="15" ry="11" fill="none" stroke="#6a1b9a" stroke-width="3.5"/><ellipse cx="24" cy="24" rx="9" ry="6" fill="none" stroke="#ce93d8" stroke-width="1.8"/><circle cx="24" cy="24" r="4" fill="#4a148c" opacity="0.35"/>`,
     gota_azul: `<path fill="none" stroke="#1565c0" stroke-width="2" d="M24 8v8"/><path fill="#42a5f5" stroke="#0d47a1" stroke-width="0.8" d="M24 14 C18 22 14 28 14 32 C14 38 18 42 24 42 C30 42 34 38 34 32 C34 28 30 22 24 14"/><path fill="#90caf9" d="M20 30h8v6a4 4 0 0 1-8 0v-6" opacity="0.9"/>`,
     raiz_vida: `<circle cx="24" cy="24" r="4" fill="#ffcdd2" stroke="#b71c1c" stroke-width="1.2"/><path fill="none" stroke="#c62828" stroke-width="2.2" stroke-linecap="round" d="M24 10v6M24 32v6M10 24h6M32 24h6M14 14l5 5M29 29l5 5M34 14l-5 5M19 29l-5 5"/><path fill="#e53935" d="M24 18l3 6-3 4-3-4z" opacity="0.85"/>`,
@@ -464,6 +509,9 @@ export function artifactTooltipHtml(
       ? describeArtifactNextStack(id, stacks, u)
       : null;
   let body = `<div class="artifact-tt-name">${escapeHtml(name)}</div><div class="artifact-tt-cur"><strong>Agora (${artifactStackCounterLabel(id, stacks)}):</strong> ${escapeHtml(cur)}</div>`;
+  if (opts?.showNext === false) {
+    return `<div class="artifact-tt">${body}</div>`;
+  }
   if (next) {
     body += `<div class="artifact-tt-next"><strong>Próximo (${artifactStackCounterLabel(id, stacks + 1)}):</strong> ${escapeHtml(next)}</div>`;
   } else {
@@ -484,16 +532,17 @@ export function artifactPickChoiceTooltip(id: string, u: Unit): string {
   const max = getArtifactMaxStacks(id);
   const d = defOr(id);
   const name = d?.name ?? id;
-  const nextSt = Math.min(cur + 1, max);
-  const nextDesc = describeArtifactAtStack(id, nextSt, u);
+  const curDesc =
+    cur <= 0
+      ? "Sem acúmulos — ainda sem efeito deste artefato."
+      : describeArtifactAtStack(id, cur, u);
   let html = `<div class="artifact-tt"><div class="artifact-tt-name">${escapeHtml(name)}</div>`;
-  if (cur > 0) {
-    html += `<div class="artifact-tt-cur"><strong>Atual (${artifactStackCounterLabel(id, cur)}):</strong> ${escapeHtml(describeArtifactAtStack(id, cur, u))}</div>`;
-  }
-  html += `<div class="artifact-tt-next"><strong>Se escolher (${nextSt}/${max}):</strong> ${escapeHtml(nextDesc)}</div>`;
-  if (cur + 2 <= max) {
-    const after = describeArtifactAtStack(id, cur + 2, u);
-    html += `<div class="artifact-tt-next"><strong>Depois (${cur + 2}/${max}):</strong> ${escapeHtml(after)}</div>`;
+  html += `<div class="artifact-tt-cur"><strong>Efeito atual (${artifactStackCounterLabel(id, cur)}):</strong> ${escapeHtml(curDesc)}</div>`;
+  if (cur < max) {
+    const nextSt = cur + 1;
+    html += `<div class="artifact-tt-next"><strong>Se escolheres (${artifactStackCounterLabel(id, nextSt)}):</strong> ${escapeHtml(describeArtifactAtStack(id, nextSt, u))}</div>`;
+  } else {
+    html += `<div class="artifact-tt-max">Nível máximo.</div>`;
   }
   html += `</div>`;
   return html;

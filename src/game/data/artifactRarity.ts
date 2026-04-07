@@ -96,6 +96,17 @@ export function rarityWeightsForSorte(sorte: number): Record<ArtifactRarity, num
   };
 }
 
+/**
+ * Raridades que podem aparecer nas escolhas de level-up para este valor de sorte
+ * (alinhado com `rarityWeightsForSorte`: sem lendário abaixo de 60, sem mítico abaixo de 100).
+ */
+export function artifactRaritiesAllowedForSorte(sorte: number): ArtifactRarity[] {
+  const s = Math.floor(Math.max(0, sorte));
+  if (s < 60) return ["common", "uncommon", "rare"];
+  if (s < 100) return ["common", "uncommon", "rare", "legendary"];
+  return ["common", "uncommon", "rare", "legendary", "mythic"];
+}
+
 export function rollArtifactRarity(sorte: number): ArtifactRarity {
   const w = rarityWeightsForSorte(sorte);
   const arr = RARITIES.map((r) => w[r]);

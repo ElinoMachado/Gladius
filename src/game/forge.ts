@@ -27,6 +27,13 @@ export function biomeToEssenceId(b: BiomeId): ForgeEssenceId | null {
   return b as ForgeEssenceId;
 }
 
+/** Morte no castelo (hub): essência de forja de bioma de combate aleatório. */
+export function randomForgeEssenceForHubDeath(): ForgeEssenceId {
+  const b =
+    COMBAT_BIOMES[Math.floor(Math.random() * COMBAT_BIOMES.length)]!;
+  return biomeToEssenceId(b)!;
+}
+
 /** Chance base só por wave: 5% na wave 1 → 50% na wave 50 (e depois). */
 const ESS_PCT_WAVE_1 = 5;
 const ESS_PCT_WAVE_CAP = 50;

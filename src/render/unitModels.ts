@@ -21,7 +21,13 @@ import {
 export function modelKeyForUnit(
   u: Pick<
     Unit,
-    "isPlayer" | "heroClass" | "hp" | "formaFinal" | "ultimateId"
+    | "isPlayer"
+    | "heroClass"
+    | "hp"
+    | "formaFinal"
+    | "ultimateId"
+    | "isAllySummon"
+    | "summonKind"
   > & {
     enemyArchetypeId?: string;
     forgeLoadout?: ForgeHeroLoadout;
@@ -34,6 +40,9 @@ export function modelKeyForUnit(
       u.formaFinal && u.ultimateId ? u.ultimateId : "";
     return `h:${u.heroClass ?? "?"}:${fk}:${ult}`;
   }
+  if (u.isAllySummon && u.summonKind === "shadow") return "e:ally_shadow";
+  if (u.isAllySummon && u.summonKind === "mega_golem")
+    return "e:ally_golem";
   return `e:${u.enemyArchetypeId ?? "gladinio"}`;
 }
 
@@ -566,6 +575,8 @@ export function buildUnitBodyGroup(
     | "hp"
     | "formaFinal"
     | "ultimateId"
+    | "isAllySummon"
+    | "summonKind"
   >,
 ): THREE.Group {
   if (u.isPlayer && (u.hp ?? 1) <= 0) {
@@ -577,6 +588,12 @@ export function buildUnitBodyGroup(
         ? { formaFinal: true as const, ultimateId: u.ultimateId }
         : undefined;
     return buildHeroBody(u.heroClass, u.displayColor, u.forgeLoadout, forma);
+  }
+  if (u.isAllySummon && u.summonKind === "mega_golem") {
+    return buildEnemyBody("ally_golem", u.displayColor);
+  }
+  if (u.isAllySummon && u.summonKind === "shadow") {
+    return buildEnemyBody("ally_shadow", u.displayColor);
   }
   return buildEnemyBody(u.enemyArchetypeId ?? "gladinio", u.displayColor);
 }

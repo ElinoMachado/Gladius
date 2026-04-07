@@ -9,6 +9,7 @@ import { normalizeWeaponLevel } from "./weaponData";
 import {
   CRYSTAL_SHOP_ALCANCE_MAX,
   CRYSTAL_SHOP_EXTRA_BASIC_MAX,
+  CRYSTAL_SHOP_SORTE_MAX,
   INITIAL_CARD_COSTS,
   META_TRACK_MAX_LEVEL,
 } from "./types";
@@ -162,6 +163,7 @@ export const defaultMeta = (): MetaProgress => ({
   weaponLevelByHeroSlot: [1, 1, 1],
   crystalExtraBasic: 0,
   crystalAlcance: 0,
+  crystalSorte: 0,
 });
 
 function applyTestForgeEssences(
@@ -230,6 +232,7 @@ function buildMetaFromMainBlob(raw: string): MetaProgress {
       o.crystalAlcance,
       CRYSTAL_SHOP_ALCANCE_MAX,
     ),
+    crystalSorte: clampCrystalShopPair(o.crystalSorte, CRYSTAL_SHOP_SORTE_MAX),
     artifactRerollBonus: clampMeta03(o.artifactRerollBonus),
     artifactBanBonus: clampMeta03(o.artifactBanBonus),
     essences: mergeEssencesFromSave(o.essences, d.essences),
