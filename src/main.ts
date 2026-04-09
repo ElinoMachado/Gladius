@@ -1399,7 +1399,8 @@ function pendingGroundSkillHexConsumesMoveClick(
     skillId === "atirar_todo_lado" &&
     pendingCombat?.kind === "skill" &&
     pendingCombat.id === "atirar_todo_lado" &&
-    model.movementLeft > 0
+    model.movementLeft > 0 &&
+    !model.heroIsAmbushMovementLocked()
   ) {
     return false;
   }
@@ -1887,6 +1888,17 @@ function updateCombatPhantomHoverFromCanvas(ndcX: number, ndcY: number): void {
     }
     return;
   }
+  if (
+    pendingCombat.kind === "skill" &&
+    pendingCombat.id === "atirar_todo_lado" &&
+    model.heroIsAmbushMovementLocked()
+  ) {
+    if (combatPhantomHoverHex !== null) {
+      combatPhantomHoverHex = null;
+      applyCombatOverlays();
+    }
+    return;
+  }
   const hex = view.pickCombatHex(ndcX, ndcY, model.grid);
   if (!hex) {
     if (combatPhantomHoverHex !== null) {
@@ -1970,10 +1982,16 @@ function applyCombatOverlays(): void {
     (pendingCombat?.kind === "basic" || pendingCombat?.kind === "skill") &&
     model.movementLeft > 0
   ) {
-    const reach = model.reachableForCurrentHero();
-    const cur = axialKey(h.q, h.r);
-    for (const k of reach.keys()) {
-      if (k !== cur) moveKeys.add(k);
+    const atirarAmbushNoBlue =
+      pendingCombat?.kind === "skill" &&
+      pendingCombat.id === "atirar_todo_lado" &&
+      model.heroIsAmbushMovementLocked();
+    if (!atirarAmbushNoBlue) {
+      const reach = model.reachableForCurrentHero();
+      const cur = axialKey(h.q, h.r);
+      for (const k of reach.keys()) {
+        if (k !== cur) moveKeys.add(k);
+      }
     }
   }
   /** Inimigo sob o rato + seleção de ataque/VFX: esconde overlays de inspeção do inimigo (evita ruído). */
@@ -8793,7 +8811,9 @@ function showCombatHUD(): void {
         if (!isViewingActive) return;
         cancelPendingOrDebouncedActivate(b, () => {
           const atirarFirst =
-            id === "atirar_todo_lado" && model.movementLeft > 0;
+            id === "atirar_todo_lado" &&
+            model.movementLeft > 0 &&
+            !model.heroIsAmbushMovementLocked();
           pendingCombat = atirarFirst
             ? { kind: "skill", id, atirarMoveFirst: true }
             : { kind: "skill", id };

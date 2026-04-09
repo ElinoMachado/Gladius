@@ -8714,6 +8714,24 @@ export class GameModel {
     return true;
   }
 
+  /**
+   * Embosca (chão): N+ inimigos adjacentes bloqueiam movimento — mesma regra que `tryMoveHero`.
+   * Em voo não aplica.
+   */
+  heroIsAmbushMovementLocked(): boolean {
+    const h = this.currentHero();
+    if (!h || h.hp <= 0) return false;
+    if (h.flying) return false;
+    let adjEnemy = 0;
+    for (const e of this.enemies()) {
+      if (hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r }) === 1) {
+        adjEnemy++;
+      }
+    }
+    const ambushNeed = 2 + (h.artifacts["sorte_prata"] ?? 0);
+    return adjEnemy >= ambushNeed;
+  }
+
   reachableForCurrentHero(): Map<string, number> {
     const h = this.currentHero();
     if (!h) return new Map();
