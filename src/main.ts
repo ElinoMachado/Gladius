@@ -1002,6 +1002,8 @@ let pendingCombat: PendingCombat = null;
 let combatTiroBeamPreviewKeys: Set<string> | null = null;
 let combatTiroBeamPath: { q: number; r: number }[] | null = null;
 let combatTiroAimCacheSig = "";
+/** Hex de movimento sob o rato — overlay vermelho segue como se o herói já estivesse nessa célula. */
+let combatPhantomHoverHex: { q: number; r: number } | null = null;
 /** Evita acumular `keydown` de combate a cada `render()` / `showCombatHUD()`. */
 let combatHotkeysAbort: AbortController | null = null;
 let combatCornerResizeObserver: ResizeObserver | null = null;
@@ -1790,9 +1792,103 @@ function resetCombatSelection(): void {
   combatTiroBeamPreviewKeys = null;
   combatTiroBeamPath = null;
   combatTiroAimCacheSig = "";
+  combatPhantomHoverHex = null;
   combatInspectEnemyId = null;
   combatHoverEnemyId = null;
   combatLolInspectHeroId = null;
+}
+
+/** Origem usada para pré-visualizar alcance (hex fantasma ou posição real). */
+function getCombatAttackPreviewOriginQr(h: Unit): { q: number; r: number } {
+  if (
+    combatPhantomHoverHex &&
+    model.movementLeft > 0 &&
+    model
+      .reachableForCurrentHero()
+      .has(axialKey(combatPhantomHoverHex.q, combatPhantomHoverHex.r)) &&
+    (combatPhantomHoverHex.q !== h.q || combatPhantomHoverHex.r !== h.r)
+  ) {
+    return { q: combatPhantomHoverHex.q, r: combatPhantomHoverHex.r };
+  }
+  return { q: h.q, r: h.r };
+}
+
+function combatPendingAttackPreviewKeysAt(
+  fromQ: number,
+  fromR: number,
+): Set<string> {
+  const h = model.currentHero();
+  if (!h || h.hp <= 0) return new Set();
+  if (pendingCombat?.kind === "basic") {
+    return model.getBasicAttackRangeHexKeysFromPosition(fromQ, fromR);
+  }
+  if (pendingCombat?.kind === "skill") {
+    const id = pendingCombat.id;
+    if (id === "bunker_minas" && fromQ === h.q && fromR === h.r) {
+      return model.getSkillRangeHexKeys("bunker_minas");
+    }
+    return model.getSkillRangeHexKeysFromPosition(id, fromQ, fromR);
+  }
+  return new Set();
+}
+
+function updateCombatPhantomHoverFromCanvas(ndcX: number, ndcY: number): void {
+  if (model.phase !== "combat" || model.inEnemyPhase) {
+    if (combatPhantomHoverHex !== null) {
+      combatPhantomHoverHex = null;
+      applyCombatOverlays();
+    }
+    return;
+  }
+  const h = model.currentHero();
+  if (!h || h.hp <= 0) {
+    if (combatPhantomHoverHex !== null) {
+      combatPhantomHoverHex = null;
+      applyCombatOverlays();
+    }
+    return;
+  }
+  if (
+    !pendingCombat ||
+    model.movementLeft <= 0 ||
+    !(pendingCombat.kind === "basic" || pendingCombat.kind === "skill")
+  ) {
+    if (combatPhantomHoverHex !== null) {
+      combatPhantomHoverHex = null;
+      applyCombatOverlays();
+    }
+    return;
+  }
+  const hex = view.pickCombatHex(ndcX, ndcY, model.grid);
+  if (!hex) {
+    if (combatPhantomHoverHex !== null) {
+      combatPhantomHoverHex = null;
+      applyCombatOverlays();
+    }
+    return;
+  }
+  const reach = model.reachableForCurrentHero();
+  const k = axialKey(hex.q, hex.r);
+  if (!reach.has(k)) {
+    if (combatPhantomHoverHex !== null) {
+      combatPhantomHoverHex = null;
+      applyCombatOverlays();
+    }
+    return;
+  }
+  const cur = axialKey(h.q, h.r);
+  if (k === cur) {
+    if (combatPhantomHoverHex !== null) {
+      combatPhantomHoverHex = null;
+      applyCombatOverlays();
+    }
+    return;
+  }
+  if (combatPhantomHoverHex?.q === hex.q && combatPhantomHoverHex?.r === hex.r) {
+    return;
+  }
+  combatPhantomHoverHex = { q: hex.q, r: hex.r };
+  applyCombatOverlays();
 }
 
 function applyCombatOverlays(): void {
@@ -1814,9 +1910,16 @@ function applyCombatOverlays(): void {
   let moveKeys = new Set<string>();
   let atkKeys = new Set<string>();
   if (pendingCombat?.kind === "basic") {
-    atkKeys = model.getBasicAttackRangeHexKeys();
+    const o = getCombatAttackPreviewOriginQr(h);
+    atkKeys = model.getBasicAttackRangeHexKeysFromPosition(o.q, o.r);
   } else if (pendingCombat?.kind === "skill") {
-    atkKeys = model.getSkillRangeHexKeys(pendingCombat.id);
+    const o = getCombatAttackPreviewOriginQr(h);
+    const sid = pendingCombat.id;
+    if (sid === "bunker_minas" && o.q === h.q && o.r === h.r) {
+      atkKeys = model.getSkillRangeHexKeys("bunker_minas");
+    } else {
+      atkKeys = model.getSkillRangeHexKeysFromPosition(sid, o.q, o.r);
+    }
   } else if (movePreviewActive) {
     const reach = model.reachableForCurrentHero();
     const cur = axialKey(h.q, h.r);
@@ -1892,7 +1995,15 @@ function updateTiroDestruidorAimPreview(ndcX: number, ndcY: number): void {
     }
     return;
   }
-  const preview = model.tiroDestruidorAimPreview(hex.q, hex.r);
+  const hero = model.currentHero();
+  if (!hero || hero.hp <= 0) return;
+  const origin = getCombatAttackPreviewOriginQr(hero);
+  const preview = model.tiroDestruidorAimPreviewFromHeroAt(
+    origin.q,
+    origin.r,
+    hex.q,
+    hex.r,
+  );
   if (!preview) {
     if (combatTiroAimCacheSig !== "") {
       combatTiroBeamPreviewKeys = null;
@@ -1902,7 +2013,7 @@ function updateTiroDestruidorAimPreview(ndcX: number, ndcY: number): void {
     }
     return;
   }
-  const sig = `${[...preview.keys].sort().join("|")}:${preview.path.map((p) => `${p.q},${p.r}`).join(":")}`;
+  const sig = `${origin.q},${origin.r}|${[...preview.keys].sort().join("|")}:${preview.path.map((p) => `${p.q},${p.r}`).join(":")}`;
   if (sig === combatTiroAimCacheSig) return;
   combatTiroAimCacheSig = sig;
   combatTiroBeamPreviewKeys = preview.keys;
@@ -1930,11 +2041,48 @@ function updateCombatEnemyHoverFromCanvas(ev: MouseEvent): void {
   const r = canvas.getBoundingClientRect();
   const ndcX = ((ev.clientX - r.left) / r.width) * 2 - 1;
   const ndcY = -((ev.clientY - r.top) / r.height) * 2 + 1;
-  const uid = view.pickUnit(ndcX, ndcY);
+  const uid = view.pickUnit(ndcX, ndcY, {
+    grid: model.grid,
+    bunkerOccupantIdAt: (q, r) => {
+      const b = model.bunkerAtHex(q, r);
+      if (!b || b.hp <= 0 || !b.occupantId) return null;
+      const u = model.units.find((z) => z.id === b.occupantId);
+      return u && u.isPlayer && u.hp > 0 ? b.occupantId : null;
+    },
+  });
   let next: string | null = null;
   if (uid) {
     const u = model.units.find((x) => x.id === uid);
-    if (u && !u.isPlayer && u.hp > 0) next = uid;
+    if (u && !u.isPlayer && u.hp > 0) {
+      if (
+        pendingCombat &&
+        (pendingCombat.kind === "basic" || pendingCombat.kind === "skill")
+      ) {
+        const o = getCombatAttackPreviewOriginQr(active);
+        const atkPrev = combatPendingAttackPreviewKeysAt(o.q, o.r);
+        if (atkPrev.has(axialKey(u.q, u.r))) next = uid;
+      } else {
+        next = uid;
+      }
+    }
+  }
+  if (
+    !next &&
+    pendingCombat &&
+    (pendingCombat.kind === "basic" || pendingCombat.kind === "skill")
+  ) {
+    const hex = view.pickCombatHex(ndcX, ndcY, model.grid);
+    if (hex) {
+      const eid = model.liveEnemyIdAtHex(hex.q, hex.r);
+      if (eid) {
+        const o = getCombatAttackPreviewOriginQr(active);
+        const atkPrev = combatPendingAttackPreviewKeysAt(o.q, o.r);
+        const tu = model.units.find((u) => u.id === eid);
+        if (tu && atkPrev.has(axialKey(tu.q, tu.r))) {
+          next = eid;
+        }
+      }
+    }
   }
   if (next !== combatHoverEnemyId) {
     combatHoverEnemyId = next;
@@ -9098,6 +9246,7 @@ function showCombatHUD(): void {
       const ndcX = ((ev.clientX - r.left) / r.width) * 2 - 1;
       const ndcY = -((ev.clientY - r.top) / r.height) * 2 + 1;
       if (!model.inEnemyPhase) {
+        updateCombatPhantomHoverFromCanvas(ndcX, ndcY);
         updateTiroDestruidorAimPreview(ndcX, ndcY);
       }
       const st = view.pickStatusTooltip(canvas, ev.clientX, ev.clientY);
@@ -9144,6 +9293,10 @@ function showCombatHUD(): void {
     hideGameTooltip();
     if (combatHoverEnemyId !== null) {
       combatHoverEnemyId = null;
+      applyCombatOverlays();
+    }
+    if (combatPhantomHoverHex !== null) {
+      combatPhantomHoverHex = null;
       applyCombatOverlays();
     }
     if (
