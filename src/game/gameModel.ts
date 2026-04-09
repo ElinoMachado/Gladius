@@ -734,6 +734,8 @@ export class GameModel {
   turnStage: TurnStage = "idle";
   /** Consumido pelo render: animação hex-a-hex no canvas. */
   pendingMoveAnim: PendingMoveAnimation | null = null;
+  /** Estimativa de duração (ms) da última animação de movimento do herói — consumida pela UI. */
+  private lastHeroMoveAnimEstimateMs = 0;
   /** 1 = normal; menor que 1 acelera movimento/pausa na fase inimiga (muitos inimigos). */
   private enemyPhaseTimingMult = 1;
   /** Sinergia rochosa nv3: último herói com forja que se moveu — inimigos priorizam-no. */
@@ -4789,6 +4791,7 @@ export class GameModel {
   }
 
   tryMoveHero(toQ: number, toR: number): boolean {
+    this.lastHeroMoveAnimEstimateMs = 0;
     const h = this.currentHero();
     if (!h || h.hp <= 0) return false;
     if (this.duel) return false;
@@ -4854,15 +4857,19 @@ export class GameModel {
       blocked,
       panSwamp,
     );
+    let moveAnimEstimateMs = 0;
     if (path && path.length > 1 && !getSkipAlliedCombatAnimations()) {
+      const segMs = heroRunSegmentMs();
+      moveAnimEstimateMs = (path.length - 1) * segMs;
       this.pendingMoveAnim = {
         kind: "unit",
         unitId: h.id,
         cells: path.map((p) => ({ q: p.q, r: p.r })),
-        segmentMs: heroRunSegmentMs(),
+        segmentMs: segMs,
         playHeroRunAnim: true,
       };
     }
+    this.lastHeroMoveAnimEstimateMs = moveAnimEstimateMs;
     this.movementLeft -= cost;
     const bFrom = this.bunkerAtHex(fromQ, fromR);
     const leftBunker =
@@ -4897,6 +4904,16 @@ export class GameModel {
     this.log(`${h.name} move para (${toQ},${toR}).`);
     this.emit();
     return true;
+  }
+
+  /**
+   * Após `tryMoveHero` com sucesso: duração estimada da animação (0 se skip ou instantâneo).
+   * Chamada única por movimento; zera o buffer interno.
+   */
+  consumeLastHeroMoveAnimEstimateMs(): number {
+    const v = this.lastHeroMoveAnimEstimateMs;
+    this.lastHeroMoveAnimEstimateMs = 0;
+    return v;
   }
 
   /** Dano bruto do ataque básico (antes de crítico/defesa). Inclui bônus do Golpe Relâmpago se ativo. */

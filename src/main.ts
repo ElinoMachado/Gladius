@@ -994,7 +994,14 @@ function schedulePersistRunSessionCheckpoint(): void {
 type PendingCombat =
   | null
   | { kind: "basic" }
-  | { kind: "skill"; id: string };
+  | {
+      kind: "skill";
+      id: string;
+      /** Atirar pra todo lado: primeiro só movimento (1 hex), depois dispara a área. */
+      atirarMoveFirst?: boolean;
+      /** Entre o movimento e o disparo automático — ignora cliques na arena. */
+      atirarExecPending?: boolean;
+    };
 
 let movePreviewActive = false;
 let pendingCombat: PendingCombat = null;
@@ -1004,6 +1011,8 @@ let combatTiroBeamPath: { q: number; r: number }[] | null = null;
 let combatTiroAimCacheSig = "";
 /** Hex de movimento sob o rato — overlay vermelho segue como se o herói já estivesse nessa célula. */
 let combatPhantomHoverHex: { q: number; r: number } | null = null;
+let combatAtirarTodoLadoFireTimer: ReturnType<typeof window.setTimeout> | null =
+  null;
 /** Evita acumular `keydown` de combate a cada `render()` / `showCombatHUD()`. */
 let combatHotkeysAbort: AbortController | null = null;
 let combatCornerResizeObserver: ResizeObserver | null = null;
@@ -1386,6 +1395,14 @@ function pendingGroundSkillHexConsumesMoveClick(
   hex: { q: number; r: number },
   hero: { q: number; r: number },
 ): boolean {
+  if (
+    skillId === "atirar_todo_lado" &&
+    pendingCombat?.kind === "skill" &&
+    pendingCombat.id === "atirar_todo_lado" &&
+    pendingCombat.atirarMoveFirst
+  ) {
+    return false;
+  }
   if (skillId === "tiro_destruidor") {
     if (hex.q === hero.q && hex.r === hero.r) return false;
     return model.hexInSkillRange(skillId, hex.q, hex.r);
@@ -1786,7 +1803,15 @@ function bindEnemyInspectPanel(panel: HTMLElement): void {
   );
 }
 
+function clearCombatAtirarFireTimer(): void {
+  if (combatAtirarTodoLadoFireTimer != null) {
+    window.clearTimeout(combatAtirarTodoLadoFireTimer);
+    combatAtirarTodoLadoFireTimer = null;
+  }
+}
+
 function resetCombatSelection(): void {
+  clearCombatAtirarFireTimer();
   movePreviewActive = false;
   pendingCombat = null;
   combatTiroBeamPreviewKeys = null;
@@ -1824,6 +1849,9 @@ function combatPendingAttackPreviewKeysAt(
   }
   if (pendingCombat?.kind === "skill") {
     const id = pendingCombat.id;
+    if (id === "atirar_todo_lado" && pendingCombat.atirarMoveFirst) {
+      return new Set();
+    }
     if (id === "bunker_minas" && fromQ === h.q && fromR === h.r) {
       return model.getSkillRangeHexKeys("bunker_minas");
     }
@@ -1926,7 +1954,9 @@ function applyCombatOverlays(): void {
   } else if (pendingCombat?.kind === "skill") {
     const o = getCombatAttackPreviewOriginQr(h);
     const sid = pendingCombat.id;
-    if (sid === "bunker_minas" && o.q === h.q && o.r === h.r) {
+    if (sid === "atirar_todo_lado" && pendingCombat.atirarMoveFirst) {
+      atkKeys = new Set();
+    } else if (sid === "bunker_minas" && o.q === h.q && o.r === h.r) {
       atkKeys = model.getSkillRangeHexKeys("bunker_minas");
     } else {
       atkKeys = model.getSkillRangeHexKeysFromPosition(sid, o.q, o.r);
@@ -7615,7 +7645,7 @@ function showCombatHUD(): void {
   const hud = el(`
     <div class="hud">
       ${sandboxHudHtml}
-      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Com <strong>ataque ou skill</strong> selecionados, os hexes <strong>azuis</strong> permitem <strong>reposicionar</strong> antes do alvo; o <strong>vermelho</strong> é o alcance da ação. Clique num <strong>inimigo</strong> para ver atributos <strong>só sem</strong> ataque/skill selecionados. Skills em <strong>área</strong> (ex.: pistoleiro <strong>Atirar pra todo lado</strong>): move primeiro se precisares, depois escolhe a skill e confirma no alcance. Repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados · <strong>Esc</strong> pausar.</div>
+      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Com <strong>ataque ou skill</strong> selecionados, os hexes <strong>azuis</strong> permitem <strong>reposicionar</strong> antes do alvo; o <strong>vermelho</strong> é o alcance da ação. Clique num <strong>inimigo</strong> para ver atributos <strong>só sem</strong> ataque/skill selecionados. <strong>Atirar pra todo lado</strong> (pistoleiro): com movimento, ao escolheres a skill vês só hexes <strong>azuis</strong>; após <strong>um</strong> passo a ráfaga dispara sozinha. Sem movimento, dispara ao ativar a skill. Repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados · <strong>Esc</strong> pausar.</div>
     </div>
   `);
   const stipendOverlay = el(
@@ -8764,7 +8794,21 @@ function showCombatHUD(): void {
       b.addEventListener("click", () => {
         if (!isViewingActive) return;
         cancelPendingOrDebouncedActivate(b, () => {
-          pendingCombat = { kind: "skill", id };
+          if (id === "atirar_todo_lado" && model.movementLeft <= 0) {
+            dismissCombatTransientUi();
+            if (model.trySkill("atirar_todo_lado")) {
+              resetCombatSelection();
+              resumeMovementPreviewAfterHeroAction();
+              refreshOverlays();
+              update();
+            }
+            return;
+          }
+          const atirarFirst =
+            id === "atirar_todo_lado" && model.movementLeft > 0;
+          pendingCombat = atirarFirst
+            ? { kind: "skill", id, atirarMoveFirst: true }
+            : { kind: "skill", id };
           movePreviewActive = false;
           refreshOverlays();
           update();
@@ -9117,6 +9161,7 @@ function showCombatHUD(): void {
   function focusTurnHeroMovePreview(): void {
     const active = model.currentHero();
     if (!active || !active.heroClass || active.hp <= 0) return;
+    clearCombatAtirarFireTimer();
     combatLolInspectHeroId = null;
     combatInspectEnemyId = null;
     view.focusOnAxial(active.q, active.r, false);
@@ -9368,6 +9413,7 @@ function showCombatHUD(): void {
     };
 
     const cancelPendingCombatToMove = (): void => {
+      clearCombatAtirarFireTimer();
       pendingCombat = null;
       combatInspectEnemyId = null;
       openMovePreviewIfPossible();
@@ -9402,6 +9448,41 @@ function showCombatHUD(): void {
         }
         if (allowMove && model.tryMoveHero(hexAtPointer.q, hexAtPointer.r)) {
           view.clearHeroAttackFacing(active.id);
+          const chainAtirar =
+            pendingCombat.kind === "skill" &&
+            pendingCombat.id === "atirar_todo_lado" &&
+            pendingCombat.atirarMoveFirst === true;
+          if (chainAtirar) {
+            const delayMs = model.consumeLastHeroMoveAnimEstimateMs() + 25;
+            combatPhantomHoverHex = null;
+            pendingCombat = {
+              kind: "skill",
+              id: "atirar_todo_lado",
+              atirarExecPending: true,
+            };
+            if (combatAtirarTodoLadoFireTimer != null) {
+              window.clearTimeout(combatAtirarTodoLadoFireTimer);
+            }
+            combatAtirarTodoLadoFireTimer = window.setTimeout(() => {
+              combatAtirarTodoLadoFireTimer = null;
+              if (model.phase !== "combat" || model.inEnemyPhase) return;
+              const hero = model.currentHero();
+              if (!hero || hero.hp <= 0 || hero.heroClass !== "pistoleiro") {
+                resetCombatSelection();
+                refreshCombatHud?.();
+                return;
+              }
+              dismissCombatTransientUi();
+              if (model.trySkill("atirar_todo_lado")) {
+                resetCombatSelection();
+                resumeMovementPreviewAfterHeroAction();
+                refreshCombatHud?.();
+              } else {
+                resetCombatSelection();
+                refreshCombatHud?.();
+              }
+            }, delayMs);
+          }
           refreshOverlays();
           update();
           return;
@@ -9447,6 +9528,9 @@ function showCombatHUD(): void {
     if (pendingCombat?.kind === "skill") {
       const sid = pendingCombat.id;
       if (sid === "atirar_todo_lado") {
+        if (pendingCombat.atirarExecPending || pendingCombat.atirarMoveFirst) {
+          return;
+        }
         const hex = view.pickCombatHex(x, y, model.grid);
         const onHex =
           hex && model.hexInSkillRange(sid, hex.q, hex.r);
