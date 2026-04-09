@@ -1867,6 +1867,17 @@ function updateCombatPhantomHoverFromCanvas(ndcX: number, ndcY: number): void {
     }
     return;
   }
+  const eidOnHex = model.liveEnemyIdAtHex(hex.q, hex.r);
+  if (eidOnHex) {
+    const tu = model.units.find((u) => u.id === eidOnHex);
+    if (tu && !tu.isPlayer && tu.hp > 0) {
+      const origin = getCombatAttackPreviewOriginQr(h);
+      const atkPrev = combatPendingAttackPreviewKeysAt(origin.q, origin.r);
+      if (atkPrev.has(axialKey(tu.q, tu.r))) {
+        return;
+      }
+    }
+  }
   const reach = model.reachableForCurrentHero();
   const k = axialKey(hex.q, hex.r);
   if (!reach.has(k)) {
