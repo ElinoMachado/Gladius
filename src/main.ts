@@ -1420,7 +1420,9 @@ function pendingGroundSkillHexConsumesMoveClick(
 function maybeCombatNoActionsAutoEndOrModal(runUpdate: () => void): void {
   if (model.phase !== "combat" || model.inEnemyPhase || model.duel) return;
   if (model.hasPendingCombatSchedule()) return;
+  if (model.pendingMoveAnim != null) return;
   if (view.isUnitMoveAnimating()) return;
+  if (combatAtirarTodoLadoFireTimer != null) return;
   if (pendingCombat != null) return;
   if (combatNoActionsModalVisible) return;
 
@@ -10039,6 +10041,59 @@ function syncPauseMenuWithGamePhase(): void {
   }
 }
 
+/**
+ * Consome `pendingMoveAnim`, sincroniza meshes e enfileira animação no renderer.
+ * Em combate deve correr **antes** de `refreshCombatHud` / `maybeCombatNoActionsAutoEndOrModal`,
+ * para `isUnitMoveAnimating()` já refletir o movimento e o fim de turno automático não disparar
+ * no mesmo frame do movimento.
+ */
+function applyPendingMoveAnimationSync(layoutSceneEdit: boolean): void {
+  const mv = model.takePendingMoveAnimation();
+  view.syncUnits(
+    layoutSceneEdit ? model.layoutEditorSyntheticUnits() : model.units,
+    model.phase === "combat" ? model.wave : null,
+  );
+  if (!mv) return;
+  const segMs = mv.segmentMs ?? UNIT_MOVE_SEGMENT_MS;
+  if (mv.kind === "flamingSword") {
+    view.queueFlamingSwordMoveAlongCells(mv.heroId, mv.cells, mv.segmentMs);
+    const segs = Math.max(0, mv.cells.length - 1);
+    const totalMs = segs * segMs;
+    if (totalMs > 0) {
+      window.setTimeout(() => {
+        render();
+      }, totalMs + 20);
+    }
+  } else {
+    view.queueUnitMoveAlongCells(mv.unitId, mv.cells, mv.segmentMs, {
+      playHeroRun: mv.playHeroRunAnim === true,
+    });
+    const segs = Math.max(0, mv.cells.length - 1);
+    const totalMs = segs * segMs;
+    const dest = mv.cells[mv.cells.length - 1];
+    if (dest && model.phase === "combat") {
+      const b = model.bunkerAtHex(dest.q, dest.r);
+      if (b && b.hp > 0) {
+        view.scheduleHeroHideInBunkerAfterMove(mv.unitId, totalMs);
+        window.setTimeout(() => {
+          if (model.phase !== "combat") return;
+          const hero = model.units.find((u) => u.id === mv.unitId);
+          const bunk = model.bunkerAtHex(dest.q, dest.r);
+          if (!hero || hero.hp <= 0) return;
+          if (!bunk || bunk.hp <= 0) return;
+          if (hero.q !== dest.q || hero.r !== dest.r) return;
+          playWeaponsCock();
+        }, totalMs + 10);
+      }
+    }
+    if (totalMs > 0) {
+      window.setTimeout(() => {
+        render();
+      }, totalMs + 20);
+    }
+  }
+}
+
 function render(): void {
   if (!import.meta.env.DEV) {
     model.devSandboxMode = false;
@@ -10145,6 +10200,7 @@ function render(): void {
         view.snapCameraToAxial(ch.q, ch.r);
       }
     }
+    applyPendingMoveAnimationSync(false);
     if (prevPhase !== "combat" || !refreshCombatHud) {
       showCombatHUD();
     } else {
@@ -10183,51 +10239,8 @@ function render(): void {
     model.phase === "main_menu" &&
     view.isArenaLayoutEditActive();
 
-  const mv = model.takePendingMoveAnimation();
-  view.syncUnits(
-    layoutSceneEdit ? model.layoutEditorSyntheticUnits() : model.units,
-    model.phase === "combat" ? model.wave : null,
-  );
-  if (mv) {
-    const segMs = mv.segmentMs ?? UNIT_MOVE_SEGMENT_MS;
-    if (mv.kind === "flamingSword") {
-      view.queueFlamingSwordMoveAlongCells(mv.heroId, mv.cells, mv.segmentMs);
-      const segs = Math.max(0, mv.cells.length - 1);
-      const totalMs = segs * segMs;
-      if (totalMs > 0) {
-        window.setTimeout(() => {
-          render();
-        }, totalMs + 20);
-      }
-    } else {
-      view.queueUnitMoveAlongCells(mv.unitId, mv.cells, mv.segmentMs, {
-        playHeroRun: mv.playHeroRunAnim === true,
-      });
-      const segs = Math.max(0, mv.cells.length - 1);
-      const totalMs = segs * segMs;
-      const dest = mv.cells[mv.cells.length - 1];
-      if (dest && model.phase === "combat") {
-        const b = model.bunkerAtHex(dest.q, dest.r);
-        if (b && b.hp > 0) {
-          view.scheduleHeroHideInBunkerAfterMove(mv.unitId, totalMs);
-          // SFX deve tocar quando a animação realmente chegar ao bunker.
-          window.setTimeout(() => {
-            if (model.phase !== "combat") return;
-            const hero = model.units.find((u) => u.id === mv.unitId);
-            const bunk = model.bunkerAtHex(dest.q, dest.r);
-            if (!hero || hero.hp <= 0) return;
-            if (!bunk || bunk.hp <= 0) return;
-            if (hero.q !== dest.q || hero.r !== dest.r) return;
-            playWeaponsCock();
-          }, totalMs + 10);
-        }
-      }
-      if (totalMs > 0) {
-        window.setTimeout(() => {
-          render();
-        }, totalMs + 20);
-      }
-    }
+  if (model.phase !== "combat") {
+    applyPendingMoveAnimationSync(layoutSceneEdit);
   }
   const showBunkers =
     shouldShowBunkerMeshes(model.phase) || layoutSceneEdit;
