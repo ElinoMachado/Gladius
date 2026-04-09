@@ -7645,7 +7645,7 @@ function showCombatHUD(): void {
   const hud = el(`
     <div class="hud">
       ${sandboxHudHtml}
-      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Com <strong>ataque ou skill</strong> selecionados, os hexes <strong>azuis</strong> permitem <strong>reposicionar</strong> antes do alvo; o <strong>vermelho</strong> é o alcance da ação. Clique num <strong>inimigo</strong> para ver atributos <strong>só sem</strong> ataque/skill selecionados. <strong>Atirar pra todo lado</strong> (pistoleiro): com movimento, ao escolheres a skill vês só hexes <strong>azuis</strong>; após <strong>um</strong> passo a ráfaga dispara sozinha. Sem movimento, dispara ao ativar a skill. Repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados · <strong>Esc</strong> pausar.</div>
+      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Com <strong>ataque ou skill</strong> selecionados, os hexes <strong>azuis</strong> permitem <strong>reposicionar</strong> antes do alvo; o <strong>vermelho</strong> é o alcance da ação. Clique num <strong>inimigo</strong> para ver atributos <strong>só sem</strong> ataque/skill selecionados. <strong>Atirar pra todo lado</strong> (pistoleiro): com movimento, ao escolheres a skill vês só hexes <strong>azuis</strong>; após <strong>um</strong> passo a ráfaga dispara sozinha. Sem movimento, vês o alcance em <strong>vermelho</strong> e confirmas com um clique na arena (hex ou inimigo no alcance). Repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados · <strong>Esc</strong> pausar.</div>
     </div>
   `);
   const stipendOverlay = el(
@@ -8794,16 +8794,6 @@ function showCombatHUD(): void {
       b.addEventListener("click", () => {
         if (!isViewingActive) return;
         cancelPendingOrDebouncedActivate(b, () => {
-          if (id === "atirar_todo_lado" && model.movementLeft <= 0) {
-            dismissCombatTransientUi();
-            if (model.trySkill("atirar_todo_lado")) {
-              resetCombatSelection();
-              resumeMovementPreviewAfterHeroAction();
-              refreshOverlays();
-              update();
-            }
-            return;
-          }
           const atirarFirst =
             id === "atirar_todo_lado" && model.movementLeft > 0;
           pendingCombat = atirarFirst
