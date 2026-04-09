@@ -7615,7 +7615,7 @@ function showCombatHUD(): void {
   const hud = el(`
     <div class="hud">
       ${sandboxHudHtml}
-      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Com <strong>ataque ou skill</strong> selecionados, os hexes <strong>azuis</strong> permitem <strong>reposicionar</strong> antes do alvo; o <strong>vermelho</strong> é o alcance da ação. Clique num <strong>inimigo</strong> para ver atributos. Repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados · <strong>Esc</strong> pausar.</div>
+      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Com <strong>ataque ou skill</strong> selecionados, os hexes <strong>azuis</strong> permitem <strong>reposicionar</strong> antes do alvo; o <strong>vermelho</strong> é o alcance da ação. Clique num <strong>inimigo</strong> para ver atributos <strong>só sem</strong> ataque/skill selecionados. Skills em <strong>área</strong> (ex.: pistoleiro <strong>Atirar pra todo lado</strong>): move primeiro se precisares, depois escolhe a skill e confirma no alcance. Repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados · <strong>Esc</strong> pausar.</div>
     </div>
   `);
   const stipendOverlay = el(
@@ -7999,6 +7999,9 @@ function showCombatHUD(): void {
   };
 
   const update = (): void => {
+    if (pendingCombat != null) {
+      combatInspectEnemyId = null;
+    }
     const activeHero = model.currentHero();
     const h = lolViewedHero(model);
     const partyLive = model.getParty().filter((u) => u.hp > 0);
@@ -8389,7 +8392,7 @@ function showCombatHUD(): void {
         combatLolInspectHeroId =
           ch && u.id !== ch.id ? u.id : null;
       } else {
-        combatInspectEnemyId = id;
+        combatInspectEnemyId = pendingCombat != null ? null : id;
       }
       update();
     };
@@ -9567,6 +9570,9 @@ function showCombatHUD(): void {
           return;
         }
       } else if (u && !u.isPlayer && u.hp > 0) {
+        if (pendingCombat != null) {
+          return;
+        }
         combatInspectEnemyId = uid;
         view.focusOnAxial(u.q, u.r);
         update();
