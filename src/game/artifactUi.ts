@@ -446,7 +446,6 @@ export function artifactCardFigureSvg(artifactId: string): string {
     coroa_ferro: `<path fill="#bf360c" d="M26 8 L38 22 L32 40 L16 40 L10 22 Z" stroke="#3e2723" stroke-width="1"/><path fill="#ff6f00" d="M24 14 L32 22 L28 36 L20 36 L16 22 Z" opacity="0.9"/><path fill="#ffeb3b" d="M24 18 L28 24 L26 32 L22 32 L20 24 Z" opacity="0.85"/><path fill="none" stroke="#fff59d" stroke-width="1.4" d="M12 26 Q24 12 36 26" opacity="0.9"/>`,
     martelo_juiz: `<rect x="18" y="10" width="12" height="22" rx="2" fill="#5d4037" stroke="#3e2723" stroke-width="1"/><rect x="14" y="28" width="20" height="10" rx="2" fill="#78909c" stroke="#455a64"/><circle cx="24" cy="14" r="3" fill="#ff7043"/><path fill="none" stroke="#bdbdbd" stroke-width="1" d="M20 20h8M22 24h4"/>`,
     motor_morte: `<path fill="#ffee58" stroke="#e65100" stroke-width="1.4" stroke-linejoin="round" d="M30 3 L14 25h11l-7 21 22-26h-10l10-17z"/>`,
-    maos_venenosas: `<path fill="#6a1b9a" d="M18 32 Q24 8 30 32 Z"/><circle cx="20" cy="26" r="2" fill="#ce93d8"/><circle cx="28" cy="26" r="2" fill="#ce93d8"/>`,
     alento_morte: `<path fill="none" stroke="#78909c" stroke-width="1.4" d="M24 8v32"/><path fill="#b0bec5" d="M16 18c0-4 4-8 8-8s8 4 8 8v6H16v-6z"/><path fill="#37474f" d="M18 26h12v6H18z"/><circle cx="20" cy="22" r="2" fill="#eceff1"/><circle cx="28" cy="22" r="2" fill="#eceff1"/>`,
     ronin: `<path fill="#b71c1c" d="M12 36 L24 10 L36 36 Z" stroke="#3e2723" stroke-width="1"/><path fill="#eceff1" d="M22 20h4v14h-4z"/>`,
     imortal: `<path fill="#c62828" d="M24 12 C32 20 32 32 24 38 C16 32 16 20 24 12"/><path fill="#ffcdd2" d="M24 22v10" stroke="#fff" stroke-width="2"/>`,
@@ -490,6 +489,9 @@ export function artifactCardFigureSvg(artifactId: string): string {
 }
 
 export function artifactCardInnerHtml(artifactId: string): string {
+  if (artifactId === "maos_venenosas") {
+    return `<img class="artifact-card-img" src="/icons/maos_venenosas.png" alt="" width="48" height="48" decoding="async" aria-hidden="true" />`;
+  }
   const inner = artifactCardFigureSvg(artifactId);
   return `<svg class="artifact-card-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner}</svg>`;
 }
