@@ -2643,7 +2643,8 @@ h1 {
   outline-offset: 2px;
 }
 
-.artifact-mini-card .artifact-card-svg {
+.artifact-mini-card .artifact-card-svg,
+.artifact-mini-card .artifact-card-img {
   width: 78%;
   height: auto;
   max-height: 72%;
@@ -2665,8 +2666,13 @@ h1 {
   border: 1px solid rgba(180, 160, 110, 0.35);
 }
 
-.artifact-card-svg {
+.artifact-card-svg,
+.artifact-card-img {
   display: block;
+}
+
+.artifact-card-img {
+  object-fit: contain;
 }
 
 .artifact-tt {
@@ -3031,7 +3037,8 @@ h1 {
     height: 3rem;
   }
 
-  .combat-above-bar-left .artifact-mini-card .artifact-card-svg {
+  .combat-above-bar-left .artifact-mini-card .artifact-card-svg,
+  .combat-above-bar-left .artifact-mini-card .artifact-card-img {
     max-height: 68%;
   }
 }
@@ -4877,6 +4884,13 @@ body.enemy-inspect--dragging-body {
   height: auto;
 }
 
+.artifact-pick-card__art .artifact-card-img {
+  width: 76px;
+  height: 76px;
+  max-width: 76px;
+  box-sizing: border-box;
+}
+
 .artifact-pick-card__name {
   font-size: 0.68rem;
   font-weight: 700;
@@ -5298,6 +5312,12 @@ body.enemy-inspect--dragging-body {
 .artifact-codex-card__art .artifact-card-svg {
   width: 56px;
   height: auto;
+}
+
+.artifact-codex-card__art .artifact-card-img {
+  width: 56px;
+  height: 56px;
+  box-sizing: border-box;
 }
 
 .artifact-codex-card__name {
@@ -10360,6 +10380,13 @@ select.forge-biome-sel option:disabled {
   width: 36px;
   max-width: 90%;
   height: auto;
+}
+
+.artifact-pick-owned-card__art .artifact-card-img {
+  width: 36px;
+  height: 36px;
+  max-width: 90%;
+  box-sizing: border-box;
 }
 
 .artifact-pick-owned-card__badge {
