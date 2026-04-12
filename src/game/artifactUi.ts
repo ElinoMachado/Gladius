@@ -435,9 +435,6 @@ export function artifactCodexAllTiersHtml(id: string, u?: Unit): string {
 
 /** SVG decorativo da “figura” da carta (símbolo central). */
 export function artifactCardFigureSvg(artifactId: string): string {
-  if (artifactId === "maos_venenosas") {
-    return `<image href="/icons/maos_venenosas.png" width="48" height="48" preserveAspectRatio="xMidYMid slice"/>`;
-  }
   const sym: Record<string, string> = {
     garra_ferro: `<path fill="#5d4037" stroke="#3e2723" stroke-width="1" d="M14 38c2-8 4-14 8-18 2 6 1 12-2 18M20 36c1-7 3-12 6-16 3 5 2 11 0 16M26 34c0-6 2-10 4-13 3 4 3 9 2 13M32 32c-1-5 0-9 2-12 2 3 4 7 3 12"/><path fill="#8d6e63" d="M18 38 L22 22 L26 20 L30 24 L28 38 Z"/><path fill="#ff7043" stroke="#bf360c" stroke-width="0.8" d="M20 24 L24 18 L28 24 L26 28 L22 28 Z"/>`,
     escama_leve: `<circle cx="24" cy="26" r="10" fill="#e65100" opacity="0.35"/><path fill="#ff6f00" d="M24 10 Q34 18 32 28 Q30 38 24 42 Q18 38 16 28 Q14 18 24 10"/><path fill="#ffca28" d="M24 16 Q28 20 27 26 Q26 32 24 34 Q22 32 21 26 Q20 20 24 16"/><path fill="#fff59d" d="M22 22h4v6h-4z" opacity="0.7"/>`,
@@ -492,10 +489,10 @@ export function artifactCardFigureSvg(artifactId: string): string {
 }
 
 export function artifactCardInnerHtml(artifactId: string): string {
-  const inner = artifactCardFigureSvg(artifactId);
   if (artifactId === "maos_venenosas") {
-    return `<svg class="artifact-card-svg artifact-card-svg--fullbleed" viewBox="0 0 48 48" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true">${inner}</svg>`;
+    return `<img class="artifact-card-img artifact-card-img--fullbleed" src="/icons/maos_venenosas.png" alt="" decoding="async" />`;
   }
+  const inner = artifactCardFigureSvg(artifactId);
   return `<svg class="artifact-card-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner}</svg>`;
 }
 
