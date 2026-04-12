@@ -435,6 +435,9 @@ export function artifactCodexAllTiersHtml(id: string, u?: Unit): string {
 
 /** SVG decorativo da “figura” da carta (símbolo central). */
 export function artifactCardFigureSvg(artifactId: string): string {
+  if (artifactId === "maos_venenosas") {
+    return `<image href="/icons/maos_venenosas.png" width="48" height="48" preserveAspectRatio="xMidYMid meet"/>`;
+  }
   const sym: Record<string, string> = {
     garra_ferro: `<path fill="#5d4037" stroke="#3e2723" stroke-width="1" d="M14 38c2-8 4-14 8-18 2 6 1 12-2 18M20 36c1-7 3-12 6-16 3 5 2 11 0 16M26 34c0-6 2-10 4-13 3 4 3 9 2 13M32 32c-1-5 0-9 2-12 2 3 4 7 3 12"/><path fill="#8d6e63" d="M18 38 L22 22 L26 20 L30 24 L28 38 Z"/><path fill="#ff7043" stroke="#bf360c" stroke-width="0.8" d="M20 24 L24 18 L28 24 L26 28 L22 28 Z"/>`,
     escama_leve: `<circle cx="24" cy="26" r="10" fill="#e65100" opacity="0.35"/><path fill="#ff6f00" d="M24 10 Q34 18 32 28 Q30 38 24 42 Q18 38 16 28 Q14 18 24 10"/><path fill="#ffca28" d="M24 16 Q28 20 27 26 Q26 32 24 34 Q22 32 21 26 Q20 20 24 16"/><path fill="#fff59d" d="M22 22h4v6h-4z" opacity="0.7"/>`,
@@ -446,7 +449,6 @@ export function artifactCardFigureSvg(artifactId: string): string {
     coroa_ferro: `<path fill="#bf360c" d="M26 8 L38 22 L32 40 L16 40 L10 22 Z" stroke="#3e2723" stroke-width="1"/><path fill="#ff6f00" d="M24 14 L32 22 L28 36 L20 36 L16 22 Z" opacity="0.9"/><path fill="#ffeb3b" d="M24 18 L28 24 L26 32 L22 32 L20 24 Z" opacity="0.85"/><path fill="none" stroke="#fff59d" stroke-width="1.4" d="M12 26 Q24 12 36 26" opacity="0.9"/>`,
     martelo_juiz: `<rect x="18" y="10" width="12" height="22" rx="2" fill="#5d4037" stroke="#3e2723" stroke-width="1"/><rect x="14" y="28" width="20" height="10" rx="2" fill="#78909c" stroke="#455a64"/><circle cx="24" cy="14" r="3" fill="#ff7043"/><path fill="none" stroke="#bdbdbd" stroke-width="1" d="M20 20h8M22 24h4"/>`,
     motor_morte: `<path fill="#ffee58" stroke="#e65100" stroke-width="1.4" stroke-linejoin="round" d="M30 3 L14 25h11l-7 21 22-26h-10l10-17z"/>`,
-    maos_venenosas: `<path fill="#6a1b9a" d="M18 32 Q24 8 30 32 Z"/><circle cx="20" cy="26" r="2" fill="#ce93d8"/><circle cx="28" cy="26" r="2" fill="#ce93d8"/>`,
     alento_morte: `<path fill="none" stroke="#78909c" stroke-width="1.4" d="M24 8v32"/><path fill="#b0bec5" d="M16 18c0-4 4-8 8-8s8 4 8 8v6H16v-6z"/><path fill="#37474f" d="M18 26h12v6H18z"/><circle cx="20" cy="22" r="2" fill="#eceff1"/><circle cx="28" cy="22" r="2" fill="#eceff1"/>`,
     ronin: `<path fill="#b71c1c" d="M12 36 L24 10 L36 36 Z" stroke="#3e2723" stroke-width="1"/><path fill="#eceff1" d="M22 20h4v14h-4z"/>`,
     imortal: `<path fill="#c62828" d="M24 12 C32 20 32 32 24 38 C16 32 16 20 24 12"/><path fill="#ffcdd2" d="M24 22v10" stroke="#fff" stroke-width="2"/>`,
