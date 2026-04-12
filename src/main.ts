@@ -221,10 +221,8 @@ import {
 import { setArenaCombatMusicFromWave, stopArenaAmbient } from "./audio/arenaAmbient";
 import { ensureMenuThemePlaying, pauseMenuTheme } from "./audio/menuAmbient";
 import {
-  getSkipAlliedCombatAnimations,
-  getSkipEnemyCombatAnimations,
-  setSkipAlliedCombatAnimations,
-  setSkipEnemyCombatAnimations,
+  getSkipCombatAnimations,
+  setSkipCombatAnimations,
 } from "./game/combatPrefs";
 import {
   getSandboxNoCdUltReady,
@@ -440,8 +438,6 @@ function disposeBioHeroPreview(): void {
 
 let enemyInspectPreview3d: EnemyPreview3D | null = null;
 let lastEnemyInspectRenderedId: string | null = null;
-/** Evita rajada de whoosh quando várias bolas de vento disparam em sequência. */
-let lastAnelDragaoAirWhooshAt = 0;
 
 function disposeEnemyInspectPreview(): void {
   enemyInspectPreview3d?.dispose();
@@ -457,19 +453,16 @@ function heroClassLetter(cls: HeroClassId): string {
 
 function applyCombatVfxHint(h: CombatVfxHint): void {
   if (!h) return;
-  const skipAllyVfx = getSkipAlliedCombatAnimations();
   switch (h.kind) {
     case "atirar_todo_lado":
-      if (!skipAllyVfx) {
-        view.triggerRadialShotVfx(h.heroId);
-        playGunVolley(Math.min(14, Math.max(4, Math.ceil(h.shotCount / 3))), 46);
-        for (let i = 0; i < h.targetIds.length; i++) {
-          const tid = h.targetIds[i]!;
-          window.setTimeout(
-            () => view.spawnComicPowImpactOnUnit(tid),
-            ATIRAR_FIRST_DAMAGE_MS + i * ATIRAR_STAGGER_MS,
-          );
-        }
+      view.triggerRadialShotVfx(h.heroId);
+      playGunVolley(Math.min(14, Math.max(4, Math.ceil(h.shotCount / 3))), 46);
+      for (let i = 0; i < h.targetIds.length; i++) {
+        const tid = h.targetIds[i]!;
+        window.setTimeout(
+          () => view.spawnComicPowImpactOnUnit(tid),
+          ATIRAR_FIRST_DAMAGE_MS + i * ATIRAR_STAGGER_MS,
+        );
       }
       break;
     case "duel_start":
@@ -479,38 +472,30 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
       view.setDuelFlameAura(h.gladiadorId, false);
       break;
     case "sentenca":
-      if (!skipAllyVfx) {
-        view.triggerSentencaOrbBarrage(
-          h.priestId,
-          h.targetIds,
-          SENTENCA_FIRST_DAMAGE_MS,
-          SENTENCA_STAGGER_MS,
-        );
+      view.triggerSentencaOrbBarrage(
+        h.priestId,
+        h.targetIds,
+        SENTENCA_FIRST_DAMAGE_MS,
+        SENTENCA_STAGGER_MS,
+      );
+      window.setTimeout(
+        () =>
+          playMagicBarrage(
+            Math.max(1, h.enemyHitCount),
+            SENTENCA_STAGGER_MS,
+          ),
+        Math.max(0, SENTENCA_FIRST_DAMAGE_MS - 70),
+      );
+      {
+        const last =
+          h.enemyHitCount === 0
+            ? 0
+            : SENTENCA_FIRST_DAMAGE_MS +
+              (h.enemyHitCount - 1) * SENTENCA_STAGGER_MS;
         window.setTimeout(
-          () =>
-            playMagicBarrage(
-              Math.max(1, h.enemyHitCount),
-              SENTENCA_STAGGER_MS,
-            ),
-          Math.max(0, SENTENCA_FIRST_DAMAGE_MS - 70),
+          () => view.triggerHealGust(h.allyIds),
+          last + SENTENCA_HEAL_AFTER_LAST_HIT_MS,
         );
-        {
-          const last =
-            h.enemyHitCount === 0
-              ? 0
-              : SENTENCA_FIRST_DAMAGE_MS +
-                (h.enemyHitCount - 1) * SENTENCA_STAGGER_MS;
-          window.setTimeout(
-            () => view.triggerHealGust(h.allyIds),
-            last + SENTENCA_HEAL_AFTER_LAST_HIT_MS,
-          );
-        }
-      }
-      break;
-    case "espinhos_gelados_spike":
-      if (!skipAllyVfx) {
-        view.queueIceSpikeProjectile(h.fromId, h.toId, 0.32);
-        playMagicWhoosh();
       }
       break;
     case "basic_projectile": {
@@ -523,7 +508,7 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
         style: h.style,
         durationSec: flightMs / 1000,
       });
-      if (!skipAllyVfx) {
+      if (!getSkipCombatAnimations()) {
         if (h.style === "bullet") {
           view.playHeroCombatClip(h.fromId, [
             heroAttackClipName("pistoleiro"),
@@ -531,7 +516,7 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
             "fire",
             "shot",
           ]);
-        } else if (h.style !== "air") {
+        } else {
           view.playHeroCombatClip(h.fromId, [
             heroAttackClipName("sacerdotisa"),
             "cast",
@@ -541,20 +526,12 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
           ]);
         }
       }
-      if (!skipAllyVfx) {
-        if (h.style === "bullet") playGunshot();
-        else if (h.style === "air") {
-          const now = performance.now();
-          if (now - lastAnelDragaoAirWhooshAt > 72) {
-            lastAnelDragaoAirWhooshAt = now;
-            playMagicWhoosh();
-          }
-        } else playMagicWhoosh();
-      }
+      if (h.style === "bullet") playGunshot();
+      else playMagicWhoosh();
       break;
     }
     case "hero_basic_melee":
-      if (!skipAllyVfx) {
+      if (!getSkipCombatAnimations()) {
         view.playHeroCombatClip(h.heroId, [
           heroAttackClipName("gladiador"),
           "box01",
@@ -565,7 +542,6 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
       }
       break;
     case "basic_volley": {
-      if (skipAllyVfx) break;
       view.triggerRadialShotVfx(h.fromId, {
         rays: 14,
         durationMs: 320,
@@ -614,26 +590,23 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
       if (h.archetypeId === "escravo") playEscravoChainSlash();
       else playSwordHit();
       view.triggerMeleeSlashBetween(h.attackerId, h.targetId);
-      if (!skipAllyVfx) view.playHeroHitReact(h.targetId);
+      if (!getSkipCombatAnimations()) {
+        view.playHeroHitReact(h.targetId);
+      }
       break;
     case "flaming_sword_strike":
-      if (!skipAllyVfx) {
-        playSwordHit();
-        view.triggerFlamingSwordSlash(h.heroOwnerId, h.targetId);
-      }
+      playSwordHit();
+      view.triggerFlamingSwordSlash(h.heroOwnerId, h.targetId);
       break;
     case "ally_summon_strike":
-      if (!skipAllyVfx) {
-        playSwordHit();
-        view.triggerGridSummonSlash(
-          h.summonId,
-          h.targetId,
-          h.summonKind ?? "mega_golem",
-        );
-      }
+      playSwordHit();
+      view.triggerGridSummonSlash(
+        h.summonId,
+        h.targetId,
+        h.summonKind ?? "mega_golem",
+      );
       break;
     case "weapon_ult_furacao": {
-      if (skipAllyVfx) break;
       view.triggerWeaponUltFuracaoJump(h.heroId, FURACAO_ULT_JUMP_MS);
       view.triggerRadialShotVfx(h.heroId, {
         rays: Math.min(36, 16 + h.targetIds.length * 3),
@@ -656,24 +629,21 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
       break;
     }
     case "pisotear_chain":
-      if (!skipAllyVfx) {
-        for (let i = 0; i < h.targetIds.length; i++) {
-          const tid = h.targetIds[i]!;
-          window.setTimeout(() => {
-            playSwordHit();
-            view.triggerMeleeSlashBetween(h.heroId, tid);
-          }, PISOTEAR_FIRST_DAMAGE_MS + i * PISOTEAR_STAGGER_MS);
-        }
+      for (let i = 0; i < h.targetIds.length; i++) {
+        const tid = h.targetIds[i]!;
+        window.setTimeout(() => {
+          playSwordHit();
+          view.triggerMeleeSlashBetween(h.heroId, tid);
+        }, PISOTEAR_FIRST_DAMAGE_MS + i * PISOTEAR_STAGGER_MS);
       }
       break;
     case "golpe_relampago_teleport":
-      if (!skipAllyVfx) playTeleportWhoosh();
+      playTeleportWhoosh();
       break;
     case "golpe_relampago_hero_charge":
-      if (!skipAllyVfx) view.triggerGolpeRelampagoHeroElectrify(h.heroId);
+      view.triggerGolpeRelampagoHeroElectrify(h.heroId);
       break;
     case "golpe_relampago_lightning": {
-      if (skipAllyVfx) break;
       const delay = Math.max(0, h.delayMs);
       window.setTimeout(() => {
         playLightningStrike();
@@ -994,14 +964,7 @@ function schedulePersistRunSessionCheckpoint(): void {
 type PendingCombat =
   | null
   | { kind: "basic" }
-  | {
-      kind: "skill";
-      id: string;
-      /** Atirar pra todo lado: primeiro só movimento (1 hex), depois dispara a área. */
-      atirarMoveFirst?: boolean;
-      /** Entre o movimento e o disparo automático — ignora cliques na arena. */
-      atirarExecPending?: boolean;
-    };
+  | { kind: "skill"; id: string };
 
 let movePreviewActive = false;
 let pendingCombat: PendingCombat = null;
@@ -1009,10 +972,6 @@ let pendingCombat: PendingCombat = null;
 let combatTiroBeamPreviewKeys: Set<string> | null = null;
 let combatTiroBeamPath: { q: number; r: number }[] | null = null;
 let combatTiroAimCacheSig = "";
-/** Hex de movimento sob o rato — overlay vermelho segue como se o herói já estivesse nessa célula. */
-let combatPhantomHoverHex: { q: number; r: number } | null = null;
-let combatAtirarTodoLadoFireTimer: ReturnType<typeof window.setTimeout> | null =
-  null;
 /** Evita acumular `keydown` de combate a cada `render()` / `showCombatHUD()`. */
 let combatHotkeysAbort: AbortController | null = null;
 let combatCornerResizeObserver: ResizeObserver | null = null;
@@ -1270,8 +1229,6 @@ function writeCombatNoActionsAutoEndSkip(on: boolean): void {
 /** Modal “sem ações” já visível (evita reabrir a cada `update`). */
 let combatNoActionsModalVisible = false;
 let combatNoActionsModalEl: HTMLElement | null = null;
-/** Após “Não, fico no turno”: não voltar a abrir o modal neste herói até mudar de turno. */
-let combatNoActionsDeclinedForHeroId: string | null = null;
 
 function disposeCombatNoActionsModal(): void {
   combatNoActionsModalEl?.remove();
@@ -1385,38 +1342,6 @@ function resumeMovementPreviewAfterHeroAction(): void {
   }
 }
 
-/**
- * Skills com alvo em hex vazio: clique nesse hex deve executar a skill, não só reposicionar.
- * (Reposicionar usa hexes alcançáveis que não são alvo válido da skill de chão.)
- */
-function pendingGroundSkillHexConsumesMoveClick(
-  model: GameModel,
-  skillId: string,
-  hex: { q: number; r: number },
-  hero: { q: number; r: number },
-): boolean {
-  if (
-    skillId === "atirar_todo_lado" &&
-    pendingCombat?.kind === "skill" &&
-    pendingCombat.id === "atirar_todo_lado" &&
-    model.movementLeft > 0 &&
-    !model.heroIsAmbushMovementLocked()
-  ) {
-    return false;
-  }
-  if (skillId === "tiro_destruidor") {
-    if (hex.q === hero.q && hex.r === hero.r) return false;
-    return model.hexInSkillRange(skillId, hex.q, hex.r);
-  }
-  if (skillId === "bunker_minas") {
-    return model.hexInSkillRange(skillId, hex.q, hex.r);
-  }
-  if (skillId === "atirar_todo_lado") {
-    return model.hexInSkillRange(skillId, hex.q, hex.r);
-  }
-  return false;
-}
-
 function maybeCombatNoActionsAutoEndOrModal(runUpdate: () => void): void {
   if (model.phase !== "combat" || model.inEnemyPhase || model.duel) return;
   if (model.hasPendingCombatSchedule()) return;
@@ -1430,18 +1355,9 @@ function maybeCombatNoActionsAutoEndOrModal(runUpdate: () => void): void {
     return;
   if (cur.hp <= 0) return;
 
-  if (
-    combatNoActionsDeclinedForHeroId &&
-    combatNoActionsDeclinedForHeroId !== cur.id
-  ) {
-    combatNoActionsDeclinedForHeroId = null;
-  }
-  if (combatNoActionsDeclinedForHeroId === cur.id) return;
-
   if (heroHasAnyEnabledCombatAction(model, cur)) return;
 
   if (readCombatNoActionsAutoEndSkip()) {
-    combatNoActionsDeclinedForHeroId = null;
     resetCombatSelection();
     model.endHeroTurn();
     runUpdate();
@@ -1477,7 +1393,6 @@ function maybeCombatNoActionsAutoEndOrModal(runUpdate: () => void): void {
         "#combat-no-actions-skip-future",
       ) as HTMLInputElement | null;
       if (cb?.checked) writeCombatNoActionsAutoEndSkip(true);
-      combatNoActionsDeclinedForHeroId = null;
       resetCombatSelection();
       model.endHeroTurn();
       close();
@@ -1487,7 +1402,6 @@ function maybeCombatNoActionsAutoEndOrModal(runUpdate: () => void): void {
   overlay.querySelector("#combat-no-actions-decline")!.addEventListener(
     "click",
     () => {
-      combatNoActionsDeclinedForHeroId = cur.id;
       close();
     },
   );
@@ -1807,139 +1721,15 @@ function bindEnemyInspectPanel(panel: HTMLElement): void {
   );
 }
 
-function clearCombatAtirarFireTimer(): void {
-  if (combatAtirarTodoLadoFireTimer != null) {
-    window.clearTimeout(combatAtirarTodoLadoFireTimer);
-    combatAtirarTodoLadoFireTimer = null;
-  }
-}
-
 function resetCombatSelection(): void {
-  clearCombatAtirarFireTimer();
   movePreviewActive = false;
   pendingCombat = null;
   combatTiroBeamPreviewKeys = null;
   combatTiroBeamPath = null;
   combatTiroAimCacheSig = "";
-  combatPhantomHoverHex = null;
   combatInspectEnemyId = null;
   combatHoverEnemyId = null;
   combatLolInspectHeroId = null;
-}
-
-/** Origem usada para pré-visualizar alcance (hex fantasma ou posição real). */
-function getCombatAttackPreviewOriginQr(h: Unit): { q: number; r: number } {
-  if (
-    combatPhantomHoverHex &&
-    model.movementLeft > 0 &&
-    model
-      .reachableForCurrentHero()
-      .has(axialKey(combatPhantomHoverHex.q, combatPhantomHoverHex.r)) &&
-    (combatPhantomHoverHex.q !== h.q || combatPhantomHoverHex.r !== h.r)
-  ) {
-    return { q: combatPhantomHoverHex.q, r: combatPhantomHoverHex.r };
-  }
-  return { q: h.q, r: h.r };
-}
-
-function combatPendingAttackPreviewKeysAt(
-  fromQ: number,
-  fromR: number,
-): Set<string> {
-  const h = model.currentHero();
-  if (!h || h.hp <= 0) return new Set();
-  if (pendingCombat?.kind === "basic") {
-    return model.getBasicAttackRangeHexKeysFromPosition(fromQ, fromR);
-  }
-  if (pendingCombat?.kind === "skill") {
-    const id = pendingCombat.id;
-    if (id === "bunker_minas" && fromQ === h.q && fromR === h.r) {
-      return model.getSkillRangeHexKeys("bunker_minas");
-    }
-    return model.getSkillRangeHexKeysFromPosition(id, fromQ, fromR);
-  }
-  return new Set();
-}
-
-function updateCombatPhantomHoverFromCanvas(ndcX: number, ndcY: number): void {
-  if (model.phase !== "combat" || model.inEnemyPhase) {
-    if (combatPhantomHoverHex !== null) {
-      combatPhantomHoverHex = null;
-      applyCombatOverlays();
-    }
-    return;
-  }
-  const h = model.currentHero();
-  if (!h || h.hp <= 0) {
-    if (combatPhantomHoverHex !== null) {
-      combatPhantomHoverHex = null;
-      applyCombatOverlays();
-    }
-    return;
-  }
-  if (
-    !pendingCombat ||
-    model.movementLeft <= 0 ||
-    !(pendingCombat.kind === "basic" || pendingCombat.kind === "skill")
-  ) {
-    if (combatPhantomHoverHex !== null) {
-      combatPhantomHoverHex = null;
-      applyCombatOverlays();
-    }
-    return;
-  }
-  if (
-    pendingCombat.kind === "skill" &&
-    pendingCombat.id === "atirar_todo_lado" &&
-    model.heroIsAmbushMovementLocked()
-  ) {
-    if (combatPhantomHoverHex !== null) {
-      combatPhantomHoverHex = null;
-      applyCombatOverlays();
-    }
-    return;
-  }
-  const hex = view.pickCombatHex(ndcX, ndcY, model.grid);
-  if (!hex) {
-    if (combatPhantomHoverHex !== null) {
-      combatPhantomHoverHex = null;
-      applyCombatOverlays();
-    }
-    return;
-  }
-  const eidOnHex = model.liveEnemyIdAtHex(hex.q, hex.r);
-  if (eidOnHex) {
-    const tu = model.units.find((u) => u.id === eidOnHex);
-    if (tu && !tu.isPlayer && tu.hp > 0) {
-      const origin = getCombatAttackPreviewOriginQr(h);
-      const atkPrev = combatPendingAttackPreviewKeysAt(origin.q, origin.r);
-      if (atkPrev.has(axialKey(tu.q, tu.r))) {
-        return;
-      }
-    }
-  }
-  const reach = model.reachableForCurrentHero();
-  const k = axialKey(hex.q, hex.r);
-  if (!reach.has(k)) {
-    if (combatPhantomHoverHex !== null) {
-      combatPhantomHoverHex = null;
-      applyCombatOverlays();
-    }
-    return;
-  }
-  const cur = axialKey(h.q, h.r);
-  if (k === cur) {
-    if (combatPhantomHoverHex !== null) {
-      combatPhantomHoverHex = null;
-      applyCombatOverlays();
-    }
-    return;
-  }
-  if (combatPhantomHoverHex?.q === hex.q && combatPhantomHoverHex?.r === hex.r) {
-    return;
-  }
-  combatPhantomHoverHex = { q: hex.q, r: hex.r };
-  applyCombatOverlays();
 }
 
 function applyCombatOverlays(): void {
@@ -1961,37 +1751,14 @@ function applyCombatOverlays(): void {
   let moveKeys = new Set<string>();
   let atkKeys = new Set<string>();
   if (pendingCombat?.kind === "basic") {
-    const o = getCombatAttackPreviewOriginQr(h);
-    atkKeys = model.getBasicAttackRangeHexKeysFromPosition(o.q, o.r);
+    atkKeys = model.getBasicAttackRangeHexKeys();
   } else if (pendingCombat?.kind === "skill") {
-    const o = getCombatAttackPreviewOriginQr(h);
-    const sid = pendingCombat.id;
-    if (sid === "bunker_minas" && o.q === h.q && o.r === h.r) {
-      atkKeys = model.getSkillRangeHexKeys("bunker_minas");
-    } else {
-      atkKeys = model.getSkillRangeHexKeysFromPosition(sid, o.q, o.r);
-    }
+    atkKeys = model.getSkillRangeHexKeys(pendingCombat.id);
   } else if (movePreviewActive) {
     const reach = model.reachableForCurrentHero();
     const cur = axialKey(h.q, h.r);
     for (const k of reach.keys()) {
       if (k !== cur) moveKeys.add(k);
-    }
-  }
-  if (
-    (pendingCombat?.kind === "basic" || pendingCombat?.kind === "skill") &&
-    model.movementLeft > 0
-  ) {
-    const atirarAmbushNoBlue =
-      pendingCombat?.kind === "skill" &&
-      pendingCombat.id === "atirar_todo_lado" &&
-      model.heroIsAmbushMovementLocked();
-    if (!atirarAmbushNoBlue) {
-      const reach = model.reachableForCurrentHero();
-      const cur = axialKey(h.q, h.r);
-      for (const k of reach.keys()) {
-        if (k !== cur) moveKeys.add(k);
-      }
     }
   }
   /** Inimigo sob o rato + seleção de ataque/VFX: esconde overlays de inspeção do inimigo (evita ruído). */
@@ -2052,15 +1819,7 @@ function updateTiroDestruidorAimPreview(ndcX: number, ndcY: number): void {
     }
     return;
   }
-  const hero = model.currentHero();
-  if (!hero || hero.hp <= 0) return;
-  const origin = getCombatAttackPreviewOriginQr(hero);
-  const preview = model.tiroDestruidorAimPreviewFromHeroAt(
-    origin.q,
-    origin.r,
-    hex.q,
-    hex.r,
-  );
+  const preview = model.tiroDestruidorAimPreview(hex.q, hex.r);
   if (!preview) {
     if (combatTiroAimCacheSig !== "") {
       combatTiroBeamPreviewKeys = null;
@@ -2070,7 +1829,7 @@ function updateTiroDestruidorAimPreview(ndcX: number, ndcY: number): void {
     }
     return;
   }
-  const sig = `${origin.q},${origin.r}|${[...preview.keys].sort().join("|")}:${preview.path.map((p) => `${p.q},${p.r}`).join(":")}`;
+  const sig = `${[...preview.keys].sort().join("|")}:${preview.path.map((p) => `${p.q},${p.r}`).join(":")}`;
   if (sig === combatTiroAimCacheSig) return;
   combatTiroAimCacheSig = sig;
   combatTiroBeamPreviewKeys = preview.keys;
@@ -2098,48 +1857,11 @@ function updateCombatEnemyHoverFromCanvas(ev: MouseEvent): void {
   const r = canvas.getBoundingClientRect();
   const ndcX = ((ev.clientX - r.left) / r.width) * 2 - 1;
   const ndcY = -((ev.clientY - r.top) / r.height) * 2 + 1;
-  const uid = view.pickUnit(ndcX, ndcY, {
-    grid: model.grid,
-    bunkerOccupantIdAt: (q, r) => {
-      const b = model.bunkerAtHex(q, r);
-      if (!b || b.hp <= 0 || !b.occupantId) return null;
-      const u = model.units.find((z) => z.id === b.occupantId);
-      return u && u.isPlayer && u.hp > 0 ? b.occupantId : null;
-    },
-  });
+  const uid = view.pickUnit(ndcX, ndcY);
   let next: string | null = null;
   if (uid) {
     const u = model.units.find((x) => x.id === uid);
-    if (u && !u.isPlayer && u.hp > 0) {
-      if (
-        pendingCombat &&
-        (pendingCombat.kind === "basic" || pendingCombat.kind === "skill")
-      ) {
-        const o = getCombatAttackPreviewOriginQr(active);
-        const atkPrev = combatPendingAttackPreviewKeysAt(o.q, o.r);
-        if (atkPrev.has(axialKey(u.q, u.r))) next = uid;
-      } else {
-        next = uid;
-      }
-    }
-  }
-  if (
-    !next &&
-    pendingCombat &&
-    (pendingCombat.kind === "basic" || pendingCombat.kind === "skill")
-  ) {
-    const hex = view.pickCombatHex(ndcX, ndcY, model.grid);
-    if (hex) {
-      const eid = model.liveEnemyIdAtHex(hex.q, hex.r);
-      if (eid) {
-        const o = getCombatAttackPreviewOriginQr(active);
-        const atkPrev = combatPendingAttackPreviewKeysAt(o.q, o.r);
-        const tu = model.units.find((u) => u.id === eid);
-        if (tu && atkPrev.has(axialKey(tu.q, tu.r))) {
-          next = eid;
-        }
-      }
-    }
+    if (u && !u.isPlayer && u.hp > 0) next = uid;
   }
   if (next !== combatHoverEnemyId) {
     combatHoverEnemyId = next;
@@ -3791,17 +3513,15 @@ function showBiomeSetup(): void {
   canvas.addEventListener("mousemove", (ev) => {
     const hit = biomePickerInstance?.pickHex(ev.clientX, ev.clientY);
     if (!hit) {
-      biomePickerInstance?.setHoverBiome(null);
+      biomePickerInstance?.setHoverKey(null);
       applyHoverDesc(null);
       return;
     }
-    biomePickerInstance?.setHoverBiome(
-      hit.biome === "hub" ? null : hit.biome,
-    );
+    biomePickerInstance?.setHoverKey(hit.hexKey);
     applyHoverDesc(hit.biome);
   });
   canvas.addEventListener("mouseleave", () => {
-    biomePickerInstance?.setHoverBiome(null);
+    biomePickerInstance?.setHoverKey(null);
     applyHoverDesc(null);
   });
 
@@ -4220,7 +3940,7 @@ function mountGoldShopArtifactStrip(panel: HTMLElement, h: Unit): void {
   }
 
   if (arts.length === 0) {
-    strip.innerHTML = `${artifactRaritySlotsStripHtml(h, model.getParty())}<span class="shop-hero-artifacts-empty">Nenhum artefato</span>`;
+    strip.innerHTML = `${artifactRaritySlotsStripHtml(h)}<span class="shop-hero-artifacts-empty">Nenhum artefato</span>`;
     return;
   }
   const a0 = goldShopArtifactPage * GOLD_SHOP_ARTIFACT_PAGE_SIZE;
@@ -4236,7 +3956,7 @@ function mountGoldShopArtifactStrip(panel: HTMLElement, h: Unit): void {
     showPager && arts.length > 0
       ? `<div class="shop-hero-artifacts-page-hint" aria-hidden="true">${a0 + 1}–${Math.min(a0 + pageArts.length, arts.length)}/${arts.length}</div>`
       : "";
-  strip.innerHTML = `${artifactRaritySlotsStripHtml(h, model.getParty())}${rangeHint}<div class="shop-hero-artifacts-cards">${cards}</div>`;
+  strip.innerHTML = `${artifactRaritySlotsStripHtml(h)}${rangeHint}<div class="shop-hero-artifacts-cards">${cards}</div>`;
   strip.querySelectorAll("[data-artifact-id]").forEach((node) => {
     const el = node as HTMLElement;
     const aid = el.dataset.artifactId!;
@@ -4789,44 +4509,6 @@ function combatCornerIntText(n: number): string {
   return String(Math.max(0, Math.round(n)));
 }
 
-/** Preenchimento 0–100 (CD a terminar), estilo ultimate mas prateado. */
-function combatSkillCdFillPercent(
-  cdEff: number,
-  maxWaves: number,
-): number | undefined {
-  if (cdEff <= 0 || maxWaves <= 0) return undefined;
-  const max = Math.max(maxWaves, cdEff, 1);
-  return Math.round(
-    Math.min(100, Math.max(0, (100 * (max - cdEff)) / max)),
-  );
-}
-
-function combatSkillMaxCdWaves(
-  m: GameModel,
-  h: Unit,
-  skillId: string,
-  cdEff: number,
-  skillDef?: SkillDef,
-): number {
-  if (skillId === "bunker_minas") {
-    const b = m.bunkerForOccupant(h.id);
-    return b ? bunkerMinasCooldownWaves(b.tier) : 1;
-  }
-  if (skillId === "bunker_tiro_preciso") return bunkerTiroCooldownWaves();
-  if (skillId === "ate_a_morte") return ateMorteCooldownWaves(h.weaponLevel);
-  if (skillId === "pisotear") return pisotearCooldownWaves(h.weaponLevel);
-  if (skillId === "tiro_destruidor") {
-    const tiroSk = pistoleiroTiroDestruidorSkillDef();
-    return Math.max(1, tiroSk.cooldownWaves ?? 1);
-  }
-  if (skillId === "sentenca") return sentencaCooldownWaves(h.weaponLevel);
-  if (skillId === "atirar_todo_lado" || skillId === "atirar") {
-    return atirarCooldownWaves(h.weaponLevel);
-  }
-  if (skillDef && skillDef.cooldownWaves > 0) return skillDef.cooldownWaves;
-  return Math.max(1, cdEff);
-}
-
 /** Botão quadrado de skill: ícone + tecla + mana; nome no tooltip/`aria-label`. */
 function combatSquareSkillHtml(opts: {
   disabled: boolean;
@@ -4837,8 +4519,6 @@ function combatSquareSkillHtml(opts: {
   extraClass?: string;
   extraStyle?: string;
   ultFill?: boolean;
-  /** Preenchimento prateado durante CD (0–100). */
-  skillCdFillPct?: number;
   /** Uma letra/número minúsculo: mesmo efeito que o clique (atalho de combate). */
   combatHotkey?: string;
   /** Ondas restantes de recarga (mostrado no canto superior esquerdo, branco). */
@@ -4859,12 +4539,6 @@ function combatSquareSkillHtml(opts: {
   const fill = opts.ultFill
     ? '<span class="lol-weapon-ult-fill" aria-hidden="true"></span>'
     : "";
-  const cdFill =
-    opts.skillCdFillPct != null &&
-    opts.cdTurns != null &&
-    opts.cdTurns > 0
-      ? `<span class="lol-skill-cd-fill" style="--skill-cd-pct:${opts.skillCdFillPct}" aria-hidden="true"></span>`
-      : "";
   const hkAttr =
     opts.combatHotkey && opts.combatHotkey.length > 0
       ? ` data-combat-hotkey="${escapeHtml(opts.combatHotkey.slice(0, 1).toLowerCase())}"`
@@ -4886,7 +4560,7 @@ function combatSquareSkillHtml(opts: {
     if (opts.selectKind === "skill" && opts.selectId)
       selAttr += ` data-combat-select-id="${escapeHtml(opts.selectId)}"`;
   }
-  return `<button type="button" class="${cls}"${dis}${st}${hkAttr}${selAttr} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${usesBadge}${fill}${cdFill}${opts.iconHtml}<span class="lol-skill-key-wrap"><span class="lol-key">${escapeHtml(opts.hotkey)}</span></span>${manaSpan}</button>`;
+  return `<button type="button" class="${cls}"${dis}${st}${hkAttr}${selAttr} aria-label="${escapeHtml(opts.ariaLabel)}">${cdBadge}${usesBadge}${fill}${opts.iconHtml}<span class="lol-skill-key-wrap"><span class="lol-key">${escapeHtml(opts.hotkey)}</span></span>${manaSpan}</button>`;
 }
 
 /** Ícone de skill na loja (sem tecla de combate); tooltips iguais ao HUD. */
@@ -5155,15 +4829,6 @@ function hideGameTooltip(): void {
   tip.classList.remove("game-ui-tooltip--visible");
   tip.hidden = true;
   tip.innerHTML = "";
-}
-
-/** Fecha painéis flutuantes antes de armar ataque/skill no combate. */
-function dismissCombatTransientUi(): void {
-  hideGameTooltip();
-  removeEquipmentModal();
-  document.getElementById("combat-artifact-ref-overlay")?.remove();
-  combatInspectEnemyId = null;
-  combatLolInspectHeroId = null;
 }
 
 let waveIntroAutoCloseTimer: number | null = null;
@@ -7661,7 +7326,7 @@ function showCombatHUD(): void {
   const hud = el(`
     <div class="hud">
       ${sandboxHudHtml}
-      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Com <strong>ataque ou skill</strong> selecionados, os hexes <strong>azuis</strong> permitem <strong>reposicionar</strong> antes do alvo; o <strong>vermelho</strong> é o alcance da ação. Clique num <strong>inimigo</strong> para ver atributos <strong>só sem</strong> ataque/skill selecionados. <strong>Atirar pra todo lado</strong> (pistoleiro): aparecem o alcance em <strong>vermelho</strong> e, se tiveres movimento, os hexes <strong>azuis</strong>; ao pairar nos azuis o vermelho acompanha. Com movimento, clica num <strong>azul</strong> para andar e a ráfaga dispara após o passo. Sem movimento, clica num hex <strong>vermelho</strong> para confirmar. Repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados · <strong>Esc</strong> pausar.</div>
+      <div class="hud-block hint-inline">Cada <strong>rodada</strong> começa pelos <strong>inimigos</strong>. Clique no <strong>seu herói</strong> para <strong>movimento</strong> (hexes azuis) ou <strong>Espaço</strong> para o herói do turno. Clique num <strong>inimigo</strong> para ver atributos. Ações abaixo mostram <strong>alcance</strong> em vermelho; repetir a mesma tecla da skill cancela a seleção. <strong>WASD</strong> ou <strong>arrastar botão esquerdo</strong> na arena para mover a câmera · <strong>roda</strong> zoom. <strong>I</strong> equipamentos forjados · <strong>Esc</strong> pausar.</div>
     </div>
   `);
   const stipendOverlay = el(
@@ -7692,16 +7357,10 @@ function showCombatHUD(): void {
         <div class="combat-above-rarity combat-rarity-hint" id="combat-rarity-hint" aria-live="polite"></div>
       </div>
       <div class="combat-above-bar-right">
-        <div class="combat-skip-toggles" role="group" aria-label="Animações de combate">
-          <label class="combat-skip-toggle-label" for="chk-skip-enemy-move">
-            <input type="checkbox" id="chk-skip-enemy-move" />
-            <span>Inimigas</span>
-          </label>
-          <label class="combat-skip-toggle-label" for="chk-skip-allied-combat-anim">
-            <input type="checkbox" id="chk-skip-allied-combat-anim" />
-            <span>Aliadas</span>
-          </label>
-        </div>
+        <label class="combat-skip-enemy-label" for="chk-skip-enemy-move">
+          <input type="checkbox" id="chk-skip-enemy-move" />
+          <span>Pular animações</span>
+        </label>
         <div class="combat-above-bar-right-btns">
           <button type="button" class="btn btn-combat-above combat-btn--hidden" id="btn-cancel-sel">Cancelar seleção</button>
           <button type="button" class="btn btn-combat-above" id="btn-end">Encerrar turno</button>
@@ -8045,9 +7704,6 @@ function showCombatHUD(): void {
   };
 
   const update = (): void => {
-    if (pendingCombat != null) {
-      combatInspectEnemyId = null;
-    }
     const activeHero = model.currentHero();
     const h = lolViewedHero(model);
     const partyLive = model.getParty().filter((u) => u.hp > 0);
@@ -8201,7 +7857,7 @@ function showCombatHUD(): void {
         btnArtDown.disabled = combatArtifactStripPage >= maxArtPage;
       }
       if (arts.length === 0) {
-        artStrip.innerHTML = `<span class="combat-artifacts-label">Artefatos</span>${artifactRaritySlotsStripHtml(h, model.getParty())}<span class="combat-artifacts-empty">—</span>`;
+        artStrip.innerHTML = `<span class="combat-artifacts-label">Artefatos</span>${artifactRaritySlotsStripHtml(h)}<span class="combat-artifacts-empty">—</span>`;
       } else {
         const a0 = combatArtifactStripPage * COMBAT_ARTIFACT_PAGE_SIZE;
         const artsPage = arts.slice(a0, a0 + COMBAT_ARTIFACT_PAGE_SIZE);
@@ -8216,7 +7872,7 @@ function showCombatHUD(): void {
           showArtPager && arts.length > 0
             ? ` <span class="combat-artifacts-page-hint" aria-hidden="true">${a0 + 1}–${Math.min(a0 + artsPage.length, arts.length)}/${arts.length}</span>`
             : "";
-        artStrip.innerHTML = `<span class="combat-artifacts-label">Artefatos</span>${artifactRaritySlotsStripHtml(h, model.getParty())}${rangeHint}<div class="combat-artifacts-cards">${cards}</div>`;
+        artStrip.innerHTML = `<span class="combat-artifacts-label">Artefatos</span>${artifactRaritySlotsStripHtml(h)}${rangeHint}<div class="combat-artifacts-cards">${cards}</div>`;
         artStrip.querySelectorAll("[data-artifact-id]").forEach((node) => {
           const el = node as HTMLElement;
           const aid = el.dataset.artifactId!;
@@ -8428,7 +8084,7 @@ function showCombatHUD(): void {
       const id = summonOwnerId ?? rowId;
       const u = model.units.find((x) => x.id === id);
       if (!u || u.hp <= 0) return;
-      view.focusOnAxial(u.q, u.r, false);
+      view.focusOnAxial(u.q, u.r, u.isPlayer);
       if (u.isAllySummon) {
         combatInspectEnemyId = null;
         combatLolInspectHeroId = null;
@@ -8438,7 +8094,7 @@ function showCombatHUD(): void {
         combatLolInspectHeroId =
           ch && u.id !== ch.id ? u.id : null;
       } else {
-        combatInspectEnemyId = pendingCombat != null ? null : id;
+        combatInspectEnemyId = id;
       }
       update();
     };
@@ -8706,7 +8362,6 @@ function showCombatHUD(): void {
           ev.preventDefault();
           if (!formaReady) return;
           if (!combatAbilityInputDebounce()) return;
-          dismissCombatTransientUi();
           if (model.tryOpenFormaFinalPickFromHud()) update();
         });
       }
@@ -8790,8 +8445,6 @@ function showCombatHUD(): void {
       const dis = cdEff > 0 || extraDisabled || !isViewingActive;
       const key = hotkeys[hotkeyIdx++] ?? "?";
       const manaBadge = manaCostBadgeText(skillDef.manaCost ?? 0);
-      const maxCd = combatSkillMaxCdWaves(model, h, id, cdEff, skillDef);
-      const fillPct = combatSkillCdFillPercent(cdEff, maxCd);
       const b = el(
         combatSquareSkillHtml({
           disabled: dis,
@@ -8801,7 +8454,6 @@ function showCombatHUD(): void {
           manaBadge,
           ariaLabel: ariaSkillLabel(name, cdEff),
           cdTurns: cdEff > 0 ? cdEff : undefined,
-          skillCdFillPct: fillPct,
           selectKind: "skill",
           selectId: id,
         }),
@@ -8810,13 +8462,7 @@ function showCombatHUD(): void {
       b.addEventListener("click", () => {
         if (!isViewingActive) return;
         cancelPendingOrDebouncedActivate(b, () => {
-          const atirarFirst =
-            id === "atirar_todo_lado" &&
-            model.movementLeft > 0 &&
-            !model.heroIsAmbushMovementLocked();
-          pendingCombat = atirarFirst
-            ? { kind: "skill", id, atirarMoveFirst: true }
-            : { kind: "skill", id };
+          pendingCombat = { kind: "skill", id };
           movePreviewActive = false;
           refreshOverlays();
           update();
@@ -8829,8 +8475,6 @@ function showCombatHUD(): void {
       const cdM = model.sandboxNoCdUltEnabled()
         ? 0
         : (h.skillCd["bunker_minas"] ?? 0);
-      const maxM = combatSkillMaxCdWaves(model, h, "bunker_minas", cdM);
-      const fillM = combatSkillCdFillPercent(cdM, maxM);
       const keyW = hotkeys[hotkeyIdx++] ?? "W";
       const bMin = el(
         combatSquareSkillHtml({
@@ -8842,7 +8486,6 @@ function showCombatHUD(): void {
           manaBadge: manaCostBadgeText(0),
           ariaLabel: ariaSkillLabel("Minas terrestres", cdM),
           cdTurns: cdM > 0 ? cdM : undefined,
-          skillCdFillPct: fillM,
           selectKind: "skill",
           selectId: "bunker_minas",
         }),
@@ -8862,8 +8505,6 @@ function showCombatHUD(): void {
         const cdT = model.sandboxNoCdUltEnabled()
           ? 0
           : (h.skillCd["bunker_tiro_preciso"] ?? 0);
-        const maxT = combatSkillMaxCdWaves(model, h, "bunker_tiro_preciso", cdT);
-        const fillT = combatSkillCdFillPercent(cdT, maxT);
         const keyE = hotkeys[hotkeyIdx++] ?? "E";
         const bTiro = el(
           combatSquareSkillHtml({
@@ -8875,7 +8516,6 @@ function showCombatHUD(): void {
             manaBadge: manaCostBadgeText(0),
             ariaLabel: ariaSkillLabel("Tiro preciso", cdT),
             cdTurns: cdT > 0 ? cdT : undefined,
-            skillCdFillPct: fillT,
             selectKind: "skill",
             selectId: "bunker_tiro_preciso",
           }),
@@ -8904,8 +8544,6 @@ function showCombatHUD(): void {
             cd > 0 ||
             !isViewingActive ||
             (mc > 0 && h.maxMana > 0 && h.mana < mc);
-          const maxP = combatSkillMaxCdWaves(model, h, "pisotear", cd);
-          const fillP = combatSkillCdFillPercent(cd, maxP);
           const key = hotkeys[hotkeyIdx++] ?? "?";
           const b = el(
             combatSquareSkillHtml({
@@ -8917,14 +8555,12 @@ function showCombatHUD(): void {
               manaBadge: manaCostBadgeText(mc),
               ariaLabel: ariaSkillLabel("Pisotear", cd),
               cdTurns: cd > 0 ? cd : undefined,
-              skillCdFillPct: fillP,
             }),
           );
           bindGameTooltip(b, () => tooltipSkillPisotear(h, model));
           b.addEventListener("click", () => {
             if (!isViewingActive) return;
             if (!combatAbilityInputDebounce()) return;
-            dismissCombatTransientUi();
             if (model.trySkill("pisotear")) {
               resetCombatSelection();
               resumeMovementPreviewAfterHeroAction();
@@ -8962,8 +8598,6 @@ function showCombatHUD(): void {
               : (h.skillCd[sk.id] ?? 0);
             const dis =
               cdS > 0 || h.mana < sm || !isViewingActive;
-            const maxS = combatSkillMaxCdWaves(model, h, "sentenca", cdS, sk);
-            const fillS = combatSkillCdFillPercent(cdS, maxS);
             const key = hotkeys[hotkeyIdx++] ?? "?";
             const manaBadge = manaCostBadgeText(sm);
             const b = el(
@@ -8978,14 +8612,12 @@ function showCombatHUD(): void {
                 manaBadge,
                 ariaLabel: ariaSkillLabel(sk.name, cdS),
                 cdTurns: cdS > 0 ? cdS : undefined,
-                skillCdFillPct: fillS,
               }),
             );
             bindGameTooltip(b, () => tooltipSkillById(h, model, sk));
             b.addEventListener("click", () => {
               if (!isViewingActive) return;
               if (!combatAbilityInputDebounce()) return;
-              dismissCombatTransientUi();
               if (model.trySkill("sentenca")) {
                 resetCombatSelection();
                 resumeMovementPreviewAfterHeroAction();
@@ -9057,7 +8689,6 @@ function showCombatHUD(): void {
       bWU.addEventListener("click", () => {
         if (!isViewingActive || !ready) return;
         if (!combatAbilityInputDebounce()) return;
-        dismissCombatTransientUi();
         if (model.tryWeaponUltimate()) {
           resetCombatSelection();
           resumeMovementPreviewAfterHeroAction();
@@ -9163,16 +8794,14 @@ function showCombatHUD(): void {
       return;
     }
     if (!combatAbilityInputDebounce()) return;
-    dismissCombatTransientUi();
     activate();
   }
   function focusTurnHeroMovePreview(): void {
     const active = model.currentHero();
     if (!active || !active.heroClass || active.hp <= 0) return;
-    clearCombatAtirarFireTimer();
     combatLolInspectHeroId = null;
     combatInspectEnemyId = null;
-    view.focusOnAxial(active.q, active.r, false);
+    view.focusOnAxial(active.q, active.r, true);
     movePreviewActive = true;
     pendingCombat = null;
     refreshOverlays();
@@ -9183,18 +8812,9 @@ function showCombatHUD(): void {
     "#chk-skip-enemy-move",
   ) as HTMLInputElement | null;
   if (chkSkipEnemy) {
-    chkSkipEnemy.checked = getSkipEnemyCombatAnimations();
+    chkSkipEnemy.checked = getSkipCombatAnimations();
     chkSkipEnemy.addEventListener("change", () => {
-      setSkipEnemyCombatAnimations(chkSkipEnemy.checked);
-    });
-  }
-  const chkSkipAllied = combatAboveBar.querySelector(
-    "#chk-skip-allied-combat-anim",
-  ) as HTMLInputElement | null;
-  if (chkSkipAllied) {
-    chkSkipAllied.checked = getSkipAlliedCombatAnimations();
-    chkSkipAllied.addEventListener("change", () => {
-      setSkipAlliedCombatAnimations(chkSkipAllied.checked);
+      setSkipCombatAnimations(chkSkipEnemy.checked);
     });
   }
   combatAboveBar.querySelector("#btn-cancel-sel")!.addEventListener("click", () => {
@@ -9204,7 +8824,6 @@ function showCombatHUD(): void {
     update();
   });
   combatAboveBar.querySelector("#btn-end")!.addEventListener("click", () => {
-    combatNoActionsDeclinedForHeroId = null;
     resetCombatSelection();
     model.endHeroTurn();
     update();
@@ -9313,7 +8932,6 @@ function showCombatHUD(): void {
       const ndcX = ((ev.clientX - r.left) / r.width) * 2 - 1;
       const ndcY = -((ev.clientY - r.top) / r.height) * 2 + 1;
       if (!model.inEnemyPhase) {
-        updateCombatPhantomHoverFromCanvas(ndcX, ndcY);
         updateTiroDestruidorAimPreview(ndcX, ndcY);
       }
       const st = view.pickStatusTooltip(canvas, ev.clientX, ev.clientY);
@@ -9360,10 +8978,6 @@ function showCombatHUD(): void {
     hideGameTooltip();
     if (combatHoverEnemyId !== null) {
       combatHoverEnemyId = null;
-      applyCombatOverlays();
-    }
-    if (combatPhantomHoverHex !== null) {
-      combatPhantomHoverHex = null;
       applyCombatOverlays();
     }
     if (
@@ -9421,11 +9035,10 @@ function showCombatHUD(): void {
     };
 
     const cancelPendingCombatToMove = (): void => {
-      clearCombatAtirarFireTimer();
       pendingCombat = null;
       combatInspectEnemyId = null;
       openMovePreviewIfPossible();
-      view.focusOnAxial(active.q, active.r, false);
+      view.focusOnAxial(active.q, active.r, true);
       refreshOverlays();
       update();
     };
@@ -9433,69 +9046,6 @@ function showCombatHUD(): void {
     if (pendingCombat && uid === active.id) {
       cancelPendingCombatToMove();
       return;
-    }
-
-    if (
-      pendingCombat &&
-      model.movementLeft > 0 &&
-      hexAtPointer &&
-      (hexAtPointer.q !== active.q || hexAtPointer.r !== active.r) &&
-      !model.liveEnemyIdAtHex(hexAtPointer.q, hexAtPointer.r)
-    ) {
-      const reach = model.reachableForCurrentHero();
-      const hk = axialKey(hexAtPointer.q, hexAtPointer.r);
-      if (reach.has(hk)) {
-        let allowMove = true;
-        if (pendingCombat.kind === "skill") {
-          allowMove = !pendingGroundSkillHexConsumesMoveClick(
-            model,
-            pendingCombat.id,
-            hexAtPointer,
-            active,
-          );
-        }
-        if (allowMove && model.tryMoveHero(hexAtPointer.q, hexAtPointer.r)) {
-          view.clearHeroAttackFacing(active.id);
-          const chainAtirar =
-            pendingCombat.kind === "skill" &&
-            pendingCombat.id === "atirar_todo_lado" &&
-            pendingCombat.atirarMoveFirst === true;
-          if (chainAtirar) {
-            const delayMs = model.consumeLastHeroMoveAnimEstimateMs() + 25;
-            combatPhantomHoverHex = null;
-            pendingCombat = {
-              kind: "skill",
-              id: "atirar_todo_lado",
-              atirarExecPending: true,
-            };
-            if (combatAtirarTodoLadoFireTimer != null) {
-              window.clearTimeout(combatAtirarTodoLadoFireTimer);
-            }
-            combatAtirarTodoLadoFireTimer = window.setTimeout(() => {
-              combatAtirarTodoLadoFireTimer = null;
-              if (model.phase !== "combat" || model.inEnemyPhase) return;
-              const hero = model.currentHero();
-              if (!hero || hero.hp <= 0 || hero.heroClass !== "pistoleiro") {
-                resetCombatSelection();
-                refreshCombatHud?.();
-                return;
-              }
-              dismissCombatTransientUi();
-              if (model.trySkill("atirar_todo_lado")) {
-                resetCombatSelection();
-                resumeMovementPreviewAfterHeroAction();
-                refreshCombatHud?.();
-              } else {
-                resetCombatSelection();
-                refreshCombatHud?.();
-              }
-            }, delayMs);
-          }
-          refreshOverlays();
-          update();
-          return;
-        }
-      }
     }
 
     const resolveLiveEnemyAtClick = (): string | null => {
@@ -9511,8 +9061,7 @@ function showCombatHUD(): void {
     if (pendingCombat?.kind === "basic") {
       const tid = resolveLiveEnemyAtClick();
       if (tid && model.validateEnemyForBasicAttack(tid)) {
-        dismissCombatTransientUi();
-        if (model.tryMoveThenBasicAttack(tid)) {
+        if (model.tryBasicAttack(tid)) {
           view.applyHeroAttackFacingFromPointer(active.id, x, y);
           resetCombatSelection();
           resumeMovementPreviewAfterHeroAction();
@@ -9536,9 +9085,6 @@ function showCombatHUD(): void {
     if (pendingCombat?.kind === "skill") {
       const sid = pendingCombat.id;
       if (sid === "atirar_todo_lado") {
-        if (pendingCombat.atirarExecPending || pendingCombat.atirarMoveFirst) {
-          return;
-        }
         const hex = view.pickCombatHex(x, y, model.grid);
         const onHex =
           hex && model.hexInSkillRange(sid, hex.q, hex.r);
@@ -9551,7 +9097,6 @@ function showCombatHUD(): void {
             model.units.find((u) => u.id === uid)!.r,
           );
         if (onHex || onEnemy) {
-          dismissCombatTransientUi();
           if (model.trySkill("atirar_todo_lado")) {
             view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
@@ -9577,7 +9122,6 @@ function showCombatHUD(): void {
           cancelPendingCombatToMove();
           return;
         }
-        dismissCombatTransientUi();
         if (
           model.trySkill("tiro_destruidor", `beam:${hex.q}:${hex.r}`)
         ) {
@@ -9591,7 +9135,6 @@ function showCombatHUD(): void {
       if (sid === "ate_a_morte" || sid === "especialista_destruicao") {
         const tid = resolveLiveEnemyAtClick();
         if (tid && model.canSkillTargetEnemy(sid, tid)) {
-          dismissCombatTransientUi();
           if (model.trySkill(sid, tid)) {
             view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
@@ -9611,7 +9154,6 @@ function showCombatHUD(): void {
       if (sid === "bunker_tiro_preciso") {
         const tid = resolveLiveEnemyAtClick();
         if (tid && model.canSkillTargetEnemy(sid, tid)) {
-          dismissCombatTransientUi();
           if (model.trySkill(sid, tid)) {
             view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
@@ -9632,7 +9174,6 @@ function showCombatHUD(): void {
         const hex = view.pickCombatHex(x, y, model.grid);
         const onHex = hex && model.hexInSkillRange(sid, hex.q, hex.r);
         if (onHex) {
-          dismissCombatTransientUi();
           if (model.trySkill("bunker_minas")) {
             view.applyHeroAttackFacingFromPointer(active.id, x, y);
             resetCombatSelection();
@@ -9657,14 +9198,11 @@ function showCombatHUD(): void {
         if (u.id !== active.id) {
           combatLolInspectHeroId = u.id;
           combatInspectEnemyId = null;
-          view.focusOnAxial(u.q, u.r, false);
+          view.focusOnAxial(u.q, u.r, true);
           update();
           return;
         }
       } else if (u && !u.isPlayer && u.hp > 0) {
-        if (pendingCombat != null) {
-          return;
-        }
         combatInspectEnemyId = uid;
         view.focusOnAxial(u.q, u.r);
         update();
@@ -9675,7 +9213,7 @@ function showCombatHUD(): void {
     if (uid === active.id) {
       combatLolInspectHeroId = null;
       combatInspectEnemyId = null;
-      view.focusOnAxial(active.q, active.r, false);
+      view.focusOnAxial(active.q, active.r, true);
       movePreviewActive = true;
       pendingCombat = null;
       refreshOverlays();
@@ -10338,18 +9876,9 @@ function loop(): void {
           ? null
           : turnHero.id,
       );
-      const orbEntries: { heroId: string; count: number }[] = [];
-      for (const u of model.getParty()) {
-        if (u.hp <= 0) continue;
-        if ((u.artifacts["anel_dragao"] ?? 0) <= 0) continue;
-        const c = u.anelDragaoOrbsEndTurn ?? 0;
-        if (c > 0) orbEntries.push({ heroId: u.id, count: c });
-      }
-      view.syncAnelDragaoIdleOrbs(orbEntries);
     } else {
       view.setCombatSelectionUnitId(null);
       view.setCombatTurnHeroIdForFacing(null);
-      view.clearAnelDragaoIdleOrbs();
     }
     const pops =
       model.phase === "combat" && !runPauseOpen

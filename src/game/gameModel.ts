@@ -1,16 +1,9 @@
-import {
-  axialKey,
-  hexBeamRayThroughGrid,
-  hexNeighbors,
-  parseAxialKey,
-} from "./hex";
+import { axialKey, hexBeamRayThroughGrid, hexNeighbors } from "./hex";
 import type {
   BiomeId,
   ForgeEssenceId,
-  ForgeHeroLoadout,
   GamePhase,
   HeroClassId,
-  HeroStatBaseline,
   MetaProgress,
   TeamColor,
   TurnStage,
@@ -36,10 +29,7 @@ import {
   type HexCell,
 } from "./grid";
 import { findPath, reachableHexes } from "./pathfinding";
-import {
-  getSkipAlliedCombatAnimations,
-  getSkipEnemyCombatAnimations,
-} from "./combatPrefs";
+import { getSkipCombatAnimations } from "./combatPrefs";
 import {
   enemyMeleeAttackWindupMs,
   heroBasicMagicDamageDelayMs,
@@ -76,7 +66,6 @@ import {
 import { artifactAffectsInvocationSync } from "./invocationArtifacts";
 import {
   createAllyShadowSummon,
-  createAncestralMageSummon,
   createEnemyUnit,
   createHeroUnit,
   createMegaGolemSummon,
@@ -133,7 +122,6 @@ import {
   FORMA_FINAL_LEVEL,
 } from "./data/coliseums";
 import { COMBAT_BIOMES, BIOME_LABELS } from "./data/biomes";
-import { HEROES } from "./data/heroes";
 import { goldDrainPerTurn } from "./data/shops";
 import { loadMeta, permPercent, saveMeta } from "./metaStore";
 import {
@@ -277,7 +265,7 @@ export type CombatVfxHint =
       summonId: string;
       targetId: string;
       /** Mesmo papel que a espada flamejante: escolhe o traço no render. */
-      summonKind?: "shadow" | "mega_golem" | "ancestral_mage";
+      summonKind?: "shadow" | "mega_golem";
     }
   | {
       kind: "weapon_ult_furacao";
@@ -289,11 +277,6 @@ export type CombatVfxHint =
       heroId: string;
       pathQr: { q: number; r: number }[];
       charges: number;
-    }
-  | {
-      kind: "espinhos_gelados_spike";
-      fromId: string;
-      toId: string;
     }
   | { kind: "pisotear_chain"; heroId: string; targetIds: string[] }
   | { kind: "golpe_relampago_teleport"; heroId: string }
@@ -313,13 +296,8 @@ const ENEMY_APPROACH_PATHFIND_MAX = 100;
 
 /** Pausa entre golpes da espada flamejante na fase de invocação (legibilidade). */
 const FLAMING_SWORD_STRIKE_GAP_MS = 280;
-/** Meteoros do Mago ancestral na fase de invocações. */
-const ANCESTRAL_METEOR_STAGGER_MS = 100;
-/**
- * Anel do dragão adormecido: tempo total da sequência (todas as bolas, uma após a outra).
- * Cada bola usa `(i+1)*T/n - i*T/n` ms de voo+dano, com `T` fixo.
- */
-const ANEL_DRAGAO_ORBS_SEQUENCE_TOTAL_MS = 1000;
+/** Bolas de Ar do Anel do dragão adormecido (fim de turno). */
+const ANEL_DRAGAO_ORB_STAGGER_MS = 95;
 
 export type PendingMoveAnimation =
   | {
@@ -509,20 +487,6 @@ type ShopHeroSnapshot = {
   penetracao: number;
   potencialCuraEscudo: number;
   artifacts: Record<string, number>;
-  /** Snapshots antigos (antes do marco pós-coliseu): ausentes no JSON. */
-  penetracaoEscudo?: number;
-  alcance?: number;
-  lifesteal?: number;
-  sorte?: number;
-  level?: number;
-  xp?: number;
-  xpToNext?: number;
-  weaponLevel?: WeaponLevel;
-  ultimateId?: string;
-  formaFinal?: boolean;
-  forgeLoadout?: ForgeHeroLoadout;
-  skillCd?: Record<string, number>;
-  statBaseline?: HeroStatBaseline;
 };
 
 type ShopBunkerSnapshot = {
@@ -734,17 +698,10 @@ export class GameModel {
   turnStage: TurnStage = "idle";
   /** Consumido pelo render: animação hex-a-hex no canvas. */
   pendingMoveAnim: PendingMoveAnimation | null = null;
-  /** Estimativa de duração (ms) da última animação de movimento do herói — consumida pela UI. */
-  private lastHeroMoveAnimEstimateMs = 0;
   /** 1 = normal; menor que 1 acelera movimento/pausa na fase inimiga (muitos inimigos). */
   private enemyPhaseTimingMult = 1;
   /** Sinergia rochosa nv3: último herói com forja que se moveu — inimigos priorizam-no. */
   private rochosoTauntHeroId: string | null = null;
-  /**
-   * Mago ancestral morreu nesta onda: não volta até à wave seguinte (com % de vida conforme tier).
-   * Valor = `wave` em que morreu.
-   */
-  private ancestralMageDeathWaveByOwner = new Map<string, number>();
 
   private combatFloats: CombatFloatEvent[] = [];
 
@@ -1149,7 +1106,6 @@ export class GameModel {
     this.waveXpGained = 0;
     this.runPlaySessionPerfMsStart = null;
     this.artifactBannedThisRun.clear();
-    this.ancestralMageDeathWaveByOwner.clear();
 
     this.playerTurnJustStarted = false;
     this.turnStage = "idle";
@@ -1287,9 +1243,6 @@ export class GameModel {
         ) as CombatVfxHint[],
         coliseumTier: this.coliseumTier,
         postColiseuContinueEnemyScaling: this.postColiseuContinueEnemyScaling,
-        ancestralMageDeathWaves: Object.fromEntries(
-          this.ancestralMageDeathWaveByOwner,
-        ),
       };
       return JSON.stringify(payload);
     } catch {
@@ -1374,7 +1327,6 @@ export class GameModel {
         artifactBannedThisRun?: string[];
         coliseumTier?: ColiseumTierId;
         postColiseuContinueEnemyScaling?: boolean;
-        ancestralMageDeathWaves?: Record<string, number>;
       };
       if (
         (o.v !== 1 &&
@@ -1391,14 +1343,6 @@ export class GameModel {
 
       this.meta = o.meta;
       this.units = o.units;
-      for (const u of this.units) {
-        if (!u.isPlayer) continue;
-        const oldCeu = u.artifacts["ceu_partido"];
-        if (oldCeu && oldCeu > 0) {
-          u.artifacts["o_proibido"] = (u.artifacts["o_proibido"] ?? 0) + oldCeu;
-          delete u.artifacts["ceu_partido"];
-        }
-      }
       migrateAlcanceMisticoToAuraTita(this.units);
       migrateTonicoToImagemResidual(this.units);
       if (o.v === 1) migrateGotaAzulRaizVidaOldPickBonuses(this.units);
@@ -1465,9 +1409,6 @@ export class GameModel {
       this.runShopRefundUses = o.runShopRefundUses ?? 0;
 
       this.artifactBannedThisRun = new Set(o.artifactBannedThisRun ?? []);
-      this.ancestralMageDeathWaveByOwner = new Map(
-        Object.entries(o.ancestralMageDeathWaves ?? {}),
-      );
       this.pendingKillLevelUpFlushHeroIds = new Set(
         o.pendingKillLevelUpFlushHeroIds ?? [],
       );
@@ -1496,8 +1437,6 @@ export class GameModel {
       this.turnStage = "idle";
       this.enemyTurnQueue = [];
 
-      this.disambiguatePartyHeroDisplayNames();
-
       this.saveMeta();
       this.emit();
       return true;
@@ -1510,29 +1449,6 @@ export class GameModel {
     return this.partyOrder
       .map((id) => this.units.find((u) => u.id === id))
       .filter((u): u is Unit => !!u);
-  }
-
-  /** Duas gladiadoras na mesma party → nomes “Classe #1”, “Classe #2”. */
-  private disambiguatePartyHeroDisplayNames(): void {
-    const byClass = new Map<HeroClassId, Unit[]>();
-    for (const id of this.partyOrder) {
-      const u = this.units.find((x) => x.id === id);
-      if (!u?.heroClass) continue;
-      const arr = byClass.get(u.heroClass) ?? [];
-      arr.push(u);
-      byClass.set(u.heroClass, arr);
-    }
-    for (const [cls, arr] of byClass) {
-      const base = HEROES[cls].name;
-      if (arr.length <= 1) {
-        arr[0]!.name = base;
-        continue;
-      }
-      arr.sort((a, b) => a.id.localeCompare(b.id));
-      for (let i = 0; i < arr.length; i++) {
-        arr[i]!.name = `${base} #${i + 1}`;
-      }
-    }
   }
 
   private partyHasForgeVulcanicTier(min: 2 | 3): boolean {
@@ -1580,7 +1496,6 @@ export class GameModel {
   heroMovementPool(h: Unit): number {
     let mov = h.movimento + rulerMovementBonus(h);
     mov += this.partyPantanoRulerMovBonus();
-    mov += this.ancestralMageAuraMovBonusForHero(h);
     if (forgeSynergyTier(h.forgeLoadout, "pantano") >= 3) mov *= 2;
     return mov;
   }
@@ -1681,76 +1596,6 @@ export class GameModel {
     return Math.floor(flat + basic * pct);
   }
 
-  private espinhosGeladosStacks(h: Unit): number {
-    return Math.min(6, Math.max(0, h.artifacts["espinhos_gelados"] ?? 0));
-  }
-
-  private espinhosGeladosRawPerHit(h: Unit): number {
-    const s = this.espinhosGeladosStacks(h);
-    if (s <= 0) return 0;
-    const flat = 10 + (s - 1) * 5;
-    const pct = (5 + (s - 1)) / 100;
-    return roundToCombatDecimals(flat + h.dano * pct);
-  }
-
-  /** Veneno + queimadura + congelamento + choque (instâncias), para Espinhos gelados. */
-  private dotInstanceSumForEspinhosOnUnit(u: Unit): number {
-    const p = u.poison?.instances.length ?? 0;
-    const b = u.burn?.instances.length ?? 0;
-    return (
-      p + b + congelamentoInstancesCount(u) + choqueInstancesCount(u)
-    );
-  }
-
-  /** Soma instâncias nos inimigos do bioma do herói (no hub, todos os inimigos). */
-  private totalDotInstancesInHeroBiomeForEspinhos(hero: Unit): number {
-    const heroBio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
-    let sum = 0;
-    for (const e of this.enemies()) {
-      if (e.hp <= 0) continue;
-      if (heroBio !== "hub") {
-        const eb = biomeAt(this.grid, e.q, e.r) as BiomeId;
-        if (eb !== heroBio) continue;
-      }
-      sum += this.dotInstanceSumForEspinhosOnUnit(e);
-    }
-    return sum;
-  }
-
-  private applyEspinhosGeladosTurnStart(h: Unit): void {
-    if (this.phase !== "combat" || this.duel) return;
-    if (this.espinhosGeladosStacks(h) <= 0) return;
-    const rawPer = this.espinhosGeladosRawPerHit(h);
-    if (rawPer <= 0) return;
-    const extra = this.totalDotInstancesInHeroBiomeForEspinhos(h);
-    const totalShots = 1 + extra;
-    let pool = this.enemies().filter((e) => e.hp > 0);
-    if (pool.length === 0) return;
-    for (let i = 0; i < totalShots; i++) {
-      pool = this.enemies().filter((e) => e.hp > 0);
-      if (pool.length === 0) break;
-      const pick = pool[Math.floor(Math.random() * pool.length)]!;
-      this.pendingCombatVfxQueue.push({
-        kind: "espinhos_gelados_spike",
-        fromId: h.id,
-        toId: pick.id,
-      });
-      const crit = rollCrit(h.acertoCritico + roninCritBonus(h));
-      this.dealDamage(h, pick, rawPer, crit, true, false, {
-        suppressOnHitArtifacts: true,
-        suppressLifesteal: true,
-        suppressSourceHitSfx: true,
-      });
-    }
-    this.log(`${h.name}: Espinhos gelados — ${totalShots} disparo(s).`);
-    this.flushCombatLevelUp(h);
-    if (this.phase === "combat") {
-      this.tryResolveWaveClearAfterCombatResume();
-    }
-    this.flushEnemyDeathQueue();
-    this.emit();
-  }
-
   /** Inimigo vivo mais afastado do herói no mesmo bioma (hub: qualquer inimigo). */
   private farthestEnemyInHeroBiome(hero: Unit): Unit | null {
     const heroBio = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
@@ -1780,19 +1625,7 @@ export class GameModel {
     h.anelDragaoOrbsEndTurn = this.maxBasicAttacksForHero(h);
   }
 
-  /**
-   * Dispara bolas de Ar no fim do turno: **uma de cada vez**, alvo = inimigo mais distante
-   * no bioma. Duração total da sequência = `ANEL_DRAGAO_ORBS_SEQUENCE_TOTAL_MS` (1 s);
-   * com `n` bolas, o impacto da bola `i` cai em `sliceEnd_i = round((i+1)*1000/n)` ms desde o
-   * início da sequência (n=1 → 1000 ms, n=2 → 500 ms por bola, etc.).
-   *
-   * **Dano no impacto:** o instante do dano é **absoluto** `sequenceT0 + sliceEnd` (não
-   * `now + flightMs` no lançamento). O mesmo `delayToHit` vai para `flightMs` no VFX, para o
-   * projétil no canvas terminar quando o dano corre — evita matar o alvo a meio do voo e
-   * “perder” a mesh antes da bola chegar.
-   *
-   * **Encadeamento:** o orb seguinte só se agenda depois do callback de dano do anterior.
-   */
+  /** Dispara bolas de Ar no fim do turno (fila de combate com pequeno stagger). */
   private fireAnelDragaoOrbsAtEndOfTurn(h: Unit): void {
     const n = h.anelDragaoOrbsEndTurn ?? 0;
     delete h.anelDragaoOrbsEndTurn;
@@ -1800,65 +1633,35 @@ export class GameModel {
     if (this.anelDragaoStacks(h) <= 0) return;
     const rawPer = this.anelDragaoDamagePerOrb(h);
     if (rawPer <= 0) return;
-    const totalMs = ANEL_DRAGAO_ORBS_SEQUENCE_TOTAL_MS;
-    const heroId = h.id;
-    const sequenceT0 = performance.now();
-    const skipAlly = getSkipAlliedCombatAnimations();
-
-    const runOrb = (i: number): void => {
-      if (i >= n) return;
-      const sliceEnd = skipAlly
-        ? 0
-        : Math.round(((i + 1) * totalMs) / n);
-
-      this.queueCombat(0, () => {
-        const att = this.units.find((x) => x.id === heroId);
+    const skipFx = getSkipCombatAnimations();
+    const stagger = skipFx ? 0 : ANEL_DRAGAO_ORB_STAGGER_MS;
+    for (let i = 0; i < n; i++) {
+      const delay = i * stagger;
+      this.queueCombat(delay, () => {
+        const att = this.units.find((x) => x.id === h.id);
         if (!att || att.hp <= 0 || this.phase !== "combat") return;
         const tgt = this.farthestEnemyInHeroBiome(att);
         if (!tgt || tgt.hp <= 0) return;
-
-        const strikeFrom = att.id;
-        const strikeTo = tgt.id;
-
-        const delayToHit = skipAlly
-          ? 0
-          : Math.max(1, Math.round(sequenceT0 + sliceEnd - performance.now()));
-
-        if (!skipAlly) {
+        if (!skipFx) {
           this.pendingCombatVfxQueue.push({
             kind: "basic_projectile",
-            fromId: strikeFrom,
-            toId: strikeTo,
+            fromId: att.id,
+            toId: tgt.id,
             style: "air",
-            flightMs: delayToHit,
+            flightMs: BASIC_MAGIC_FLIGHT_MS,
           });
         }
-
-        this.queueCombat(delayToHit, () => {
-          const att2 = this.units.find((x) => x.id === heroId);
-          const tgt2 = this.units.find((x) => x.id === strikeTo);
-          if (
-            att2 &&
-            tgt2 &&
-            tgt2.hp > 0 &&
-            this.phase === "combat"
-          ) {
-            const crit = rollCrit(att2.acertoCritico + roninCritBonus(att2));
-            this.dealDamage(att2, tgt2, rawPer, crit, true, false, {
-              suppressOnHitArtifacts: true,
-              suppressLifesteal: true,
-            });
-            if (this.phase === "combat") {
-              this.tryResolveWaveClearAfterCombatResume();
-            }
-            this.emit();
-          }
-          runOrb(i + 1);
+        const crit = rollCrit(att.acertoCritico + roninCritBonus(att));
+        this.dealDamage(att, tgt, rawPer, crit, true, false, {
+          suppressOnHitArtifacts: true,
+          suppressLifesteal: true,
         });
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
       });
-    };
-
-    runOrb(0);
+    }
   }
 
   takePendingMoveAnimation(): PendingMoveAnimation | null {
@@ -2098,7 +1901,6 @@ export class GameModel {
     clearCombatOutcomeQueue();
     this.cancelLevelUpFloatHoldTimer();
     this.pendingCombatLevelUpHeroIds.clear();
-    this.ancestralMageDeathWaveByOwner.clear();
     this.basicAttacksSpentThisTurn = 0;
     this.pendingSentencaPartyHeal = null;
     this.duelNextIsGladiatorStrike = true;
@@ -2148,7 +1950,6 @@ export class GameModel {
     });
     /** Não usar getParty() aqui: ele depende de partyOrder, ainda vazio neste ponto. */
     this.partyOrder = this.units.filter((u) => u.isPlayer).map((u) => u.id);
-    this.disambiguatePartyHeroDisplayNames();
     if (DEV_TEST_CROWD_UI) {
       const poolSlice = ARTIFACT_POOL.slice(0, DEV_TEST_ARTIFACT_COUNT);
       for (const u of this.units) {
@@ -2675,32 +2476,6 @@ export class GameModel {
     return this.getParty().filter((h) => this.heroHomeBiome(h) === biome);
   }
 
-  /** Soma dos tiers dos Magos ancestrais vivos no mesmo bioma que o herói (+mov / +alcance cada). */
-  private ancestralMageAuraTierSumInHeroBiome(hero: Unit): number {
-    if (!hero.isPlayer || hero.hp <= 0) return 0;
-    const hb = biomeAt(this.grid, hero.q, hero.r) as BiomeId;
-    let sum = 0;
-    for (const u of this.units) {
-      if (
-        !u.isAllySummon ||
-        u.summonKind !== "ancestral_mage" ||
-        u.hp <= 0
-      )
-        continue;
-      if ((biomeAt(this.grid, u.q, u.r) as BiomeId) !== hb) continue;
-      sum += u.ancestralMageTier ?? 1;
-    }
-    return sum;
-  }
-
-  private ancestralMageAuraMovBonusForHero(hero: Unit): number {
-    return this.ancestralMageAuraTierSumInHeroBiome(hero);
-  }
-
-  private ancestralMageAuraAlcanceBonusForHero(hero: Unit): number {
-    return this.ancestralMageAuraTierSumInHeroBiome(hero);
-  }
-
   /**
    * Inimigos priorizam o(s) herói(s) que escolheram o bioma de spawn do inimigo;
    * só mudam de alvo quando esse(s) morre(m) (fallback: outros vivos).
@@ -2713,22 +2488,6 @@ export class GameModel {
       if (taunt) return taunt;
     }
     const hereBio = biomeAt(this.grid, e.q, e.r) as BiomeId;
-    const mages: Unit[] = [];
-    for (const u of this.units) {
-      if (
-        u.hp > 0 &&
-        u.isAllySummon &&
-        u.summonKind === "ancestral_mage" &&
-        (biomeAt(this.grid, u.q, u.r) as BiomeId) === hereBio
-      ) {
-        const owner = party.find((h) => h.id === u.summonOwnerHeroId);
-        if (owner) mages.push(u);
-      }
-    }
-    if (mages.length > 0) {
-      mages.sort((a, b) => a.hp - b.hp || a.defesa - b.defesa);
-      return mages[0]!;
-    }
     if (hereBio !== "hub") {
       const golems: Unit[] = [];
       for (const u of this.units) {
@@ -2917,10 +2676,6 @@ export class GameModel {
       return;
     }
     h.bunkerReentryBlocked = false;
-    this.applyEspinhosGeladosTurnStart(h);
-    if (this.phase !== "combat") {
-      return;
-    }
     const mov = this.heroMovementPool(h);
     this.movementLeft = mov;
     this.basicAttacksSpentThisTurn = 0;
@@ -3077,7 +2832,6 @@ export class GameModel {
     }
     if (this.phase === "combat" && !this.duel) {
       this.reconcileGridInvocationsForHero(u);
-      this.reconcileAncestralMagesParty();
     }
   }
 
@@ -3219,10 +2973,10 @@ export class GameModel {
       const cells = this.buildFlamingSwordMoveCells(hero, pos, best);
       hero.flamingSwordPos = { q: best.q, r: best.r };
 
-      const skipAlly = getSkipAlliedCombatAnimations();
+      const skipAnim = getSkipCombatAnimations();
       const moveSegs = Math.max(0, cells.length - 1);
       const segMs = UNIT_MOVE_SEGMENT_MS;
-      if (moveSegs > 0 && !skipAlly) {
+      if (moveSegs > 0 && !skipAnim) {
         this.pendingMoveAnim = {
           kind: "flamingSword",
           heroId: hero.id,
@@ -3230,8 +2984,8 @@ export class GameModel {
           segmentMs: segMs,
         };
       }
-      const moveMs = skipAlly ? 0 : moveSegs * segMs;
-      const atkWind = skipAlly ? 0 : enemyMeleeAttackWindupMs();
+      const moveMs = skipAnim ? 0 : moveSegs * segMs;
+      const atkWind = skipAnim ? 0 : enemyMeleeAttackWindupMs();
       const targetId = target.id;
 
       this.emit();
@@ -3294,7 +3048,9 @@ export class GameModel {
           hero.lifesteal = prev.lifesteal;
         }
         this.emit();
-        const gap = skipAlly ? 0 : FLAMING_SWORD_STRIKE_GAP_MS;
+        const gap = getSkipCombatAnimations()
+          ? 0
+          : FLAMING_SWORD_STRIKE_GAP_MS;
         this.queueCombat(gap, () => runAttack(attackIndex + 1));
       });
     };
@@ -3317,16 +3073,7 @@ export class GameModel {
     const hasGolems = this.units.some(
       (u) => u.isAllySummon && u.summonKind === "mega_golem" && u.hp > 0,
     );
-    const hasAncestralMages = this.units.some(
-      (u) =>
-        u.isAllySummon && u.summonKind === "ancestral_mage" && u.hp > 0,
-    );
-    if (
-      swordOwners.length === 0 &&
-      !hasShadows &&
-      !hasGolems &&
-      !hasAncestralMages
-    ) {
+    if (swordOwners.length === 0 && !hasShadows && !hasGolems) {
       onComplete();
       return;
     }
@@ -3348,9 +3095,7 @@ export class GameModel {
       onComplete();
     };
     const afterGolems = (): void => {
-      this.runMegaGolemSummonChain(() => {
-        this.runAncestralMageMeteorChain(afterAll);
-      });
+      this.runMegaGolemSummonChain(afterAll);
     };
     const afterShadows = (): void => {
       this.runResidualShadowSummonChain(afterGolems);
@@ -3434,53 +3179,6 @@ export class GameModel {
     return out;
   }
 
-  /**
-   * Hexes livres junto ao herói no **mesmo bioma** que o hex atual dele;
-   * se não couber, usa `collectSpawnHexesNearHero` (ex.: bioma muito cheio).
-   */
-  private collectSpawnHexesNearHeroSameBiome(
-    hero: Unit,
-    needed: number,
-  ): { q: number; r: number }[] {
-    if (needed <= 0) return [];
-    const bio = biomeAt(this.grid, hero.q, hero.r);
-    const occ = new Set<string>();
-    for (const u of this.units) {
-      if (u.hp <= 0) continue;
-      occ.add(axialKey(u.q, u.r));
-    }
-    const out: { q: number; r: number }[] = [];
-    const visited = new Set<string>();
-    const queue: { q: number; r: number; d: number }[] = [
-      { q: hero.q, r: hero.r, d: 0 },
-    ];
-    visited.add(axialKey(hero.q, hero.r));
-    let qi = 0;
-    while (qi < queue.length && out.length < needed) {
-      const cur = queue[qi++]!;
-      const k = axialKey(cur.q, cur.r);
-      const cell = this.grid.get(k);
-      if (!cell || cell.biome !== bio) continue;
-      if (cur.d > 0 && !occ.has(k)) {
-        out.push({ q: cur.q, r: cur.r });
-        occ.add(k);
-      }
-      if (cur.d >= 24) continue;
-      for (const n of hexNeighbors(cur.q, cur.r)) {
-        const nk = axialKey(n.q, n.r);
-        if (visited.has(nk)) continue;
-        const nc = this.grid.get(nk);
-        if (!nc || nc.biome !== bio) continue;
-        visited.add(nk);
-        queue.push({ q: n.q, r: n.r, d: cur.d + 1 });
-      }
-    }
-    if (out.length < needed) {
-      return this.collectSpawnHexesNearHero(hero, needed);
-    }
-    return out;
-  }
-
   private countLivingGridSummons(
     hero: Unit,
     kind: "shadow" | "mega_golem",
@@ -3559,136 +3257,10 @@ export class GameModel {
     }
   }
 
-  /**
-   * Um mago ancestral por herói vivo da party quando alguém tem `o_proibido`;
-   * tier e dano seguem o maior acúmulo (fonte de crítico/dano); posição segue cada herói.
-   */
-  private reconcileAncestralMagesParty(): void {
-    if (this.phase !== "combat" || this.duel) return;
-    const party = this.getParty();
-    const partyIds = new Set(party.map((h) => h.id));
-    const partyAlive = party.filter((h) => h.hp > 0);
-
-    for (const u of [...this.units]) {
-      if (!u.isAllySummon || u.summonKind !== "ancestral_mage") continue;
-      const sid = u.summonOwnerHeroId;
-      if (!sid || !partyIds.has(sid)) {
-        this.removeAllySummonUnit(u.id);
-        continue;
-      }
-      const owner = this.units.find((x) => x.id === sid);
-      if (!owner || !owner.isPlayer || owner.hp <= 0) {
-        this.removeAllySummonUnit(u.id);
-      }
-    }
-
-    let maxSt = 0;
-    let skillSource: Unit | undefined;
-    for (const h of partyAlive) {
-      const st = Math.min(3, Math.max(0, h.artifacts["o_proibido"] ?? 0));
-      if (st > maxSt) {
-        maxSt = st;
-        skillSource = h;
-      }
-    }
-
-    if (maxSt <= 0) {
-      for (const u of [...this.units]) {
-        if (
-          u.isAllySummon &&
-          u.summonKind === "ancestral_mage" &&
-          partyIds.has(u.summonOwnerHeroId ?? "")
-        ) {
-          this.removeAllySummonUnit(u.id);
-        }
-      }
-      return;
-    }
-
-    const st = maxSt as 1 | 2 | 3;
-    const src = skillSource ?? partyAlive[0]!;
-    for (const h of partyAlive) {
-      this.ensureAncestralMageBesideHero(h, st, src);
-    }
-  }
-
-  private ensureAncestralMageBesideHero(
-    hero: Unit,
-    st: 1 | 2 | 3,
-    skillSource: Unit,
-  ): void {
-    const existing = this.units.filter(
-      (u) =>
-        u.isAllySummon &&
-        u.summonKind === "ancestral_mage" &&
-        u.summonOwnerHeroId === hero.id,
-    );
-    let m = existing.find((u) => u.hp > 0);
-    for (const u of existing) {
-      if (u !== m) this.removeAllySummonUnit(u.id);
-    }
-
-    const expectedMaxHp = ([500, 900, 1400] as const)[st - 1]!;
-    const mustReplace =
-      !!m &&
-      ((m.ancestralMageTier ?? 1) !== st ||
-        m.maxHp !== expectedMaxHp ||
-        m.ancestralMageSkillSourceHeroId !== skillSource.id);
-    if (mustReplace && m) {
-      this.removeAllySummonUnit(m.id);
-      m = undefined;
-    }
-
-    const deathW = this.ancestralMageDeathWaveByOwner.get(hero.id);
-    const waitThisWave =
-      deathW !== undefined && deathW === this.wave && !m;
-
-    if (!m) {
-      if (waitThisWave) return;
-      const hexes = this.collectSpawnHexesNearHeroSameBiome(hero, 1);
-      if (hexes.length === 0) return;
-      let frac = 1;
-      if (deathW !== undefined && deathW < this.wave) {
-        frac = ([0.25, 0.5, 1] as const)[st - 1]!;
-      }
-      this.units.push(
-        createAncestralMageSummon(
-          hero,
-          hexes[0]!.q,
-          hexes[0]!.r,
-          st,
-          frac,
-          skillSource,
-        ),
-      );
-      if (deathW !== undefined && deathW < this.wave) {
-        this.ancestralMageDeathWaveByOwner.delete(hero.id);
-      }
-      return;
-    }
-
-    const ideal = this.collectSpawnHexesNearHeroSameBiome(hero, 1);
-    if (ideal.length > 0) {
-      const t = ideal[0]!;
-      const taken = this.units.some(
-        (u) =>
-          u.hp > 0 &&
-          u.id !== m!.id &&
-          u.q === t.q &&
-          u.r === t.r,
-      );
-      if (!taken && (m.q !== t.q || m.r !== t.r)) {
-        m.q = t.q;
-        m.r = t.r;
-      }
-    }
-  }
-
   private spawnAllySummonsForWave(): void {
     for (const hero of this.getParty()) {
       this.reconcileGridInvocationsForHero(hero);
     }
-    this.reconcileAncestralMagesParty();
     for (const h of this.getParty()) {
       if (h.hp <= 0) continue;
       this.ensureFlamingSwordState(h);
@@ -3771,10 +3343,10 @@ export class GameModel {
     sh.q = best.q;
     sh.r = best.r;
 
-    const skipAlly = getSkipAlliedCombatAnimations();
+    const skipAnim = getSkipCombatAnimations();
     const moveSegs = Math.max(0, cells.length - 1);
     const segMs = UNIT_MOVE_SEGMENT_MS;
-    if (moveSegs > 0 && !skipAlly) {
+    if (moveSegs > 0 && !skipAnim) {
       this.pendingMoveAnim = {
         kind: "unit",
         unitId: sh.id,
@@ -3782,8 +3354,8 @@ export class GameModel {
         segmentMs: segMs,
       };
     }
-    const moveMs = skipAlly ? 0 : moveSegs * segMs;
-    const atkWind = skipAlly ? 0 : enemyMeleeAttackWindupMs();
+    const moveMs = skipAnim ? 0 : moveSegs * segMs;
+    const atkWind = skipAnim ? 0 : enemyMeleeAttackWindupMs();
     const targetId = target.id;
 
     this.emit();
@@ -3852,10 +3424,10 @@ export class GameModel {
       this.scheduleResidualShadowTurn(sh, owner, () => {
         this.removeAllySummonUnit(sh.id);
         this.emit();
-        const gap = getSkipAlliedCombatAnimations()
-          ? 0
-          : FLAMING_SWORD_STRIKE_GAP_MS;
-        this.queueCombat(gap, () => step());
+        this.queueCombat(
+          getSkipCombatAnimations() ? 0 : FLAMING_SWORD_STRIKE_GAP_MS,
+          () => step(),
+        );
       });
     };
     step();
@@ -3890,10 +3462,10 @@ export class GameModel {
     golem.q = best.q;
     golem.r = best.r;
 
-    const skipAlly = getSkipAlliedCombatAnimations();
+    const skipAnim = getSkipCombatAnimations();
     const moveSegs = Math.max(0, cells.length - 1);
     const segMs = UNIT_MOVE_SEGMENT_MS;
-    if (moveSegs > 0 && !skipAlly) {
+    if (moveSegs > 0 && !skipAnim) {
       this.pendingMoveAnim = {
         kind: "unit",
         unitId: golem.id,
@@ -3901,8 +3473,8 @@ export class GameModel {
         segmentMs: segMs,
       };
     }
-    const moveMs = skipAlly ? 0 : moveSegs * segMs;
-    const atkWind = skipAlly ? 0 : enemyMeleeAttackWindupMs();
+    const moveMs = skipAnim ? 0 : moveSegs * segMs;
+    const atkWind = skipAnim ? 0 : enemyMeleeAttackWindupMs();
 
     this.emit();
 
@@ -3930,7 +3502,9 @@ export class GameModel {
         return;
       }
       let i = 0;
-      const gap = skipAlly ? 0 : FLAMING_SWORD_STRIKE_GAP_MS;
+      const gap = getSkipCombatAnimations()
+        ? 0
+        : FLAMING_SWORD_STRIKE_GAP_MS;
       const hitNext = (): void => {
         if (this.phase !== "combat" || this.duel) {
           onDone();
@@ -4004,143 +3578,10 @@ export class GameModel {
       this.emit();
       this.scheduleMegaGolemTurn(g, owner, () => {
         actedThisSummonPhase.add(g.id);
-        const gap = getSkipAlliedCombatAnimations()
-          ? 0
-          : FLAMING_SWORD_STRIKE_GAP_MS;
-        this.queueCombat(gap, () => step());
-      });
-    };
-    step();
-  }
-
-  /** 5 meteoros no bioma do mago; com menos de 5 inimigos reparte aleatoriamente (≥1 por inimigo). */
-  private pickAncestralMeteorTargets(mage: Unit): Unit[] {
-    const mb = biomeAt(this.grid, mage.q, mage.r) as BiomeId;
-    const pool = this.enemies().filter((e) => {
-      if (e.hp <= 0) return false;
-      if (mb === "hub") return true;
-      return (biomeAt(this.grid, e.q, e.r) as BiomeId) === mb;
-    });
-    pool.sort(
-      (a, b) =>
-        hexDistance({ q: mage.q, r: mage.r }, { q: a.q, r: a.r }) -
-        hexDistance({ q: mage.q, r: mage.r }, { q: b.q, r: b.r }),
-    );
-    const MET = 5;
-    if (pool.length === 0) return [];
-    if (pool.length >= MET) return pool.slice(0, MET);
-    const n = pool.length;
-    const picks: Unit[] = [];
-    const order = [...pool].sort(() => Math.random() - 0.5);
-    for (let i = 0; i < n; i++) picks.push(order[i]!);
-    for (let i = n; i < MET; i++) {
-      picks.push(pool[Math.floor(Math.random() * n)]!);
-    }
-    for (let i = picks.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [picks[i], picks[j]] = [picks[j]!, picks[i]!];
-    }
-    return picks;
-  }
-
-  private scheduleAncestralMageMeteorVolley(
-    mage: Unit,
-    owner: Unit,
-    onDone: () => void,
-  ): void {
-    const targets = this.pickAncestralMeteorTargets(mage);
-    if (targets.length === 0) {
-      onDone();
-      return;
-    }
-    const meteorDmg = mage.dano;
-    let idx = 0;
-    const gap = getSkipAlliedCombatAnimations()
-      ? 0
-      : ANCESTRAL_METEOR_STAGGER_MS;
-    const strikeNext = (): void => {
-      if (this.phase !== "combat" || this.duel) {
-        onDone();
-        return;
-      }
-      const mx = this.units.find((u) => u.id === mage.id);
-      if (!mx || mx.hp <= 0) {
-        onDone();
-        return;
-      }
-      if (idx >= targets.length) {
-        onDone();
-        return;
-      }
-      const tid = targets[idx]!.id;
-      idx++;
-      const tg = this.units.find((u) => u.id === tid);
-      if (!tg || tg.hp <= 0) {
-        this.queueCombat(0, strikeNext);
-        return;
-      }
-      const ow = this.units.find((u) => u.id === owner.id);
-      if (!ow || !ow.isPlayer || ow.hp <= 0) {
-        onDone();
-        return;
-      }
-      const skillSid = mx.ancestralMageSkillSourceHeroId ?? ow.id;
-      const skillOw = this.units.find((u) => u.id === skillSid);
-      const dmgSrc =
-        skillOw && skillOw.isPlayer && skillOw.hp > 0 ? skillOw : ow;
-      this.pendingCombatVfxQueue.push({
-        kind: "ally_summon_strike",
-        summonId: mx.id,
-        targetId: tg.id,
-        summonKind: "ancestral_mage",
-      });
-      this.dealSummonSkillDamage(dmgSrc, { q: mx.q, r: mx.r }, meteorDmg, tg);
-      if (this.phase === "combat") {
-        this.tryResolveWaveClearAfterCombatResume();
-      }
-      this.emit();
-      this.queueCombat(gap, strikeNext);
-    };
-    strikeNext();
-  }
-
-  private runAncestralMageMeteorChain(onDone: () => void): void {
-    const acted = new Set<string>();
-    const step = (): void => {
-      if (this.phase !== "combat" || this.duel) {
-        onDone();
-        return;
-      }
-      const m = this.units.find(
-        (u) =>
-          u.isAllySummon &&
-          u.summonKind === "ancestral_mage" &&
-          u.hp > 0 &&
-          !acted.has(u.id),
-      );
-      if (!m) {
-        onDone();
-        return;
-      }
-      const owner = this.units.find((h) => h.id === m.summonOwnerHeroId);
-      if (!owner || !owner.isPlayer || owner.hp <= 0) {
-        this.removeAllySummonUnit(m.id);
-        this.emit();
-        this.queueCombat(0, () => step());
-        return;
-      }
-      this.currentSummonOwnerId = owner.id;
-      this.currentSummonActorId = m.id;
-      this.emit();
-      this.scheduleAncestralMageMeteorVolley(m, owner, () => {
-        acted.add(m.id);
-        const skillSid = m.ancestralMageSkillSourceHeroId ?? owner.id;
-        const flushU = this.units.find((u) => u.id === skillSid);
-        if (flushU) this.flushCombatLevelUp(flushU);
-        const gap = getSkipAlliedCombatAnimations()
-          ? 0
-          : FLAMING_SWORD_STRIKE_GAP_MS;
-        this.queueCombat(gap, () => step());
+        this.queueCombat(
+          getSkipCombatAnimations() ? 0 : FLAMING_SWORD_STRIKE_GAP_MS,
+          () => step(),
+        );
       });
     };
     step();
@@ -4328,11 +3769,8 @@ export class GameModel {
       enemyHitCount: targets.length,
     });
 
-    const skipAllySentenca = getSkipAlliedCombatAnimations();
     targets.forEach((e, i) => {
-      const delay = skipAllySentenca
-        ? 0
-        : SENTENCA_FIRST_DAMAGE_MS + i * SENTENCA_STAGGER_MS;
+      const delay = SENTENCA_FIRST_DAMAGE_MS + i * SENTENCA_STAGGER_MS;
       this.queueCombat(delay, () => {
         const att = this.units.find((u) => u.id === p.id);
         const tg = this.units.find((u) => u.id === e.id);
@@ -4343,14 +3781,8 @@ export class GameModel {
 
     const n = targets.length;
     const lastHit =
-      n === 0
-        ? 0
-        : skipAllySentenca
-          ? 0
-          : SENTENCA_FIRST_DAMAGE_MS + (n - 1) * SENTENCA_STAGGER_MS;
-    const healAt =
-      lastHit +
-      (skipAllySentenca ? 0 : SENTENCA_HEAL_AFTER_LAST_HIT_MS);
+      n === 0 ? 0 : SENTENCA_FIRST_DAMAGE_MS + (n - 1) * SENTENCA_STAGGER_MS;
+    const healAt = lastHit + SENTENCA_HEAL_AFTER_LAST_HIT_MS;
 
     this.queueCombat(healAt, () => {
       this.applySentencaPartyHeal({ resumeCombat: true });
@@ -4780,9 +4212,6 @@ export class GameModel {
         h.r = hub.r;
       }
     }
-    if (this.phase === "combat" && !this.duel) {
-      this.reconcileAncestralMagesParty();
-    }
   }
 
   finishWaveShop(): void {
@@ -4791,7 +4220,6 @@ export class GameModel {
   }
 
   tryMoveHero(toQ: number, toR: number): boolean {
-    this.lastHeroMoveAnimEstimateMs = 0;
     const h = this.currentHero();
     if (!h || h.hp <= 0) return false;
     if (this.duel) return false;
@@ -4857,19 +4285,15 @@ export class GameModel {
       blocked,
       panSwamp,
     );
-    let moveAnimEstimateMs = 0;
-    if (path && path.length > 1 && !getSkipAlliedCombatAnimations()) {
-      const segMs = heroRunSegmentMs();
-      moveAnimEstimateMs = (path.length - 1) * segMs;
+    if (path && path.length > 1 && !getSkipCombatAnimations()) {
       this.pendingMoveAnim = {
         kind: "unit",
         unitId: h.id,
         cells: path.map((p) => ({ q: p.q, r: p.r })),
-        segmentMs: segMs,
+        segmentMs: heroRunSegmentMs(),
         playHeroRunAnim: true,
       };
     }
-    this.lastHeroMoveAnimEstimateMs = moveAnimEstimateMs;
     this.movementLeft -= cost;
     const bFrom = this.bunkerAtHex(fromQ, fromR);
     const leftBunker =
@@ -4898,22 +4322,9 @@ export class GameModel {
     if (forgeSynergyTier(h.forgeLoadout, "rochoso") >= 3) {
       this.rochosoTauntHeroId = h.id;
     }
-    if (this.phase === "combat" && !this.duel) {
-      this.reconcileAncestralMagesParty();
-    }
     this.log(`${h.name} move para (${toQ},${toR}).`);
     this.emit();
     return true;
-  }
-
-  /**
-   * Após `tryMoveHero` com sucesso: duração estimada da animação (0 se skip ou instantâneo).
-   * Chamada única por movimento; zera o buffer interno.
-   */
-  consumeLastHeroMoveAnimEstimateMs(): number {
-    const v = this.lastHeroMoveAnimEstimateMs;
-    this.lastHeroMoveAnimEstimateMs = 0;
-    return v;
   }
 
   /** Dano bruto do ataque básico (antes de crítico/defesa). Inclui bônus do Golpe Relâmpago se ativo. */
@@ -5028,68 +4439,6 @@ export class GameModel {
     this.basicLeft = Math.max(0, cap - this.basicAttacksSpentThisTurn);
   }
 
-  private findCheapestHexToReachBasicAttack(targetId: string): {
-    q: number;
-    r: number;
-  } | null {
-    const h = this.currentHero();
-    if (!h || h.hp <= 0) return null;
-    const tgt = this.units.find((u) => u.id === targetId);
-    if (!tgt || tgt.isPlayer || tgt.hp <= 0) return null;
-    const alc = this.effectiveAlcanceForHero(h);
-    const fly = h.flying;
-    const ign = unitIgnoresTerrain(h);
-    const panSwamp =
-      !ign && forgeSynergyTier(h.forgeLoadout, "pantano") >= 1;
-    const blocked = this.occupiedHexKeysExcluding(h.id);
-    const reach = reachableHexes(
-      this.grid,
-      { q: h.q, r: h.r },
-      this.movementLeft,
-      fly,
-      ign,
-      blocked,
-      panSwamp,
-    );
-    let best: { q: number; r: number; cost: number; dist: number } | null =
-      null;
-    for (const [k, cost] of reach) {
-      const { q, r } = parseAxialKey(k);
-      const dist = hexDistance({ q, r }, { q: tgt.q, r: tgt.r });
-      if (dist > alc) continue;
-      if (
-        !best ||
-        cost < best.cost ||
-        (cost === best.cost && dist < best.dist)
-      ) {
-        best = { q, r, cost, dist };
-      }
-    }
-    return best ? { q: best.q, r: best.r } : null;
-  }
-
-  /**
-   * Se o alvo estiver fora do alcance mas houver hex acessível com o movimento restante, move e ataca.
-   */
-  tryMoveThenBasicAttack(targetId: string): boolean {
-    const h = this.currentHero();
-    if (!h || h.hp <= 0 || this.basicLeft <= 0) return false;
-    if (this.duel) return false;
-    if (!this.validateEnemyForBasicAttack(targetId)) return false;
-    const tgt = this.units.find((u) => u.id === targetId);
-    if (!tgt || tgt.hp <= 0) return false;
-    const alc = this.effectiveAlcanceForHero(h);
-    if (
-      hexDistance({ q: h.q, r: h.r }, { q: tgt.q, r: tgt.r }) <= alc
-    ) {
-      return this.tryBasicAttack(targetId);
-    }
-    const dest = this.findCheapestHexToReachBasicAttack(targetId);
-    if (!dest) return false;
-    if (!this.tryMoveHero(dest.q, dest.r)) return false;
-    return this.tryBasicAttack(targetId);
-  }
-
   tryBasicAttack(targetId: string): boolean {
     const h = this.currentHero();
     if (!h || h.hp <= 0 || this.basicLeft <= 0) return false;
@@ -5116,11 +4465,11 @@ export class GameModel {
       this.emit();
     };
 
-    const skipAlly = getSkipAlliedCombatAnimations();
+    const skipFx = getSkipCombatAnimations();
 
     if (h.heroClass === "pistoleiro") {
-      const dmgDelay = skipAlly ? 0 : heroBasicShootDamageDelayMs();
-      const flight = skipAlly ? BASIC_PISTOL_FLIGHT_MS : dmgDelay;
+      const dmgDelay = skipFx ? 0 : heroBasicShootDamageDelayMs();
+      const flight = skipFx ? BASIC_PISTOL_FLIGHT_MS : dmgDelay;
       this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: h.id,
@@ -5140,8 +4489,8 @@ export class GameModel {
     }
 
     if (h.heroClass === "sacerdotisa") {
-      const dmgDelay = skipAlly ? 0 : heroBasicMagicDamageDelayMs();
-      const flight = skipAlly ? BASIC_MAGIC_FLIGHT_MS : dmgDelay;
+      const dmgDelay = skipFx ? 0 : heroBasicMagicDamageDelayMs();
+      const flight = skipFx ? BASIC_MAGIC_FLIGHT_MS : dmgDelay;
       this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: h.id,
@@ -5160,14 +4509,14 @@ export class GameModel {
       return true;
     }
 
-    if (!skipAlly) {
+    if (!skipFx) {
       this.pendingCombatVfxQueue.push({
         kind: "hero_basic_melee",
         heroId: h.id,
         targetId: tgt.id,
       });
     }
-    const meleeDelay = skipAlly ? 0 : heroBasicMeleeDamageDelayMs();
+    const meleeDelay = skipFx ? 0 : heroBasicMeleeDamageDelayMs();
     this.basicAttacksSpentThisTurn++;
     this.syncBasicLeftFromSpent(h);
     this.queueCombat(meleeDelay, () => {
@@ -5339,9 +4688,8 @@ export class GameModel {
         pathQr: beamHexes.map((c) => ({ q: c.q, r: c.r })),
         charges,
       });
-      const skipAllyTiro = getSkipAlliedCombatAnimations();
       let delay = 0;
-      const stepMs = skipAllyTiro ? 0 : 42;
+      const stepMs = 42;
       const hitEnemyIds: string[] = [];
       for (const cell of beamHexes) {
         const eid = this.liveEnemyIdAtHex(cell.q, cell.r);
@@ -5362,7 +4710,7 @@ export class GameModel {
       h.tiroDestruidorCharges = 0;
       h.tiroDestruidorUsedThisTurn = true;
       this.log(`${h.name}: Tiro destruidor! (${charges} carga(s))`);
-      this.queueCombat(delay + (skipAllyTiro ? 0 : 55), () => {
+      this.queueCombat(delay + 55, () => {
         const att = this.units.find((u) => u.id === h.id);
         if (att) this.flushCombatLevelUp(att);
         if (this.phase === "combat") {
@@ -5400,11 +4748,8 @@ export class GameModel {
         h.skillCd[skillId] = atirarCooldownWaves(h.weaponLevel);
       this.log(`${h.name}: Atirar pra todo lado!`);
 
-      const skipAllyAtirar = getSkipAlliedCombatAnimations();
       targets.forEach((e, i) => {
-        const delay = skipAllyAtirar
-          ? 0
-          : ATIRAR_FIRST_DAMAGE_MS + i * ATIRAR_STAGGER_MS;
+        const delay = ATIRAR_FIRST_DAMAGE_MS + i * ATIRAR_STAGGER_MS;
         this.queueCombat(delay, () => {
           const att = this.units.find((u) => u.id === h.id);
           const tg = this.units.find((u) => u.id === e.id);
@@ -5423,11 +4768,8 @@ export class GameModel {
       const last =
         targets.length === 0
           ? 0
-          : skipAllyAtirar
-            ? 0
-            : ATIRAR_FIRST_DAMAGE_MS +
-              (targets.length - 1) * ATIRAR_STAGGER_MS;
-      this.queueCombat(last + (skipAllyAtirar ? 0 : 60), () => {
+          : ATIRAR_FIRST_DAMAGE_MS + (targets.length - 1) * ATIRAR_STAGGER_MS;
+      this.queueCombat(last + 60, () => {
         const att = this.units.find((u) => u.id === h.id);
         if (att) this.flushCombatLevelUp(att);
         if (this.phase === "combat") {
@@ -5466,12 +4808,9 @@ export class GameModel {
         heroId: h.id,
         targetIds,
       });
-      const skipAllyPisotear = getSkipAlliedCombatAnimations();
       targets.forEach((e, i) => {
         const enemyId = e.id;
-        const delay = skipAllyPisotear
-          ? 0
-          : PISOTEAR_FIRST_DAMAGE_MS + i * PISOTEAR_STAGGER_MS;
+        const delay = PISOTEAR_FIRST_DAMAGE_MS + i * PISOTEAR_STAGGER_MS;
         this.queueCombat(delay, () => {
           const att = this.units.find((u) => u.id === h.id);
           const tg = this.units.find((u) => u.id === enemyId);
@@ -5488,20 +4827,16 @@ export class GameModel {
           this.emit();
         });
       });
-      const last = skipAllyPisotear
-        ? 0
-        : PISOTEAR_FIRST_DAMAGE_MS +
-          (targets.length - 1) * PISOTEAR_STAGGER_MS;
-      this.queueCombat(
-        last + (skipAllyPisotear ? 0 : PISOTEAR_TAIL_BUFFER_MS),
-        () => {
+      const last =
+        PISOTEAR_FIRST_DAMAGE_MS +
+        (targets.length - 1) * PISOTEAR_STAGGER_MS;
+      this.queueCombat(last + PISOTEAR_TAIL_BUFFER_MS, () => {
         this.flushCombatLevelUp(h);
         if (this.phase === "combat") {
           this.tryResolveWaveClearAfterCombatResume();
         }
         this.emit();
-        },
-      );
+      });
       this.emit();
       return true;
     }
@@ -5721,8 +5056,9 @@ export class GameModel {
       !tgt.isPlayer
     ) {
       const v = src.artifacts["vendaval_arcana"] ?? 0;
-      if (v > 0) {
-        rawUse = Math.floor(rawUse * (1 + 0.08 * v));
+      const c = src.artifacts["ceu_partido"] ?? 0;
+      if (v > 0 || c > 0) {
+        rawUse = Math.floor(rawUse * (1 + 0.08 * v + 0.15 * c));
       }
     }
     if (
@@ -5881,18 +5217,6 @@ export class GameModel {
     const dmgToHero = dmgWorking;
     const wasAlive = tgt.hp > 0;
     tgt.hp = Math.max(0, tgt.hp - dmgToHero);
-    if (
-      wasAlive &&
-      tgt.hp <= 0 &&
-      tgt.isAllySummon &&
-      tgt.summonKind === "ancestral_mage" &&
-      tgt.summonOwnerHeroId
-    ) {
-      this.ancestralMageDeathWaveByOwner.set(
-        tgt.summonOwnerHeroId,
-        this.wave,
-      );
-    }
     if (tgt.isPlayer && wasAlive && tgt.hp <= 0) {
       this.maybeApplyHeroOnDeathArtifacts(tgt);
     }
@@ -6311,8 +5635,9 @@ export class GameModel {
     const inBunker = bkHere && bkHere.occupantId === killer.id;
     if (inBunker) {
       const bonusPct = 10 * motor;
-      const skipAlly = getSkipAlliedCombatAnimations();
-      const delayBeforeStrike = skipAlly ? 0 : GOLPE_RELAMPAGO_WINDUP_MS;
+      const delayBeforeStrike = getSkipCombatAnimations()
+        ? 0
+        : GOLPE_RELAMPAGO_WINDUP_MS;
       this.pendingCombatVfxQueue.push({
         kind: "golpe_relampago_lightning",
         heroId: killer.id,
@@ -6342,12 +5667,11 @@ export class GameModel {
       { q: near.q, r: near.r },
     );
     const bonusPct = 10 * motor;
-    const skipAlly = getSkipAlliedCombatAnimations();
 
     if (distToTarget > alc) {
       killer.motorMorteNextBasicPct = bonusPct;
       if (movedOnMap) {
-        if (!skipAlly) {
+        if (!getSkipCombatAnimations()) {
           this.pendingMoveAnim = {
             kind: "unit",
             unitId: killer.id,
@@ -6358,23 +5682,25 @@ export class GameModel {
             segmentMs: GOLPE_RELAMPAGO_MOVE_MS,
             playHeroRunAnim: true,
           };
-          this.pendingCombatVfxQueue.push({
-            kind: "golpe_relampago_teleport",
-            heroId: killer.id,
-          });
-          this.pendingCombatVfxQueue.push({
-            kind: "golpe_relampago_hero_charge",
-            heroId: killer.id,
-          });
         }
+        this.pendingCombatVfxQueue.push({
+          kind: "golpe_relampago_teleport",
+          heroId: killer.id,
+        });
+        this.pendingCombatVfxQueue.push({
+          kind: "golpe_relampago_hero_charge",
+          heroId: killer.id,
+        });
       }
       this.emit();
       return;
     }
 
-    let delayBeforeStrike = skipAlly ? 0 : GOLPE_RELAMPAGO_WINDUP_MS;
+    let delayBeforeStrike = getSkipCombatAnimations()
+      ? 0
+      : GOLPE_RELAMPAGO_WINDUP_MS;
     if (movedOnMap) {
-      if (!skipAlly) {
+      if (!getSkipCombatAnimations()) {
         this.pendingMoveAnim = {
           kind: "unit",
           unitId: killer.id,
@@ -6386,18 +5712,16 @@ export class GameModel {
           playHeroRunAnim: true,
         };
         delayBeforeStrike = GOLPE_RELAMPAGO_MOVE_MS;
-        this.pendingCombatVfxQueue.push({
-          kind: "golpe_relampago_teleport",
-          heroId: killer.id,
-        });
       }
-    }
-    if (!skipAlly) {
       this.pendingCombatVfxQueue.push({
-        kind: "golpe_relampago_hero_charge",
+        kind: "golpe_relampago_teleport",
         heroId: killer.id,
       });
     }
+    this.pendingCombatVfxQueue.push({
+      kind: "golpe_relampago_hero_charge",
+      heroId: killer.id,
+    });
 
     this.emit();
     this.queueCombat(delayBeforeStrike, () => {
@@ -6454,11 +5778,10 @@ export class GameModel {
       this.emit();
     };
 
-    const skipAlly = getSkipAlliedCombatAnimations();
-
+    const skipFx = getSkipCombatAnimations();
     if (att.heroClass === "pistoleiro") {
-      const dly = skipAlly ? 0 : heroBasicShootDamageDelayMs();
-      const fl = skipAlly ? BASIC_PISTOL_FLIGHT_MS : dly;
+      const dly = skipFx ? 0 : heroBasicShootDamageDelayMs();
+      const fl = skipFx ? BASIC_PISTOL_FLIGHT_MS : dly;
       this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: att.id,
@@ -6477,8 +5800,8 @@ export class GameModel {
       return;
     }
     if (att.heroClass === "sacerdotisa") {
-      const dly = skipAlly ? 0 : heroBasicMagicDamageDelayMs();
-      const fl = skipAlly ? BASIC_MAGIC_FLIGHT_MS : dly;
+      const dly = skipFx ? 0 : heroBasicMagicDamageDelayMs();
+      const fl = skipFx ? BASIC_MAGIC_FLIGHT_MS : dly;
       this.pendingCombatVfxQueue.push({
         kind: "basic_projectile",
         fromId: att.id,
@@ -6496,14 +5819,14 @@ export class GameModel {
       this.emit();
       return;
     }
-    if (!skipAlly) {
+    if (!skipFx) {
       this.pendingCombatVfxQueue.push({
         kind: "hero_basic_melee",
         heroId: att.id,
         targetId: tgt.id,
       });
     }
-    const mel = skipAlly ? 0 : heroBasicMeleeDamageDelayMs();
+    const mel = skipFx ? 0 : heroBasicMeleeDamageDelayMs();
     this.pendingCombatVfxQueue.push({
       kind: "golpe_relampago_lightning",
       heroId: att.id,
@@ -6844,12 +6167,9 @@ export class GameModel {
     this.pendingKillLevelUpFlushHeroIds.clear();
     this.log(`${h.name}: Furacão de balas!`);
 
-    const skipAllyFuracao = getSkipAlliedCombatAnimations();
     targets.forEach((e, i) => {
       const enemyId = e.id;
-      const delay = skipAllyFuracao
-        ? 0
-        : FURACAO_ULT_FIRST_DAMAGE_MS + i * FURACAO_ULT_STAGGER_MS;
+      const delay = FURACAO_ULT_FIRST_DAMAGE_MS + i * FURACAO_ULT_STAGGER_MS;
       this.queueCombat(delay, () => {
         const att = this.units.find((u) => u.id === h.id);
         const tg = this.units.find((u) => u.id === enemyId);
@@ -6879,12 +6199,9 @@ export class GameModel {
     const last =
       targets.length === 0
         ? 0
-        : skipAllyFuracao
-          ? 0
-          : FURACAO_ULT_FIRST_DAMAGE_MS +
-            (targets.length - 1) * FURACAO_ULT_STAGGER_MS;
-    const tailMs =
-      last + (skipAllyFuracao ? 0 : FURACAO_ULT_TAIL_BUFFER_MS);
+        : FURACAO_ULT_FIRST_DAMAGE_MS +
+          (targets.length - 1) * FURACAO_ULT_STAGGER_MS;
+    const tailMs = last + FURACAO_ULT_TAIL_BUFFER_MS;
     this.queueCombat(tailMs, () => {
       this.drainDeferredKillLevelUpQueue();
       if (this.phase === "combat") {
@@ -7309,7 +6626,7 @@ export class GameModel {
     const fromR = hero.r;
     hero.q = dest.q;
     hero.r = dest.r;
-    if (!getSkipAlliedCombatAnimations()) {
+    if (!getSkipCombatAnimations()) {
       this.pendingMoveAnim = {
         kind: "unit",
         unitId: hero.id,
@@ -7436,8 +6753,8 @@ export class GameModel {
     const moveSegs = Math.max(0, cells.length - 1);
     const mult = this.enemyPhaseTimingMult;
     const segMs = UNIT_MOVE_SEGMENT_MS * mult;
-    const skipEnemyAnim = getSkipEnemyCombatAnimations();
-    if (cells.length > 1 && !skipEnemyAnim) {
+    const skipAnim = getSkipCombatAnimations();
+    if (cells.length > 1 && !skipAnim) {
       this.pendingMoveAnim = {
         kind: "unit",
         unitId: e.id,
@@ -7445,12 +6762,10 @@ export class GameModel {
         segmentMs: segMs,
       };
     }
-    const moveMs = skipEnemyAnim ? 0 : moveSegs * segMs;
-    const atkWind = skipEnemyAnim ? 0 : enemyMeleeAttackWindupMs();
+    const moveMs = skipAnim ? 0 : moveSegs * segMs;
+    const atkWind = skipAnim ? 0 : enemyMeleeAttackWindupMs();
     const hitReact =
-      tgt.isPlayer && !getSkipAlliedCombatAnimations()
-        ? heroHitReactAnimMs()
-        : 0;
+      skipAnim || !tgt.isPlayer ? 0 : heroHitReactAnimMs();
     const enemyId = e.id;
     const targetId = tgt.id;
     this.queueCombat(moveMs + atkWind, () => {
@@ -7790,7 +7105,6 @@ export class GameModel {
     const choices = randomArtifactChoicesForHero(u, nArt, sorteEff, new Set(), {
       bypassRarityCaps: this.devSandboxMode,
       bannedIds: this.artifactBannedThisRun,
-      partyUnits: this.getParty(),
     });
     if (choices.length === 0) {
       this.log(`${u.name}: sem cartas de level-up disponíveis.`);
@@ -7823,7 +7137,6 @@ export class GameModel {
     const choices = randomArtifactChoicesForHero(u, pa.choiceCount, sorteEff, new Set(), {
       bypassRarityCaps: this.devSandboxMode,
       bannedIds: this.artifactBannedThisRun,
-      partyUnits: this.getParty(),
     });
     if (choices.length === 0) {
       this.log(`${u.name}: sem cartas de reroll disponíveis.`);
@@ -7885,7 +7198,7 @@ export class GameModel {
       need,
       sorteEff,
       new Set(keep),
-      { ...opts, partyUnits: this.getParty() },
+      opts,
     );
     if (extra.length < need) {
       this.log(
@@ -8000,7 +7313,6 @@ export class GameModel {
     if (
       !canIncrementArtifactStack(u, artifactId, {
         bypassRarityCaps: this.devSandboxMode,
-        party: this.getParty().filter((x) => x.isPlayer),
       })
     )
       return false;
@@ -8404,47 +7716,6 @@ export class GameModel {
       if (u.penetracao !== sh.penetracao) return true;
       if (u.potencialCuraEscudo !== sh.potencialCuraEscudo) return true;
       if (!shopArtifactsEq(u.artifacts, sh.artifacts)) return true;
-      if (
-        typeof sh.penetracaoEscudo === "number" &&
-        u.penetracaoEscudo !== sh.penetracaoEscudo
-      )
-        return true;
-      if (typeof sh.alcance === "number" && u.alcance !== sh.alcance)
-        return true;
-      if (typeof sh.lifesteal === "number" && u.lifesteal !== sh.lifesteal)
-        return true;
-      if (typeof sh.sorte === "number" && u.sorte !== sh.sorte) return true;
-      if (typeof sh.level === "number" && u.level !== sh.level) return true;
-      if (typeof sh.xp === "number" && u.xp !== sh.xp) return true;
-      if (typeof sh.xpToNext === "number" && u.xpToNext !== sh.xpToNext)
-        return true;
-      if (
-        (sh.weaponLevel === 1 ||
-          sh.weaponLevel === 2 ||
-          sh.weaponLevel === 3 ||
-          sh.weaponLevel === 4 ||
-          sh.weaponLevel === 5) &&
-        u.weaponLevel !== sh.weaponLevel
-      )
-        return true;
-      if (
-        Object.prototype.hasOwnProperty.call(sh, "ultimateId") &&
-        u.ultimateId !== sh.ultimateId
-      )
-        return true;
-      if (
-        typeof sh.formaFinal === "boolean" &&
-        u.formaFinal !== sh.formaFinal
-      )
-        return true;
-      if (sh.skillCd && JSON.stringify(u.skillCd) !== JSON.stringify(sh.skillCd))
-        return true;
-      if (
-        sh.forgeLoadout &&
-        JSON.stringify(u.forgeLoadout ?? {}) !==
-          JSON.stringify(sh.forgeLoadout)
-      )
-        return true;
     }
     const curBunkers = this.snapshotBunkersNow();
     if (curBunkers.length !== snap.bunkers.length) return true;
@@ -8515,23 +7786,6 @@ export class GameModel {
       penetracao: u.penetracao,
       potencialCuraEscudo: u.potencialCuraEscudo,
       artifacts: { ...u.artifacts },
-      penetracaoEscudo: u.penetracaoEscudo,
-      alcance: u.alcance,
-      lifesteal: u.lifesteal,
-      sorte: u.sorte,
-      level: u.level,
-      xp: u.xp,
-      xpToNext: u.xpToNext,
-      weaponLevel: u.weaponLevel,
-      ultimateId: u.ultimateId,
-      formaFinal: u.formaFinal,
-      forgeLoadout: u.forgeLoadout
-        ? JSON.parse(JSON.stringify(u.forgeLoadout)) as ForgeHeroLoadout
-        : undefined,
-      skillCd: { ...u.skillCd },
-      statBaseline: u.statBaseline
-        ? JSON.parse(JSON.stringify(u.statBaseline)) as HeroStatBaseline
-        : undefined,
     };
   }
 
@@ -8586,29 +7840,6 @@ export class GameModel {
       u.penetracao = sh.penetracao;
       u.potencialCuraEscudo = sh.potencialCuraEscudo;
       u.artifacts = { ...sh.artifacts };
-      if (typeof sh.penetracaoEscudo === "number")
-        u.penetracaoEscudo = sh.penetracaoEscudo;
-      if (typeof sh.alcance === "number") u.alcance = sh.alcance;
-      if (typeof sh.lifesteal === "number") u.lifesteal = sh.lifesteal;
-      if (typeof sh.sorte === "number") u.sorte = sh.sorte;
-      if (typeof sh.level === "number") u.level = sh.level;
-      if (typeof sh.xp === "number") u.xp = sh.xp;
-      if (typeof sh.xpToNext === "number") u.xpToNext = sh.xpToNext;
-      if (sh.weaponLevel === 1 || sh.weaponLevel === 2 || sh.weaponLevel === 3 || sh.weaponLevel === 4 || sh.weaponLevel === 5)
-        u.weaponLevel = sh.weaponLevel;
-      if (Object.prototype.hasOwnProperty.call(sh, "ultimateId"))
-        u.ultimateId = sh.ultimateId;
-      if (typeof sh.formaFinal === "boolean") u.formaFinal = sh.formaFinal;
-      if (sh.forgeLoadout && typeof sh.forgeLoadout === "object")
-        u.forgeLoadout = JSON.parse(
-          JSON.stringify(sh.forgeLoadout),
-        ) as ForgeHeroLoadout;
-      if (sh.skillCd && typeof sh.skillCd === "object")
-        u.skillCd = { ...sh.skillCd };
-      if (sh.statBaseline && typeof sh.statBaseline === "object")
-        u.statBaseline = JSON.parse(
-          JSON.stringify(sh.statBaseline),
-        ) as HeroStatBaseline;
     }
     for (const sb of snap.bunkers) {
       const fortifyCap =
@@ -8714,24 +7945,6 @@ export class GameModel {
     return true;
   }
 
-  /**
-   * Embosca (chão): N+ inimigos adjacentes bloqueiam movimento — mesma regra que `tryMoveHero`.
-   * Em voo não aplica.
-   */
-  heroIsAmbushMovementLocked(): boolean {
-    const h = this.currentHero();
-    if (!h || h.hp <= 0) return false;
-    if (h.flying) return false;
-    let adjEnemy = 0;
-    for (const e of this.enemies()) {
-      if (hexDistance({ q: h.q, r: h.r }, { q: e.q, r: e.r }) === 1) {
-        adjEnemy++;
-      }
-    }
-    const ambushNeed = 2 + (h.artifacts["sorte_prata"] ?? 0);
-    return adjEnemy >= ambushNeed;
-  }
-
   reachableForCurrentHero(): Map<string, number> {
     const h = this.currentHero();
     if (!h) return new Map();
@@ -8785,7 +7998,7 @@ export class GameModel {
     const bio = biomeAt(this.grid, h.q, h.r) as BiomeId;
     const ign = unitIgnoresTerrain(h);
     const ft = forgeSynergyTier(h.forgeLoadout, "floresta");
-    let total = h.alcance + this.ancestralMageAuraAlcanceBonusForHero(h);
+    let total = h.alcance;
     if (ft >= 2) total += 2;
     else if (ft >= 1 && bio === "floresta") total += 2;
     else if (!ign && bio === "floresta") total += 1;
@@ -8845,28 +8058,14 @@ export class GameModel {
   ): { keys: Set<string>; path: { q: number; r: number }[] } | null {
     const h = this.currentHero();
     if (!h || h.hp <= 0) return null;
-    return this.tiroDestruidorAimPreviewFromHeroAt(h.q, h.r, tq, tr);
-  }
-
-  /**
-   * Pré-visualização do feixe com origem em (heroQ, heroR) — ex.: hex fantasma ao pairar no movimento.
-   */
-  tiroDestruidorAimPreviewFromHeroAt(
-    heroQ: number,
-    heroR: number,
-    tq: number,
-    tr: number,
-  ): { keys: Set<string>; path: { q: number; r: number }[] } | null {
-    const h = this.currentHero();
-    if (!h || h.hp <= 0) return null;
     if (h.heroClass !== "pistoleiro" || h.ultimateId !== "arauto_caos")
       return null;
-    if (tq === heroQ && tr === heroR) return null;
-    const d0 = hexDistance({ q: heroQ, r: heroR }, { q: tq, r: tr });
+    if (tq === h.q && tr === h.r) return null;
+    const d0 = hexDistance({ q: h.q, r: h.r }, { q: tq, r: tr });
     const alc = this.effectiveAlcanceForHero(h);
     if (d0 < 1 || d0 > alc) return null;
     const beamHexes = hexBeamRayThroughGrid(
-      { q: heroQ, r: heroR },
+      { q: h.q, r: h.r },
       { q: tq, r: tr },
       (qq, rr) => this.grid.has(axialKey(qq, rr)),
       48,
@@ -8879,15 +8078,8 @@ export class GameModel {
   getBasicAttackRangeHexKeys(): Set<string> {
     const h = this.currentHero();
     if (!h || h.hp <= 0) return new Set();
-    return this.getBasicAttackRangeHexKeysFromPosition(h.q, h.r);
-  }
-
-  /** Alcance de ataque básico como se o herói estivesse em (fromQ, fromR). */
-  getBasicAttackRangeHexKeysFromPosition(fromQ: number, fromR: number): Set<string> {
-    const h = this.currentHero();
-    if (!h || h.hp <= 0) return new Set();
     const alc = this.effectiveAlcanceForHero(h);
-    return this.hexKeysInRing(fromQ, fromR, 1, Math.max(1, alc));
+    return this.hexKeysInRing(h.q, h.r, 1, Math.max(1, alc));
   }
 
   getSkillRangeHexKeys(skillId: string): Set<string> {
@@ -8900,26 +8092,6 @@ export class GameModel {
       if (maxR < 1) return new Set();
       return this.hexKeysInRing(b.q, b.r, 1, maxR);
     }
-    return this.getSkillRangeHexKeysFromPosition(skillId, h.q, h.r);
-  }
-
-  /**
-   * Alcance de skill como se o herói / bunker estivessem em (fromQ, fromR) — pré-visualização ao mover o rato.
-   */
-  getSkillRangeHexKeysFromPosition(
-    skillId: string,
-    fromQ: number,
-    fromR: number,
-  ): Set<string> {
-    const h = this.currentHero();
-    if (!h || h.hp <= 0) return new Set();
-    if (skillId === "bunker_minas") {
-      const b = this.bunkerAtHex(fromQ, fromR);
-      if (!b || b.hp <= 0) return new Set();
-      const maxR = bunkerMinasMaxRing(b.tier);
-      if (maxR < 1) return new Set();
-      return this.hexKeysInRing(b.q, b.r, 1, maxR);
-    }
     if (skillId === "bunker_tiro_preciso") {
       const keys = new Set<string>();
       for (const u of this.units) {
@@ -8928,13 +8100,13 @@ export class GameModel {
       }
       return keys;
     }
-    if (skillId === "ate_a_morte") return this.hexKeysInRing(fromQ, fromR, 1, 1);
+    if (skillId === "ate_a_morte") return this.hexKeysInRing(h.q, h.r, 1, 1);
     if (
       skillId === "atirar_todo_lado" ||
       skillId === "tiro_destruidor" ||
       skillId === "especialista_destruicao"
     ) {
-      return this.getBasicAttackRangeHexKeysFromPosition(fromQ, fromR);
+      return this.getBasicAttackRangeHexKeys();
     }
     if (skillId === "sentenca") {
       return new Set();
