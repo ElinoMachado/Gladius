@@ -5327,6 +5327,60 @@ body.enemy-inspect--dragging-body {
   height: 104px;
 }
 
+/* Comum + raster (Mãos venenosas): imagem a preencher todo o cartão no codex */
+.artifact-codex-card.artifact-rarity--common:has(.artifact-codex-card__art .artifact-card-img) {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 7.5rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+.artifact-codex-card.artifact-rarity--common:has(.artifact-codex-card__art .artifact-card-img)
+  .artifact-codex-card__art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  min-height: 0;
+}
+
+.artifact-codex-card.artifact-rarity--common:has(.artifact-codex-card__art .artifact-card-img)
+  .artifact-codex-card__art
+  .artifact-card-img {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  object-fit: cover;
+}
+
+.artifact-codex-card.artifact-rarity--common:has(.artifact-codex-card__art .artifact-card-img)
+  .artifact-codex-card__name {
+  position: relative;
+  z-index: 1;
+  padding: 1.75rem 0.35rem 0.1rem;
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.95),
+    0 0 10px rgba(0, 0, 0, 0.65);
+  background: linear-gradient(
+    to top,
+    rgba(8, 6, 12, 0.92) 0%,
+    rgba(8, 6, 12, 0.38) 52%,
+    transparent 100%
+  );
+}
+
+.artifact-codex-card.artifact-rarity--common:has(.artifact-codex-card__art .artifact-card-img)
+  .artifact-codex-card__cnt {
+  position: relative;
+  z-index: 1;
+  margin-top: 0;
+  padding: 0 0.35rem 0.38rem;
+  background: rgba(8, 6, 12, 0.9);
+}
+
 .artifact-codex-card__name {
   font-size: 0.62rem;
   font-weight: 700;
