@@ -2682,8 +2682,9 @@ h1 {
 .artifact-pick-card:has(.artifact-card-img--fullbleed) {
   display: grid;
   grid-template-columns: 1fr;
-  grid-template-rows: auto minmax(5.25rem, 1fr) auto;
+  grid-template-rows: auto minmax(6rem, 1fr) auto;
   gap: 0.32rem;
+  overflow: hidden;
 }
 
 .artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__rarity {
@@ -2720,14 +2721,6 @@ h1 {
   grid-row: 3;
 }
 
-.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__art .artifact-card-img--fullbleed {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-}
-
 .artifact-pick-owned-card:has(.artifact-card-img--fullbleed) {
   overflow: hidden;
 }
@@ -2740,16 +2733,9 @@ h1 {
   justify-content: stretch;
 }
 
-.artifact-pick-owned-card:has(.artifact-card-img--fullbleed) .artifact-pick-owned-card__art .artifact-card-img--fullbleed {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-}
-
 .artifact-mini-card:has(.artifact-card-img--fullbleed) {
   overflow: hidden;
+  background-color: #1a0d2e;
 }
 
 .artifact-mini-card:has(.artifact-card-img--fullbleed) .artifact-card-img--fullbleed {
@@ -2757,7 +2743,11 @@ h1 {
   inset: 0;
   width: 100%;
   height: 100%;
+  min-width: 100%;
+  min-height: 100%;
   max-height: none;
+  object-fit: cover;
+  object-position: center center;
   filter: none;
 }
 
@@ -2794,14 +2784,6 @@ h1 {
 .artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__cnt {
   grid-row: 2;
   margin-top: 0;
-}
-
-.artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__art .artifact-card-img--fullbleed {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: none;
 }
 
 .artifact-tt {
@@ -5018,6 +5000,41 @@ body.enemy-inspect--dragging-body {
   height: auto;
 }
 
+/* Raster fullbleed: reforço após as regras base de __art — cobre até à borda dourada e preenche o retângulo */
+.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__art {
+  display: block;
+  width: calc(100% + 0.8rem);
+  max-width: none;
+  margin-left: -0.4rem;
+  margin-right: -0.4rem;
+  align-self: stretch;
+  min-height: 6rem;
+  background-color: #1a0d2e;
+}
+
+.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__name {
+  width: calc(100% + 0.8rem);
+  max-width: none;
+  margin-left: -0.4rem;
+  margin-right: -0.4rem;
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+  box-sizing: border-box;
+}
+
+.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__art .artifact-card-img--fullbleed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  object-position: center center;
+}
+
 .artifact-pick-card__name {
   font-size: 0.68rem;
   font-weight: 700;
@@ -5439,6 +5456,39 @@ body.enemy-inspect--dragging-body {
 .artifact-codex-card__art .artifact-card-svg {
   width: 56px;
   height: auto;
+}
+
+.artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__art {
+  display: block;
+  width: calc(100% + 0.6rem);
+  max-width: none;
+  margin-left: -0.3rem;
+  margin-right: -0.3rem;
+  min-height: 3.5rem;
+  background-color: #1a0d2e;
+}
+
+.artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__name {
+  width: calc(100% + 0.6rem);
+  max-width: none;
+  margin-left: -0.3rem;
+  margin-right: -0.3rem;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+  box-sizing: border-box;
+}
+
+.artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__art .artifact-card-img--fullbleed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  object-position: center center;
 }
 
 .artifact-codex-card__name {
@@ -10501,6 +10551,23 @@ select.forge-biome-sel option:disabled {
   width: 36px;
   max-width: 90%;
   height: auto;
+}
+
+.artifact-pick-owned-card:has(.artifact-card-img--fullbleed) .artifact-pick-owned-card__art {
+  padding: 0;
+  background-color: #1a0d2e;
+}
+
+.artifact-pick-owned-card:has(.artifact-card-img--fullbleed) .artifact-pick-owned-card__art .artifact-card-img--fullbleed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 100%;
+  min-height: 100%;
+  max-width: none;
+  object-fit: cover;
+  object-position: center center;
 }
 
 .artifact-pick-owned-card__badge {
