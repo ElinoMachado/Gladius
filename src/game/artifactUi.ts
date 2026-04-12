@@ -490,7 +490,7 @@ export function artifactCardFigureSvg(artifactId: string): string {
 
 export function artifactCardInnerHtml(artifactId: string): string {
   if (artifactId === "maos_venenosas") {
-    return `<img class="artifact-card-img artifact-card-img--fullbleed" src="/icons/maos_venenosas.png" alt="" decoding="async" />`;
+    return `<div class="artifact-card-bg artifact-card-bg--fullbleed artifact-card-bg--maos_venenosas" aria-hidden="true"></div>`;
   }
   const inner = artifactCardFigureSvg(artifactId);
   return `<svg class="artifact-card-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner}</svg>`;

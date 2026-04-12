@@ -2669,17 +2669,34 @@ h1 {
   display: block;
 }
 
-.artifact-card-img {
-  display: block;
+/**
+ * Fundo raster nos cartões (equivale a background da div de arte).
+ * `artifact-card-bg--<id>` define background-image por artefato.
+ */
+.artifact-card-bg--fullbleed {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  pointer-events: none;
+  border-radius: inherit;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center center;
 }
 
-.artifact-card-img--fullbleed {
-  object-fit: cover;
-  object-position: center;
+.artifact-card-bg--maos_venenosas {
+  background-color: #1a0d2e;
+  background-image: url("/icons/maos_venenosas.png");
 }
 
-/* Mãos venenosas (e futuros rasters fullbleed): <img> cobre a área da arte; nome/contador sobrepostos */
-.artifact-pick-card:has(.artifact-card-img--fullbleed) {
+/* Mãos venenosas (e futuros rasters fullbleed): nome/contador sobre o fundo */
+.artifact-pick-card:has(.artifact-card-bg--fullbleed) {
   display: grid;
   grid-template-columns: 1fr;
   grid-template-rows: auto minmax(6rem, 1fr) auto;
@@ -2687,11 +2704,11 @@ h1 {
   overflow: hidden;
 }
 
-.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__rarity {
+.artifact-pick-card:has(.artifact-card-bg--fullbleed) .artifact-pick-card__rarity {
   grid-row: 1;
 }
 
-.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__art {
+.artifact-pick-card:has(.artifact-card-bg--fullbleed) .artifact-pick-card__art {
   grid-row: 2;
   grid-column: 1;
   position: relative;
@@ -2704,7 +2721,7 @@ h1 {
   border-radius: 6px;
 }
 
-.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__name {
+.artifact-pick-card:has(.artifact-card-bg--fullbleed) .artifact-pick-card__name {
   grid-row: 2;
   grid-column: 1;
   z-index: 1;
@@ -2717,15 +2734,15 @@ h1 {
     0 0 12px rgba(0, 0, 0, 0.75);
 }
 
-.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__badge {
+.artifact-pick-card:has(.artifact-card-bg--fullbleed) .artifact-pick-card__badge {
   grid-row: 3;
 }
 
-.artifact-pick-owned-card:has(.artifact-card-img--fullbleed) {
+.artifact-pick-owned-card:has(.artifact-card-bg--fullbleed) {
   overflow: hidden;
 }
 
-.artifact-pick-owned-card:has(.artifact-card-img--fullbleed) .artifact-pick-owned-card__art {
+.artifact-pick-owned-card:has(.artifact-card-bg--fullbleed) .artifact-pick-owned-card__art {
   position: absolute;
   inset: 0;
   padding: 0;
@@ -2733,32 +2750,18 @@ h1 {
   justify-content: stretch;
 }
 
-.artifact-mini-card:has(.artifact-card-img--fullbleed) {
+.artifact-mini-card:has(.artifact-card-bg--fullbleed) {
   overflow: hidden;
-  background-color: #1a0d2e;
 }
 
-.artifact-mini-card:has(.artifact-card-img--fullbleed) .artifact-card-img--fullbleed {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  min-width: 100%;
-  min-height: 100%;
-  max-height: none;
-  object-fit: cover;
-  object-position: center center;
-  filter: none;
-}
-
-.artifact-codex-card:has(.artifact-card-img--fullbleed) {
+.artifact-codex-card:has(.artifact-card-bg--fullbleed) {
   display: grid;
   grid-template-columns: 1fr;
   grid-template-rows: minmax(3.35rem, auto) auto;
   gap: 0.12rem;
 }
 
-.artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__art {
+.artifact-codex-card:has(.artifact-card-bg--fullbleed) .artifact-codex-card__art {
   grid-row: 1;
   grid-column: 1;
   position: relative;
@@ -2770,7 +2773,7 @@ h1 {
   border-radius: 5px;
 }
 
-.artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__name {
+.artifact-codex-card:has(.artifact-card-bg--fullbleed) .artifact-codex-card__name {
   grid-row: 1;
   grid-column: 1;
   z-index: 1;
@@ -2781,7 +2784,7 @@ h1 {
     0 0 10px rgba(0, 0, 0, 0.7);
 }
 
-.artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__cnt {
+.artifact-codex-card:has(.artifact-card-bg--fullbleed) .artifact-codex-card__cnt {
   grid-row: 2;
   margin-top: 0;
 }
@@ -3150,12 +3153,6 @@ h1 {
 
   .combat-above-bar-left .artifact-mini-card .artifact-card-svg {
     max-height: 68%;
-  }
-
-  .combat-above-bar-left
-    .artifact-mini-card:has(.artifact-card-img--fullbleed)
-    .artifact-card-img--fullbleed {
-    max-height: none;
   }
 }
 
@@ -5000,8 +4997,8 @@ body.enemy-inspect--dragging-body {
   height: auto;
 }
 
-/* Raster fullbleed: reforço após as regras base de __art — cobre até à borda dourada e preenche o retângulo */
-.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__art {
+/* Raster fullbleed: reforço após as regras base de __art — sangra até à borda dourada */
+.artifact-pick-card:has(.artifact-card-bg--fullbleed) .artifact-pick-card__art {
   display: block;
   width: calc(100% + 0.8rem);
   max-width: none;
@@ -5009,10 +5006,9 @@ body.enemy-inspect--dragging-body {
   margin-right: -0.4rem;
   align-self: stretch;
   min-height: 6rem;
-  background-color: #1a0d2e;
 }
 
-.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__name {
+.artifact-pick-card:has(.artifact-card-bg--fullbleed) .artifact-pick-card__name {
   width: calc(100% + 0.8rem);
   max-width: none;
   margin-left: -0.4rem;
@@ -5020,19 +5016,6 @@ body.enemy-inspect--dragging-body {
   padding-left: 0.45rem;
   padding-right: 0.45rem;
   box-sizing: border-box;
-}
-
-.artifact-pick-card:has(.artifact-card-img--fullbleed) .artifact-pick-card__art .artifact-card-img--fullbleed {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  min-width: 100%;
-  min-height: 100%;
-  max-width: none;
-  max-height: none;
-  object-fit: cover;
-  object-position: center center;
 }
 
 .artifact-pick-card__name {
@@ -5458,17 +5441,16 @@ body.enemy-inspect--dragging-body {
   height: auto;
 }
 
-.artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__art {
+.artifact-codex-card:has(.artifact-card-bg--fullbleed) .artifact-codex-card__art {
   display: block;
   width: calc(100% + 0.6rem);
   max-width: none;
   margin-left: -0.3rem;
   margin-right: -0.3rem;
   min-height: 3.5rem;
-  background-color: #1a0d2e;
 }
 
-.artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__name {
+.artifact-codex-card:has(.artifact-card-bg--fullbleed) .artifact-codex-card__name {
   width: calc(100% + 0.6rem);
   max-width: none;
   margin-left: -0.3rem;
@@ -5476,19 +5458,6 @@ body.enemy-inspect--dragging-body {
   padding-left: 0.35rem;
   padding-right: 0.35rem;
   box-sizing: border-box;
-}
-
-.artifact-codex-card:has(.artifact-card-img--fullbleed) .artifact-codex-card__art .artifact-card-img--fullbleed {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  min-width: 100%;
-  min-height: 100%;
-  max-width: none;
-  max-height: none;
-  object-fit: cover;
-  object-position: center center;
 }
 
 .artifact-codex-card__name {
@@ -10553,21 +10522,8 @@ select.forge-biome-sel option:disabled {
   height: auto;
 }
 
-.artifact-pick-owned-card:has(.artifact-card-img--fullbleed) .artifact-pick-owned-card__art {
+.artifact-pick-owned-card:has(.artifact-card-bg--fullbleed) .artifact-pick-owned-card__art {
   padding: 0;
-  background-color: #1a0d2e;
-}
-
-.artifact-pick-owned-card:has(.artifact-card-img--fullbleed) .artifact-pick-owned-card__art .artifact-card-img--fullbleed {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  min-width: 100%;
-  min-height: 100%;
-  max-width: none;
-  object-fit: cover;
-  object-position: center center;
 }
 
 .artifact-pick-owned-card__badge {
