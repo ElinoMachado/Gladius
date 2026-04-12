@@ -2630,7 +2630,6 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
   background: linear-gradient(155deg, #3a3545 0%, #1e1c26 55%, #15131a 100%);
   border: 1px solid rgba(201, 168, 90, 0.45);
   box-shadow:
@@ -2651,13 +2650,6 @@ h1 {
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
 
-.artifact-mini-card .artifact-card-img {
-  width: 104px;
-  height: 104px;
-  object-fit: contain;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
-}
-
 .artifact-mini-card__cnt {
   position: absolute;
   right: 3px;
@@ -2673,17 +2665,8 @@ h1 {
   border: 1px solid rgba(180, 160, 110, 0.35);
 }
 
-.artifact-card-svg,
-.artifact-card-img {
+.artifact-card-svg {
   display: block;
-}
-
-.artifact-card-img {
-  width: 104px;
-  height: 104px;
-  object-fit: contain;
-  flex-shrink: 0;
-  box-sizing: border-box;
 }
 
 .artifact-tt {
@@ -4894,11 +4877,6 @@ body.enemy-inspect--dragging-body {
   height: auto;
 }
 
-.artifact-pick-card__art .artifact-card-img {
-  width: 104px;
-  height: 104px;
-}
-
 .artifact-pick-card__name {
   font-size: 0.68rem;
   font-weight: 700;
@@ -5320,62 +5298,6 @@ body.enemy-inspect--dragging-body {
 .artifact-codex-card__art .artifact-card-svg {
   width: 56px;
   height: auto;
-}
-
-.artifact-codex-card__art .artifact-card-img {
-  width: 104px;
-  height: 104px;
-}
-
-/* Raster no codex (Mãos venenosas, Golpe Relâmpago, …): imagem a preencher todo o cartão */
-.artifact-codex-card:has(.artifact-codex-card__art .artifact-card-img) {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  min-height: 7.5rem;
-  padding: 0;
-  overflow: hidden;
-}
-
-.artifact-codex-card:has(.artifact-codex-card__art .artifact-card-img) .artifact-codex-card__art {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  display: block;
-  min-height: 0;
-}
-
-.artifact-codex-card:has(.artifact-codex-card__art .artifact-card-img)
-  .artifact-codex-card__art
-  .artifact-card-img {
-  width: 100% !important;
-  height: 100% !important;
-  max-width: none !important;
-  object-fit: cover;
-}
-
-.artifact-codex-card:has(.artifact-codex-card__art .artifact-card-img) .artifact-codex-card__name {
-  position: relative;
-  z-index: 1;
-  padding: 1.75rem 0.35rem 0.1rem;
-  text-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.95),
-    0 0 10px rgba(0, 0, 0, 0.65);
-  background: linear-gradient(
-    to top,
-    rgba(8, 6, 12, 0.92) 0%,
-    rgba(8, 6, 12, 0.38) 52%,
-    transparent 100%
-  );
-}
-
-.artifact-codex-card:has(.artifact-codex-card__art .artifact-card-img) .artifact-codex-card__cnt {
-  position: relative;
-  z-index: 1;
-  margin-top: 0;
-  padding: 0 0.35rem 0.38rem;
-  background: rgba(8, 6, 12, 0.9);
 }
 
 .artifact-codex-card__name {
@@ -10438,11 +10360,6 @@ select.forge-biome-sel option:disabled {
   width: 36px;
   max-width: 90%;
   height: auto;
-}
-
-.artifact-pick-owned-card__art .artifact-card-img {
-  width: 104px;
-  height: 104px;
 }
 
 .artifact-pick-owned-card__badge {
