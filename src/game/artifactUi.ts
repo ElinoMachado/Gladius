@@ -486,14 +486,21 @@ export function artifactCardFigureSvg(artifactId: string): string {
   );
 }
 
-const ARTIFACT_CARD_RASTER_SRC: Record<string, string> = {
-  maos_venenosas: "/icons/maos_venenosas.png",
-  motor_morte: "/icons/motor_morte.png",
-  guerra_total: "/icons/guerra_total.png",
+/** `public/icons/*` — usa BASE_URL para GitHub Pages (ex.: `/Repo/icons/...`). */
+const ARTIFACT_CARD_RASTER_FILE: Record<string, string> = {
+  maos_venenosas: "maos_venenosas.png",
+  motor_morte: "motor_morte.png",
+  guerra_total: "guerra_total.png",
 };
 
+function artifactRasterPublicUrl(artifactId: string): string | undefined {
+  const file = ARTIFACT_CARD_RASTER_FILE[artifactId];
+  if (!file) return undefined;
+  return `${import.meta.env.BASE_URL}icons/${file}`;
+}
+
 export function artifactCardInnerHtml(artifactId: string): string {
-  const raster = ARTIFACT_CARD_RASTER_SRC[artifactId];
+  const raster = artifactRasterPublicUrl(artifactId);
   if (raster) {
     return `<img class="artifact-card-img" src="${raster}" alt="" width="64" height="64" decoding="async" aria-hidden="true" />`;
   }
