@@ -2669,6 +2669,130 @@ h1 {
   display: block;
 }
 
+/* Mãos venenosas (e futuros rasters fullbleed): imagem cobre a área da arte; nome/contador sobrepostos */
+.artifact-pick-card:has(.artifact-card-svg--fullbleed) {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(5.25rem, 1fr) auto;
+  gap: 0.32rem;
+}
+
+.artifact-pick-card:has(.artifact-card-svg--fullbleed) .artifact-pick-card__rarity {
+  grid-row: 1;
+}
+
+.artifact-pick-card:has(.artifact-card-svg--fullbleed) .artifact-pick-card__art {
+  grid-row: 2;
+  grid-column: 1;
+  position: relative;
+  z-index: 0;
+  min-height: 5.25rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.artifact-pick-card:has(.artifact-card-svg--fullbleed) .artifact-pick-card__name {
+  grid-row: 2;
+  grid-column: 1;
+  z-index: 1;
+  align-self: end;
+  justify-self: stretch;
+  margin: 0 0.15rem 0.38rem;
+  padding: 0.1rem 0.15rem 0;
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.95),
+    0 0 12px rgba(0, 0, 0, 0.75);
+}
+
+.artifact-pick-card:has(.artifact-card-svg--fullbleed) .artifact-pick-card__badge {
+  grid-row: 3;
+}
+
+.artifact-pick-card:has(.artifact-card-svg--fullbleed) .artifact-pick-card__art .artifact-card-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
+.artifact-pick-owned-card:has(.artifact-card-svg--fullbleed) {
+  overflow: hidden;
+}
+
+.artifact-pick-owned-card:has(.artifact-card-svg--fullbleed) .artifact-pick-owned-card__art {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.artifact-pick-owned-card:has(.artifact-card-svg--fullbleed) .artifact-pick-owned-card__art .artifact-card-svg {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
+.artifact-mini-card:has(.artifact-card-svg--fullbleed) {
+  overflow: hidden;
+}
+
+.artifact-mini-card:has(.artifact-card-svg--fullbleed) .artifact-card-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  filter: none;
+}
+
+.artifact-codex-card:has(.artifact-card-svg--fullbleed) {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: minmax(3.35rem, auto) auto;
+  gap: 0.12rem;
+}
+
+.artifact-codex-card:has(.artifact-card-svg--fullbleed) .artifact-codex-card__art {
+  grid-row: 1;
+  grid-column: 1;
+  position: relative;
+  z-index: 0;
+  min-height: 3.35rem;
+  padding: 0;
+  margin: 0 -0.05rem;
+  overflow: hidden;
+  border-radius: 5px;
+}
+
+.artifact-codex-card:has(.artifact-card-svg--fullbleed) .artifact-codex-card__name {
+  grid-row: 1;
+  grid-column: 1;
+  z-index: 1;
+  align-self: end;
+  margin: 0 0.1rem 0.2rem;
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.95),
+    0 0 10px rgba(0, 0, 0, 0.7);
+}
+
+.artifact-codex-card:has(.artifact-card-svg--fullbleed) .artifact-codex-card__cnt {
+  grid-row: 2;
+  margin-top: 0;
+}
+
+.artifact-codex-card:has(.artifact-card-svg--fullbleed) .artifact-codex-card__art .artifact-card-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
 .artifact-tt {
   padding: 0.55rem 0.65rem 0.58rem;
   border-radius: 6px;
@@ -2992,23 +3116,31 @@ h1 {
   gap: 0.45rem;
 }
 
-.combat-skip-enemy-label {
+.combat-skip-toggles {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.78rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.28rem;
+  font-size: 0.72rem;
   color: #c8c2b8;
-  cursor: pointer;
-  user-select: none;
   pointer-events: auto;
 }
 
-.combat-skip-enemy-label input {
+.combat-skip-toggle-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.combat-skip-toggle-label input {
   width: 0.95rem;
   height: 0.95rem;
   accent-color: #c9a24a;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .combat-above-rarity {
@@ -3025,6 +3157,12 @@ h1 {
 
   .combat-above-bar-left .artifact-mini-card .artifact-card-svg {
     max-height: 68%;
+  }
+
+  .combat-above-bar-left
+    .artifact-mini-card:has(.artifact-card-svg--fullbleed)
+    .artifact-card-svg {
+    max-height: none;
   }
 }
 
@@ -4530,6 +4668,8 @@ body.enemy-inspect--dragging-body {
 }
 
 .lol-skill-btn--square .lol-skill-ico {
+  position: relative;
+  z-index: 1;
   width: 54px;
   height: 54px;
 }
@@ -4572,6 +4712,23 @@ body.enemy-inspect--dragging-body {
     0 0 2px #000,
     0 1px 3px rgba(0, 0, 0, 0.95);
   pointer-events: none;
+}
+
+/* Recarga de skill (prateado): mesmo raciocínio que a ultimate, cor distinta. */
+.lol-skill-btn--square .lol-skill-cd-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--skill-cd-pct, 0) * 1%);
+  max-height: 100%;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(220, 230, 240, 0.42),
+    rgba(140, 155, 175, 0.22)
+  );
+  z-index: 0;
 }
 
 /* Opcional: contagem no ícone (combate: ataques vão para `.combat-corner-triangle--attacks`). */
