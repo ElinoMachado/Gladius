@@ -2652,8 +2652,8 @@ h1 {
 }
 
 .artifact-mini-card .artifact-card-img {
-  width: 56px;
-  height: 56px;
+  width: 104px;
+  height: 104px;
   object-fit: contain;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
@@ -2679,8 +2679,8 @@ h1 {
 }
 
 .artifact-card-img {
-  width: 56px;
-  height: 56px;
+  width: 104px;
+  height: 104px;
   object-fit: contain;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -4895,8 +4895,8 @@ body.enemy-inspect--dragging-body {
 }
 
 .artifact-pick-card__art .artifact-card-img {
-  width: 56px;
-  height: 56px;
+  width: 104px;
+  height: 104px;
 }
 
 .artifact-pick-card__name {
@@ -5323,8 +5323,8 @@ body.enemy-inspect--dragging-body {
 }
 
 .artifact-codex-card__art .artifact-card-img {
-  width: 56px;
-  height: 56px;
+  width: 104px;
+  height: 104px;
 }
 
 .artifact-codex-card__name {
@@ -10390,8 +10390,8 @@ select.forge-biome-sel option:disabled {
 }
 
 .artifact-pick-owned-card__art .artifact-card-img {
-  width: 56px;
-  height: 56px;
+  width: 104px;
+  height: 104px;
 }
 
 .artifact-pick-owned-card__badge {
