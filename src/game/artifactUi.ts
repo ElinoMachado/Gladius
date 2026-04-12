@@ -495,7 +495,7 @@ const ARTIFACT_CARD_RASTER_SRC: Record<string, string> = {
 export function artifactCardInnerHtml(artifactId: string): string {
   const raster = ARTIFACT_CARD_RASTER_SRC[artifactId];
   if (raster) {
-    return `<img class="artifact-card-img" src="${raster}" alt="" width="104" height="104" decoding="async" aria-hidden="true" />`;
+    return `<img class="artifact-card-img" src="${raster}" alt="" width="64" height="64" decoding="async" aria-hidden="true" />`;
   }
   const inner = artifactCardFigureSvg(artifactId);
   return `<svg class="artifact-card-svg" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${inner}</svg>`;
