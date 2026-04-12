@@ -5327,8 +5327,8 @@ body.enemy-inspect--dragging-body {
   height: 104px;
 }
 
-/* Comum + raster (Mãos venenosas): imagem a preencher todo o cartão no codex */
-.artifact-codex-card.artifact-rarity--common:has(.artifact-codex-card__art .artifact-card-img) {
+/* Raster no codex (Mãos venenosas, Golpe Relâmpago, …): imagem a preencher todo o cartão */
+.artifact-codex-card:has(.artifact-codex-card__art .artifact-card-img) {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -5338,8 +5338,7 @@ body.enemy-inspect--dragging-body {
   overflow: hidden;
 }
 
-.artifact-codex-card.artifact-rarity--common:has(.artifact-codex-card__art .artifact-card-img)
-  .artifact-codex-card__art {
+.artifact-codex-card:has(.artifact-codex-card__art .artifact-card-img) .artifact-codex-card__art {
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -5347,7 +5346,7 @@ body.enemy-inspect--dragging-body {
   min-height: 0;
 }
 
-.artifact-codex-card.artifact-rarity--common:has(.artifact-codex-card__art .artifact-card-img)
+.artifact-codex-card:has(.artifact-codex-card__art .artifact-card-img)
   .artifact-codex-card__art
   .artifact-card-img {
   width: 100% !important;
@@ -5356,8 +5355,7 @@ body.enemy-inspect--dragging-body {
   object-fit: cover;
 }
 
-.artifact-codex-card.artifact-rarity--common:has(.artifact-codex-card__art .artifact-card-img)
-  .artifact-codex-card__name {
+.artifact-codex-card:has(.artifact-codex-card__art .artifact-card-img) .artifact-codex-card__name {
   position: relative;
   z-index: 1;
   padding: 1.75rem 0.35rem 0.1rem;
@@ -5372,8 +5370,7 @@ body.enemy-inspect--dragging-body {
   );
 }
 
-.artifact-codex-card.artifact-rarity--common:has(.artifact-codex-card__art .artifact-card-img)
-  .artifact-codex-card__cnt {
+.artifact-codex-card:has(.artifact-codex-card__art .artifact-card-img) .artifact-codex-card__cnt {
   position: relative;
   z-index: 1;
   margin-top: 0;
