@@ -945,15 +945,8 @@ export class GameRenderer {
   }
 
   isUnitMoveAnimating(unitId?: string): boolean {
-    if (unitId === undefined) {
-      return (
-        this.unitMoveAnims.size > 0 || this.flamingSwordMoveAnims.size > 0
-      );
-    }
-    return (
-      this.unitMoveAnims.has(unitId) ||
-      this.flamingSwordMoveAnims.has(unitId)
-    );
+    if (unitId === undefined) return this.unitMoveAnims.size > 0;
+    return this.unitMoveAnims.has(unitId);
   }
 
   /** Flash no corpo da unidade (atingida, sangue no duelo, aura de cura). */
