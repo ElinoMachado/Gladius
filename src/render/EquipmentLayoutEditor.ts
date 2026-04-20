@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import type { HeroClassId } from "../game/types";
-import { cloneHeroBodyFromGlb } from "./heroGlbLoader";
+import {
+  cloneHeroBodyFromGlb,
+  disposeHeroGlbCloneSubtree,
+} from "./heroGlbLoader";
 import {
   buildHeroEquipmentEditorRoot,
   computeAutoForgeAttachForGlbBody,
@@ -34,17 +37,6 @@ function captureForgeGroups(root: THREE.Group): Record<
     }
   }
   return out;
-}
-
-function disposeObject3D(o: THREE.Object3D): void {
-  o.traverse((obj) => {
-    if (obj instanceof THREE.Mesh) {
-      obj.geometry?.dispose();
-      const m = obj.material;
-      if (Array.isArray(m)) m.forEach((x) => x.dispose());
-      else m?.dispose();
-    }
-  });
 }
 
 function slotKey(slot: ForgeEditSlot): keyof HeroForgeAttachConfig {
@@ -145,7 +137,10 @@ export class EquipmentLayoutEditor {
     }
     tmp.add(glb);
     tmp.updateMatrixWorld(true);
-    return computeAutoForgeAttachForGlbBody(heroClass, tmp, glb);
+    const out = computeAutoForgeAttachForGlbBody(heroClass, tmp, glb);
+    disposeHeroGlbCloneSubtree(tmp);
+    tmp.clear();
+    return out;
   }
 
   getHeroClass(): HeroClassId {
@@ -222,7 +217,7 @@ export class EquipmentLayoutEditor {
   private rebuildHero(): void {
     if (this.heroRoot) {
       this.scene.remove(this.heroRoot);
-      disposeObject3D(this.heroRoot);
+      disposeHeroGlbCloneSubtree(this.heroRoot);
       this.heroRoot = null;
     }
     const glb = cloneHeroBodyFromGlb(this.heroClass, this.displayColor);
@@ -567,7 +562,7 @@ export class EquipmentLayoutEditor {
     window.removeEventListener("keydown", this.boundKey);
     if (this.heroRoot) {
       this.scene.remove(this.heroRoot);
-      disposeObject3D(this.heroRoot);
+      disposeHeroGlbCloneSubtree(this.heroRoot);
     }
     this.renderer.dispose();
   }

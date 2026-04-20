@@ -106,6 +106,35 @@ export function getHeroGlbAnimationClips(heroClass: HeroClassId): THREE.Animatio
 }
 
 /**
+ * Clones GLB partilham `Texture` com `templates[]` (como nos bunkers).
+ * `material.dispose()` nesses meshes liberta texturas ainda usadas no cache → corrupção / context lost.
+ */
+export const HERO_GLB_SHARED_TEXTURES_USERDATA = "heroGlbSharedTextures" as const;
+
+function markHeroGlbCloneMeshes(root: THREE.Object3D): void {
+  root.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) {
+      obj.userData[HERO_GLB_SHARED_TEXTURES_USERDATA] = true;
+    }
+  });
+}
+
+/**
+ * Liberta geometrias de um ramo vindo de `cloneHeroBodyFromGlb`; **não** dá `material.dispose()`
+ * em meshes marcados (texturas partilhadas com o cache). Forge / forma / procedural: dispose completo.
+ */
+export function disposeHeroGlbCloneSubtree(root: THREE.Object3D): void {
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    obj.geometry?.dispose();
+    if (obj.userData[HERO_GLB_SHARED_TEXTURES_USERDATA] === true) return;
+    const m = obj.material;
+    if (Array.isArray(m)) m.forEach((x) => x.dispose());
+    else (m as THREE.Material | undefined)?.dispose();
+  });
+}
+
+/**
  * Instância para combate / preview: clone de hierarquia com skeleton mantém rigs e animações.
  */
 export function cloneHeroBodyFromGlb(
@@ -116,6 +145,7 @@ export function cloneHeroBodyFromGlb(
   if (!t) return null;
   const body = cloneSkinnedHierarchy(t.root) as THREE.Group;
   tintHeroMeshes(body, displayColor);
+  markHeroGlbCloneMeshes(body);
   return body;
 }
 

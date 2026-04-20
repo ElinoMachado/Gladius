@@ -35,6 +35,7 @@ import {
   stopHeroUnitClips,
   updateHeroUnitAnimations,
 } from "./heroUnitAnimations";
+import { disposeHeroGlbCloneSubtree } from "./heroGlbLoader";
 import { heroHitReactClipName, heroRunClipName } from "../game/heroCombatAnimMs";
 import {
   createBunkerVisualGroup,
@@ -458,6 +459,22 @@ export class GameRenderer {
 
     window.addEventListener("resize", () => this.resize(canvas));
     this.resize(canvas);
+    canvas.addEventListener(
+      "webglcontextlost",
+      (e) => {
+        if (import.meta.env.DEV) {
+          console.warn("[WebGL] context lost", e);
+        }
+      },
+      false,
+    );
+    canvas.addEventListener(
+      "webglcontextrestored",
+      () => {
+        this.resize(canvas);
+      },
+      false,
+    );
     this.attachCameraControls(canvas);
     this.attachArenaLayoutControls(canvas);
   }
@@ -2728,7 +2745,7 @@ export class GameRenderer {
           if (ch.userData?.role === "shieldBubble") continue;
           if (ch.userData?.role === "bunkerPickProxy") continue;
           if (ch.userData?.role === "flyingWings") continue;
-          this.disposeObject3D(ch);
+          disposeHeroGlbCloneSubtree(ch);
           g.remove(ch);
         }
         const body =

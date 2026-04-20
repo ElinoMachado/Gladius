@@ -4,18 +4,8 @@ import {
   applyHeroSelectionPreviewAnimations,
   updateHeroUnitAnimations,
 } from "./heroUnitAnimations";
+import { disposeHeroGlbCloneSubtree } from "./heroGlbLoader";
 import { buildHeroBody, type HeroFormaVisualOpts } from "./unitModels";
-
-function disposeObject3D(o: THREE.Object3D): void {
-  o.traverse((obj) => {
-    if (obj instanceof THREE.Mesh) {
-      obj.geometry.dispose();
-      const m = obj.material;
-      if (Array.isArray(m)) m.forEach((x) => x.dispose());
-      else m.dispose();
-    }
-  });
-}
 
 export type HeroPreview3DOptions = {
   /** Maior = modelo mais afastado (menos cortado nas bordas do quadro). */
@@ -116,7 +106,7 @@ export class HeroPreview3D {
     forgeLoadout?: ForgeHeroLoadout,
     forma?: HeroFormaVisualOpts,
   ): void {
-    disposeObject3D(this.pivot);
+    disposeHeroGlbCloneSubtree(this.pivot);
     this.pivot.clear();
     this.previewBody = null;
     const body = buildHeroBody(heroClass, displayColor, forgeLoadout, forma);
@@ -185,7 +175,7 @@ export class HeroPreview3D {
     window.removeEventListener("resize", this.onWindowResize);
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
-    disposeObject3D(this.pivot);
+    disposeHeroGlbCloneSubtree(this.pivot);
     this.pivot.clear();
     this.renderer.dispose();
     this.renderer.domElement.parentNode?.removeChild(this.renderer.domElement);
