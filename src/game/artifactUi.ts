@@ -491,6 +491,9 @@ const ARTIFACT_CARD_RASTER_FILE: Record<string, string> = {
   maos_venenosas: "maos_venenosas.png",
   motor_morte: "motor_morte.png",
   guerra_total: "guerra_total.png",
+  coroa_ferro: "coroa_ferro.png",
+  alento_morte: "alento_morte.png",
+  duro_pedra: "duro_pedra.png",
 };
 
 function artifactRasterPublicUrl(artifactId: string): string | undefined {
