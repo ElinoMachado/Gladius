@@ -95,6 +95,7 @@ import { initSfxVolumeControl } from "./ui/sfxVolumeControl";
 import { mountCrystalSelect } from "./ui/crystalSelect";
 import { biomeCrestWrap } from "./ui/biomeCrests";
 import { axialKey, hexDistance } from "./game/hex";
+import { effectiveCampaignUnlocks } from "./game/campaignUnlocks";
 import {
   permXpPercentPoints,
   nextMetaCost,
@@ -664,6 +665,10 @@ function selectedHeroes(): HeroClassId[] {
   return setup.slots.filter((x): x is HeroClassId => x != null);
 }
 
+function effectiveMaxHeroSlots(): 1 | 2 | 3 {
+  return effectiveCampaignUnlocks(model.meta, model.devSandboxMode).heroSlots;
+}
+
 /** Slots 0–2 ocupados, na mesma ordem que `selectedHeroes()` (forja / cores por slot). */
 function partySlotByHeroFromSlots(): (0 | 1 | 2)[] {
   const out: (0 | 1 | 2)[] = [];
@@ -820,9 +825,10 @@ function syncHeroSetupUiAfterSlotChange(slotIndex: 0 | 1 | 2): void {
   const dw = document.getElementById("hero-setup-difficulty-wrap");
   if (dw) dw.innerHTML = heroSetupDifficultyBannerHtml(selectedHeroes().length);
 
+  const maxH = effectiveMaxHeroSlots();
   const title = document.getElementById("hero-setup-main-title");
   if (title)
-    title.textContent = `Escolha até 3 heróis (${selectedHeroes().length}/3)`;
+    title.textContent = `Escolha até ${maxH} herói(s) (${selectedHeroes().length}/${maxH})`;
 
   const btn = document.getElementById(
     "hero-setup-btn-next",
@@ -2499,6 +2505,23 @@ function showForge(): void {
   hideGameTooltip();
   removeEquipmentModal();
   disposeMenu3dPreviews();
+  const cuForge = effectiveCampaignUnlocks(model.meta, model.devSandboxMode);
+  if (!cuForge.forge) {
+    uiRoot.innerHTML = "";
+    const shell = el(
+      `<div class="screen screen-forge screen--crystal-veil screen-forge--locked"></div>`,
+    );
+    shell.innerHTML = `
+      <h1 class="hero-setup-main-title">Forja</h1>
+      <p class="screen-forge__hint screen-forge__hint--locked">Ainda não desbloqueaste a forja. <strong>Vence o 1.º coliseu</strong> na campanha (avança até ao <strong>2.º coliseu</strong>).</p>
+      <button type="button" class="btn" id="forge-back-locked">Voltar ao menu</button>`;
+    uiRoot.appendChild(shell);
+    shell.querySelector("#forge-back-locked")!.addEventListener("click", () => {
+      model.phase = "main_menu";
+      render();
+    });
+    return;
+  }
   forgeUiBiomePicksByHero[0] = {};
   forgeUiBiomePicksByHero[1] = {};
   forgeUiBiomePicksByHero[2] = {};
@@ -2900,6 +2923,9 @@ function showMainMenu(): void {
           <button type="button" class="main-menu-link main-menu-link--dev" data-action="arena-layout" title="Cena inicial completa; câmara live (Espaço = voo). Esc grava. Copiar JSON para o repo.">[Dev] Ajustar cena</button>
           <button type="button" class="main-menu-link main-menu-link--dev" data-action="equipment-layout" title="Elmo, capa e manoplas por herói; gravado em localStorage.">[Dev] Ajustar equipamento</button>`
     : "";
+  const cu = effectiveCampaignUnlocks(model.meta, model.devSandboxMode);
+  const crystalLocked = !cu.crystalShop;
+  const forgeLocked = !cu.forge;
   const s = el(`
     <div class="main-menu-screen">
       <div class="main-menu-version" aria-hidden="true">${APP_VERSION_LABEL}</div>
@@ -2921,8 +2947,20 @@ function showMainMenu(): void {
         <nav class="main-menu-nav" aria-label="Menu principal">
           <button type="button" class="main-menu-link main-menu-link--primary" data-action="new">Novo jogo</button>
           ${devMenuExtras}
-          <button type="button" class="main-menu-link" data-action="crystal">Loja de cristais</button>
-          <button type="button" class="main-menu-link" data-action="forge">Forja</button>
+          <button type="button" class="main-menu-link" data-action="crystal" ${
+            crystalLocked ? "disabled" : ""
+          } title="${
+            crystalLocked
+              ? "Desbloqueia na onda 5 do 1.º coliseu (campanha)."
+              : "Abrir loja de cristais"
+          }">Loja de cristais</button>
+          <button type="button" class="main-menu-link" data-action="forge" ${
+            forgeLocked ? "disabled" : ""
+          } title="${
+            forgeLocked
+              ? "Desbloqueia ao chegares ao 2.º coliseu na campanha."
+              : "Abrir forja"
+          }">Forja</button>
           <button type="button" class="main-menu-link" data-action="artifacts">Artefatos</button>
           <button type="button" class="main-menu-link" data-action="enemies">Compendium</button>
           <button type="button" class="main-menu-link" data-action="exit">Sair</button>
@@ -3215,18 +3253,36 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
     if (model.buyArtifactBanBonus()) render();
   });
 
+  const cuShop = effectiveCampaignUnlocks(model.meta, model.devSandboxMode);
+  if (!cuShop.weaponUpgrades) {
+    grid.appendChild(
+      el(
+        `<p class="crystal-shop-weapon-lock">Evolução das armas: desbloqueia ao <strong>vencer o 2.º coliseu</strong> na campanha (chegar ao 3.º coliseu).</p>`,
+      ),
+    );
+  }
   for (let slot = 0; slot < 3; slot++) {
     const wl = m.weaponLevelByHeroSlot[slot as 0 | 1 | 2];
     const cost = weaponUpgradeCrystalCost(wl);
-    const wCanBuy = cost != null && m.crystals >= cost;
-    const wBtnLabel = cost != null ? `${cost} 💎` : "—";
-    const wAria =
-      cost != null
+    const weaponLocked = !cuShop.weaponUpgrades;
+    const wCanBuy =
+      !weaponLocked && cost != null && m.crystals >= cost;
+    const wBtnLabel = weaponLocked
+      ? "Bloqueado"
+      : cost != null
+        ? `${cost} 💎`
+        : "—";
+    const wAria = weaponLocked
+      ? "Evolução de armas ainda bloqueada na campanha"
+      : cost != null
         ? `Melhorar arma do slot ${slot + 1} por ${cost} cristais`
         : "Arma no nível máximo neste slot";
-    const div = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Arma principal (Slot ${slot + 1}): nv <strong>${wl}</strong>/5${cost != null ? "" : " — <em>máximo</em>"}</span><button type="button" class="btn crystal-shop-buy-btn" data-weapon-slot="${slot}" ${!wCanBuy ? "disabled" : ""} aria-label="${escapeHtml(wAria)}">${wBtnLabel}</button></div>`);
+    const div = el(
+      `<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">Arma principal (Slot ${slot + 1}): nv <strong>${wl}</strong>/5${cost != null ? "" : " — <em>máximo</em>"}</span><button type="button" class="btn crystal-shop-buy-btn" data-weapon-slot="${slot}" ${!wCanBuy ? "disabled" : ""} aria-label="${escapeHtml(wAria)}">${wBtnLabel}</button></div>`,
+    );
     grid.appendChild(div);
     div.querySelector("button")!.addEventListener("click", () => {
+      if (weaponLocked) return;
       if (model.buyWeaponUpgrade(slot as 0 | 1 | 2)) render();
     });
   }
@@ -3250,6 +3306,29 @@ function showCrystalShop(): void {
   hideGameTooltip();
   removeEquipmentModal();
   disposeMenu3dPreviews();
+  const cu = effectiveCampaignUnlocks(model.meta, model.devSandboxMode);
+  if (!cu.crystalShop) {
+    crystalShop3d?.dispose();
+    crystalShop3d = null;
+    uiRoot.innerHTML = "";
+    const shell = el(`<div class="shop-screen crystal-shop-screen crystal-shop-screen--locked"></div>`);
+    shell.innerHTML = `
+    <div class="shop-screen__panel shop-screen__panel--crystal">
+      <div class="crystal-shop-panel-inner">
+        <h1 class="crystal-shop-heading">Loja de cristais</h1>
+        <p class="crystal-shop-locked-msg">Ainda não desbloqueaste esta loja. Alcança a <strong>onda 5</strong> no <strong>1.º coliseu</strong> numa campanha (ou a onda 5 da tua primeira fase se começares noutro coliseu).</p>
+        <button type="button" class="btn crystal-shop-back-btn" id="btn-crystal-locked-back">Voltar</button>
+      </div>
+    </div>`;
+    uiRoot.appendChild(shell);
+    shell
+      .querySelector("#btn-crystal-locked-back")!
+      .addEventListener("click", () => {
+        model.phase = "main_menu";
+        render();
+      });
+    return;
+  }
   const m = model.meta;
   if (refreshCrystalShopInPlace()) return;
 
@@ -3331,13 +3410,16 @@ function showHeroSetup(): void {
   removeEquipmentModal();
   disposeMenu3dPreviews();
   uiRoot.innerHTML = "";
+  const maxH = effectiveMaxHeroSlots();
+  if (maxH <= 2) setup.slots[2] = null;
+  if (maxH <= 1) setup.slots[1] = null;
   const heroes = selectedHeroes();
-  const max = 3;
+  const max = maxH;
   const s = el(`
     <div class="screen screen--new-run-setup screen--hero-setup">
       <div class="hero-setup-screen">
         <div id="hero-setup-difficulty-wrap">${heroSetupDifficultyBannerHtml(heroes.length)}</div>
-        <h1 id="hero-setup-main-title" class="hero-setup-main-title">Escolha até 3 heróis (${heroes.length}/${max})</h1>
+        <h1 id="hero-setup-main-title" class="hero-setup-main-title">Escolha até ${max} herói(s) (${heroes.length}/${max})</h1>
         <div class="hero-slots-grid" id="hero-slots"></div>
         <div class="hero-setup-actions new-run-setup-actions">
           <button type="button" class="btn" id="btn-back">Voltar</button>
@@ -3356,7 +3438,37 @@ function showHeroSetup(): void {
     ),
   ];
   for (let i = 0; i < 3; i++) {
+    const locked = i >= maxH;
     const wrap = el(`<div class="hero-slot" data-slot="${i}"></div>`);
+    if (locked) {
+      wrap.classList.add("hero-slot--locked");
+      const label = el(
+        `<label class="hero-slot-label">${heroSetupSlotLabels[i]}</label>`,
+      );
+      const sel = document.createElement("select");
+      sel.className = "hero-slot-select";
+      sel.disabled = true;
+      const op = document.createElement("option");
+      op.value = "";
+      op.textContent = "— Bloqueado —";
+      sel.appendChild(op);
+      const hint =
+        i === 1
+          ? "Desbloqueia na onda 5 do 2.º coliseu na campanha."
+          : "Desbloqueia na onda 5 do 3.º coliseu na campanha.";
+      const forgePanel = el(
+        `<div class="hero-slot-forge hero-slot-forge--locked" role="region" aria-label="Slot bloqueado"></div>`,
+      );
+      forgePanel.innerHTML = `<p class="hero-slot__locked-hint">${escapeHtml(hint)}</p>`;
+      const card = el(`<div class="hero-slot-card hero-slot-card--locked"></div>`);
+      card.innerHTML = `<div class="hero-slot-placeholder"><p class="hero-slot-placeholder__txt">${escapeHtml(hint)}</p></div>`;
+      wrap.appendChild(label);
+      wrap.appendChild(sel);
+      wrap.appendChild(forgePanel);
+      wrap.appendChild(card);
+      slotsRoot.appendChild(wrap);
+      continue;
+    }
     const label = el(
       `<label class="hero-slot-label">${heroSetupSlotLabels[i]}</label>`,
     );

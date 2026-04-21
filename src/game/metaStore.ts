@@ -1,3 +1,7 @@
+import {
+  defaultCampaignUnlocks,
+  normalizeCampaignUnlocksForLoad,
+} from "./campaignUnlocks";
 import type {
   ForgeEssenceId,
   ForgeGlobalProgress,
@@ -165,6 +169,7 @@ export const defaultMeta = (): MetaProgress => ({
   crystalExtraBasic: 0,
   crystalAlcance: 0,
   crystalSorte: 0,
+  campaignUnlocks: defaultCampaignUnlocks(),
 });
 
 function applyTestForgeEssences(
@@ -213,11 +218,17 @@ function clampCrystalShopPair(n: unknown, max: number): number {
 }
 
 function buildMetaFromMainBlob(raw: string): MetaProgress {
-  const o = JSON.parse(raw) as MetaProgress;
+  const o = JSON.parse(raw) as MetaProgress & Record<string, unknown>;
   const d = defaultMeta();
+  const legacyNoCampaign =
+    !Object.prototype.hasOwnProperty.call(o, "campaignUnlocks");
   return {
     ...d,
     ...o,
+    campaignUnlocks: normalizeCampaignUnlocksForLoad(
+      o.campaignUnlocks,
+      legacyNoCampaign,
+    ),
     permDamage: clampPermTrackLevel(o.permDamage),
     permHp: clampPermTrackLevel(o.permHp),
     permDef: clampPermTrackLevel(o.permDef),

@@ -281,6 +281,17 @@ export interface WaveConfig {
   isBoss: boolean;
 }
 
+/** Desbloqueios de campanha (fora do modo sandbox). Saves antigos sem este bloco migram para “tudo desbloqueado”. */
+export interface CampaignUnlocks {
+  crystalShop: boolean;
+  forge: boolean;
+  bunker: boolean;
+  /** Evolução das armas na loja de cristais (após vencer o 2.º coliseu). */
+  weaponUpgrades: boolean;
+  /** Slots de party no arranque (1–3). */
+  heroSlots: 1 | 2 | 3;
+}
+
 export interface MetaProgress {
   crystals: number;
   /** 0–10 por trilho: +20% por nível em stats que usam `permPercent` (dano, vida, defesa, ouro). Cura/escudo usa soma direta (+10/nível). XP: ver `META_PERM_XP_PERCENT_PER_LEVEL`. */
@@ -314,6 +325,7 @@ export interface MetaProgress {
   crystalAlcance: number;
   /** 0–12: compras de +5 sorte (loja de cristais; 2 💎 cada). */
   crystalSorte: number;
+  campaignUnlocks: CampaignUnlocks;
 }
 
 /** Nível máximo por trilho de meta na loja de cristais (dano, vida, etc.). */

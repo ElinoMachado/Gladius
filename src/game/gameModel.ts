@@ -128,6 +128,10 @@ import {
 import { COMBAT_BIOMES, BIOME_LABELS } from "./data/biomes";
 import { goldDrainPerTurn } from "./data/shops";
 import {
+  mergeCampaignUnlocksFromRunWave,
+  normalizeCampaignUnlocksForLoad,
+} from "./campaignUnlocks";
+import {
   loadMeta,
   permPercent,
   permXpPercentPoints,
@@ -1351,6 +1355,10 @@ export class GameModel {
       if (!runPhaseAllowsRunSessionPersistence(o.phase)) return false;
 
       this.meta = o.meta;
+      this.meta.campaignUnlocks = normalizeCampaignUnlocksForLoad(
+        this.meta.campaignUnlocks,
+        !Object.prototype.hasOwnProperty.call(this.meta, "campaignUnlocks"),
+      );
       this.units = o.units;
       migrateAlcanceMisticoToAuraTita(this.units);
       migrateTonicoToImagemResidual(this.units);
@@ -2003,6 +2011,14 @@ export class GameModel {
     this.waveXpGained = 0;
     this.waveEssencesGained = {};
     this.wave = n;
+    if (!this.devSandboxMode) {
+      mergeCampaignUnlocksFromRunWave(
+        n,
+        this.coliseumTier,
+        this.meta.campaignUnlocks,
+      );
+      this.saveMeta();
+    }
     this.inEnemyPhase = false;
     this.inSummonPhase = false;
     this.currentSummonOwnerId = null;
@@ -2188,8 +2204,16 @@ export class GameModel {
     return true;
   }
 
+  private bunkersFeatureUnlocked(): boolean {
+    return this.devSandboxMode || this.meta.campaignUnlocks.bunker;
+  }
+
   /** Um bunker por bioma de combate, no anel ~8 hex do centro (castelo). */
   private ensureBunkersPlaced(): void {
+    if (!this.bunkersFeatureUnlocked()) {
+      this.bunkers = {};
+      return;
+    }
     this.ensureAllBunkerFields();
     const used = new Set<string>();
     for (const b of this.allBunkerStates()) {
@@ -8196,6 +8220,9 @@ export class GameModel {
   }
 
   buyWeaponUpgrade(slot: 0 | 1 | 2): boolean {
+    if (!this.devSandboxMode && !this.meta.campaignUnlocks.weaponUpgrades) {
+      return false;
+    }
     const cur = this.meta.weaponLevelByHeroSlot[slot];
     if (cur >= 5) return false;
     const cost = weaponUpgradeCrystalCost(cur);

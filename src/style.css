@@ -1187,6 +1187,17 @@ h1 {
   align-self: stretch;
 }
 
+.hero-slot--locked {
+  opacity: 0.88;
+}
+
+.hero-slot__locked-hint {
+  font-size: 0.78rem;
+  color: #9a9288;
+  line-height: 1.4;
+  margin: 0;
+}
+
 .hero-slot-label {
   font-size: 0.72rem;
   text-transform: uppercase;
@@ -7001,6 +7012,26 @@ body.enemy-inspect--dragging-body {
   }
 }
 
+.crystal-shop-locked-msg {
+  max-width: 28rem;
+  text-align: center;
+  line-height: 1.55;
+  color: #c8c0b4;
+  margin: 0.5rem 0 1rem;
+}
+
+.crystal-shop-weapon-lock {
+  grid-column: 1 / -1;
+  font-size: 0.88rem;
+  color: #a0988c;
+  line-height: 1.45;
+  margin: 0.35rem 0 0.5rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid rgba(201, 162, 39, 0.25);
+  background: rgba(0, 0, 0, 0.2);
+}
+
 .crystal-shop-crystals {
   position: absolute;
   top: 1.4rem;
@@ -8074,6 +8105,11 @@ body.enemy-inspect--dragging-body {
   text-shadow:
     0 0 12px rgba(232, 197, 71, 0.45),
     0 1px 0 rgba(120, 90, 20, 0.5);
+}
+
+.screen-forge__hint--locked {
+  max-width: min(560px, calc(100vw - 2rem));
+  margin-bottom: 1rem;
 }
 
 .forge-body {
@@ -9659,6 +9695,11 @@ select.forge-biome-sel option:disabled {
     box-shadow 0.22s ease,
     text-shadow 0.22s ease,
     transform 0.12s ease;
+}
+
+.main-menu-link:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
