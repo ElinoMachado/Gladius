@@ -85,6 +85,7 @@ const SPECIAL_MAX: Record<string, number> = {
   muralha_verdade: 3,
   manto_espectral: 5,
   olho_agucado: 6,
+  o_proibido: 3,
   guerra_total: 3,
   ira_dimensao: 2,
   carne_eterna: 3,
