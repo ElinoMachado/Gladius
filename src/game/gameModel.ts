@@ -2697,6 +2697,7 @@ export class GameModel {
     }
     this.turnStage = "main";
     this.playerTurnJustStarted = true;
+    this.syncAllAncestralMagePositions();
     this.emit();
   }
 
@@ -2842,6 +2843,7 @@ export class GameModel {
     }
     if (this.phase === "combat" && !this.duel) {
       this.reconcileGridInvocationsForHero(u);
+      this.syncAncestralMagePositionForHero(u);
     }
   }
 
@@ -3200,6 +3202,86 @@ export class GameModel {
     return out;
   }
 
+  /**
+   * Mago ancestral: só em bioma de combate (nunca hub/castelo). Com herói fora do hub,
+   * prefere vizinho livre no mesmo bioma; no hub, fica no bioma inicial (`heroHomeBiome`)
+   * no hex livre mais próximo do herói.
+   */
+  private findHexForAncestralMageNearHero(
+    hero: Unit,
+    excludeMageId: string | null,
+  ): { q: number; r: number } | null {
+    const homeBio = this.heroHomeBiome(hero);
+    if (homeBio === "hub") return null;
+
+    const heroCell = getCell(this.grid, hero.q, hero.r);
+    const heroBio = (heroCell?.biome ?? "hub") as BiomeId;
+    const targetBio = (heroBio === "hub" ? homeBio : heroBio) as BiomeId;
+    if (targetBio === "hub") return null;
+
+    const occ = new Set<string>();
+    for (const u of this.units) {
+      if (u.hp <= 0) continue;
+      if (excludeMageId && u.id === excludeMageId) continue;
+      occ.add(axialKey(u.q, u.r));
+    }
+
+    const isFreeInTarget = (q: number, r: number): boolean => {
+      const c = getCell(this.grid, q, r);
+      if (!c) return false;
+      if (c.biome !== targetBio) return false;
+      return !occ.has(axialKey(q, r));
+    };
+
+    if (heroBio !== "hub" && heroBio === targetBio) {
+      const neigh = hexNeighbors(hero.q, hero.r);
+      neigh.sort((a, b) => a.q - b.q || a.r - b.r);
+      for (const n of neigh) {
+        if (isFreeInTarget(n.q, n.r)) return { q: n.q, r: n.r };
+      }
+    }
+
+    let best: { q: number; r: number } | null = null;
+    let bestD = Infinity;
+    for (const c of this.grid.values()) {
+      if (c.biome !== targetBio) continue;
+      if (!isFreeInTarget(c.q, c.r)) continue;
+      const d = hexDistance({ q: hero.q, r: hero.r }, { q: c.q, r: c.r });
+      if (d < bestD) {
+        bestD = d;
+        best = { q: c.q, r: c.r };
+      }
+    }
+    return best;
+  }
+
+  private syncAncestralMagePositionForHero(hero: Unit): void {
+    if (this.phase !== "combat" || this.duel) return;
+    const op = Math.min(3, Math.max(0, hero.artifacts["o_proibido"] ?? 0));
+    if (op <= 0 || hero.hp <= 0) return;
+    const mage = this.units.find(
+      (u) =>
+        u.isAllySummon &&
+        u.summonKind === "ancestral_mage" &&
+        u.summonOwnerHeroId === hero.id &&
+        u.hp > 0,
+    );
+    if (!mage) return;
+    const dest = this.findHexForAncestralMageNearHero(hero, mage.id);
+    if (!dest) return;
+    if (dest.q === mage.q && dest.r === mage.r) return;
+    mage.q = dest.q;
+    mage.r = dest.r;
+  }
+
+  private syncAllAncestralMagePositions(): void {
+    if (this.phase !== "combat" || this.duel) return;
+    for (const h of this.getParty()) {
+      if (h.hp <= 0) continue;
+      this.syncAncestralMagePositionForHero(h);
+    }
+  }
+
   private countLivingGridSummons(
     hero: Unit,
     kind: "shadow" | "mega_golem" | "ancestral_mage",
@@ -3278,7 +3360,8 @@ export class GameModel {
     }
 
     const op = Math.min(3, Math.max(0, hero.artifacts["o_proibido"] ?? 0));
-    const needAncestral = op <= 0 ? 0 : 1 + extra;
+    /** Um mago por herói (sem cópias extra de `potencializar_invocacao`). */
+    const needAncestral = op <= 0 ? 0 : 1;
     if (op > 0) {
       for (const u of [...this.units]) {
         if (
@@ -3297,9 +3380,8 @@ export class GameModel {
       const haveA = this.countLivingGridSummons(hero, "ancestral_mage");
       const addA = needAncestral - haveA;
       if (addA > 0) {
-        const hexes = this.collectSpawnHexesNearHero(hero, addA);
-        for (let i = 0; i < addA && i < hexes.length; i++) {
-          const cell = hexes[i]!;
+        const cell = this.findHexForAncestralMageNearHero(hero, null);
+        if (cell) {
           this.units.push(
             createAncestralMageSummon(hero, cell.q, cell.r, op, 1, hero),
           );
@@ -4485,6 +4567,7 @@ export class GameModel {
     if (forgeSynergyTier(h.forgeLoadout, "rochoso") >= 3) {
       this.rochosoTauntHeroId = h.id;
     }
+    this.syncAncestralMagePositionForHero(h);
     this.log(`${h.name} move para (${toQ},${toR}).`);
     this.emit();
     return true;
@@ -5821,6 +5904,7 @@ export class GameModel {
       killer.q = jump.q;
       killer.r = jump.r;
     }
+    this.syncAncestralMagePositionForHero(killer);
 
     const movedOnMap =
       jump != null && (killer.q !== fromQ || killer.r !== fromR);
@@ -6801,6 +6885,7 @@ export class GameModel {
         playHeroRunAnim: true,
       };
     }
+    this.syncAncestralMagePositionForHero(hero);
     this.log(`${hero.name} foi arremessado para fora do bunker destruído!`);
     this.emit();
   }
