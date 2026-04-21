@@ -25,6 +25,7 @@ import { applyPartyBonusToUnit, computePartyBonus } from "./colorSynergy";
 import {
   metaPotencialCuraEscudoAdditivePoints,
   permPercent,
+  permXpPercentPoints,
 } from "./metaStore";
 
 let uid = 1;
@@ -150,7 +151,8 @@ export function createHeroUnit(
     u.gladiadorDuelHpGranted = 0;
   }
 
-  const xpBonus = metaPct(meta.permXp);
+  const xpPts = permXpPercentPoints(meta.permXp);
+  const xpBonus = xpPts / 100;
   if (xpBonus > 0) {
     u.artifacts["_meta_xp"] = Math.round(xpBonus * 100);
   }
@@ -482,6 +484,81 @@ export function createMegaGolemSummon(
     defesa: def,
     acertoCritico: owner.acertoCritico,
     danoCritico: owner.danoCritico,
+    penetracao: 0,
+    penetracaoEscudo: 0,
+    regenVida: 0,
+    regenMana: 0,
+    alcance: 1,
+    lifesteal: 0,
+    potencialCuraEscudo: 0,
+    sorte: 0,
+    poison: undefined,
+    hot: undefined,
+    bleed: undefined,
+    burn: undefined,
+    weaponLevel: 1,
+    weaponUltMeter: 0,
+  };
+}
+
+/** Mago ancestral (O proibido): meteoros em fase de invocações; voa; aura mov/alcance no bioma. */
+export function createAncestralMageSummon(
+  owner: Pick<Unit, "id" | "name" | "acertoCritico" | "danoCritico">,
+  q: number,
+  r: number,
+  stacks: number,
+  initialHpFrac: number,
+  skillCritSource?: Pick<Unit, "id" | "acertoCritico" | "danoCritico">,
+): Unit {
+  const critSrc = skillCritSource ?? owner;
+  const st = Math.min(3, Math.max(1, stacks)) as 1 | 2 | 3;
+  const hpTable = [500, 900, 1400] as const;
+  const defTable = [60, 120, 200] as const;
+  const movTable = [6, 8, 10] as const;
+  const meteorTable = [120, 250, 400] as const;
+  const maxHp = hpTable[st - 1]!;
+  const frac = Math.min(1, Math.max(0, initialHpFrac));
+  const hp = Math.max(1, Math.floor(maxHp * frac));
+  const meteorDmg = meteorTable[st - 1]!;
+  return {
+    id: nid("ally-ancestral-mage"),
+    name: `Mago ancestral (${owner.name})`,
+    isPlayer: false,
+    isAllySummon: true,
+    summonKind: "ancestral_mage",
+    summonOwnerHeroId: owner.id,
+    ancestralMageSkillSourceHeroId: critSrc.id,
+    ancestralMageTier: st,
+    q,
+    r,
+    flying: true,
+    immobileThisTurn: false,
+    shieldGGBlue: 0,
+    goldDrainReduction: 0,
+    ouro: 0,
+    ouroWave: 0,
+    level: 1,
+    xp: 0,
+    xpToNext: 999,
+    artifacts: {},
+    skillCd: {},
+    formaFinal: false,
+    pistoleiroBonusDanoWave: 0,
+    gladiadorKills: 0,
+    curandeiroDanoWave: 0,
+    duroPedraDefStacks: 0,
+    motorMorteNextBasicPct: 0,
+    displayColor: 0xf5f5ff,
+    enemyArchetypeId: "mago_vazio",
+    maxHp,
+    hp,
+    maxMana: 0,
+    mana: 0,
+    movimento: movTable[st - 1]!,
+    dano: meteorDmg,
+    defesa: defTable[st - 1]!,
+    acertoCritico: critSrc.acertoCritico,
+    danoCritico: critSrc.danoCritico,
     penetracao: 0,
     penetracaoEscudo: 0,
     regenVida: 0,

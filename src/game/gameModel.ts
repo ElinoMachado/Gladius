@@ -123,7 +123,12 @@ import {
 } from "./data/coliseums";
 import { COMBAT_BIOMES, BIOME_LABELS } from "./data/biomes";
 import { goldDrainPerTurn } from "./data/shops";
-import { loadMeta, permPercent, saveMeta } from "./metaStore";
+import {
+  loadMeta,
+  permPercent,
+  permXpPercentPoints,
+  saveMeta,
+} from "./metaStore";
 import {
   clearRunSessionCheckpoint,
   runPhaseAllowsRunSessionPersistence,
@@ -6968,7 +6973,7 @@ export class GameModel {
     return Math.floor(
       25 * trevo +
         shopXp +
-        permPercent(this.meta.permXp) +
+        permXpPercentPoints(this.meta.permXp) +
         this.partyXpBonusPct +
         pantanoHelmoXpBonusPercent(u.forgeLoadout),
     );
@@ -6977,7 +6982,7 @@ export class GameModel {
   private grantXp(u: Unit, base: number): void {
     const trevo = u.artifacts["trevo"] ?? 0;
     const shopXp = u.artifacts["_xp_shop"] ?? 0;
-    const metaXpPct = permPercent(this.meta.permXp);
+    const metaXpPct = permXpPercentPoints(this.meta.permXp);
     let mult =
       1 +
       0.25 * trevo +

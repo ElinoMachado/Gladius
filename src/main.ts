@@ -43,6 +43,7 @@ import {
   CRYSTAL_SHOP_SORTE_COST,
   CRYSTAL_SHOP_SORTE_MAX,
   CRYSTAL_SHOP_SORTE_PER_BUY,
+  META_PERM_XP_PERCENT_PER_LEVEL,
   META_TRACK_MAX_LEVEL,
   type GamePhase,
   type HeroClassId,
@@ -95,7 +96,7 @@ import { mountCrystalSelect } from "./ui/crystalSelect";
 import { biomeCrestWrap } from "./ui/biomeCrests";
 import { axialKey, hexDistance } from "./game/hex";
 import {
-  permPercent,
+  permXpPercentPoints,
   nextMetaCost,
   nextInitialCardCost,
   clearAllLocalProgressForFreshStart,
@@ -3105,7 +3106,9 @@ function mountCrystalShopGrid(grid: HTMLElement): void {
     const lineText =
       key === "permHealShield"
         ? `${label}: +10% · ${cur}/${META_TRACK_MAX_LEVEL}${cost != null ? "" : " — máx."}`
-        : `${label}: +20% · ${cur}/${META_TRACK_MAX_LEVEL}${cost != null ? "" : " — máx."}`;
+        : key === "permXp"
+          ? `${label}: +${META_PERM_XP_PERCENT_PER_LEVEL}% · ${cur}/${META_TRACK_MAX_LEVEL}${cost != null ? "" : " — máx."}`
+          : `${label}: +20% · ${cur}/${META_TRACK_MAX_LEVEL}${cost != null ? "" : " — máx."}`;
     const div = el(`<div class="shop-item crystal-shop-item crystal-shop-item--row"><span class="crystal-shop-item__text">${lineText}</span><button type="button" class="btn crystal-shop-buy-btn" data-meta="${key}" ${!canBuy ? "disabled" : ""} aria-label="${escapeHtml(ariaBuy)}">${btnLabel}</button></div>`);
     grid.appendChild(div);
     div.querySelector("button")!.addEventListener("click", () => {
@@ -6796,7 +6799,7 @@ function heroStatCells(h: Unit, m: GameModel): HeroStatCell[] {
       const xpBase = Math.floor(
         25 * tre0 +
           shop0 +
-          permPercent(m.meta.permXp) +
+          permXpPercentPoints(m.meta.permXp) +
           m.partyXpBonusPct +
           pantanoHelmoXpBonusPercent(h.forgeLoadout),
       );

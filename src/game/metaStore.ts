@@ -11,6 +11,7 @@ import {
   CRYSTAL_SHOP_EXTRA_BASIC_MAX,
   CRYSTAL_SHOP_SORTE_MAX,
   INITIAL_CARD_COSTS,
+  META_PERM_XP_PERCENT_PER_LEVEL,
   META_TRACK_MAX_LEVEL,
 } from "./types";
 import { COMBAT_BIOMES } from "./data/biomes";
@@ -312,6 +313,8 @@ export function clearAllLocalProgressForFreshStart(): void {
     "gladiadores-music-volume-percent",
     "gladiadores-sfx-volume-percent",
     "gladiadores-skip-enemy-move",
+    "gladiadores-skip-combat-animations",
+    "gladiadores-skip-allied-combat-animations",
     "gladiadores-combat-log-visible",
     "gladiadores-enemy-inspect-pos",
   ];
@@ -325,6 +328,12 @@ export function clearAllLocalProgressForFreshStart(): void {
 export function permPercent(level: number): number {
   const L = Math.max(0, Math.min(META_TRACK_MAX_LEVEL, Math.floor(level)));
   return 20 * L;
+}
+
+/** Pontos percentuais de bônus de XP (trilho `permXp` na loja de cristais). */
+export function permXpPercentPoints(level: number): number {
+  const L = Math.max(0, Math.min(META_TRACK_MAX_LEVEL, Math.floor(level)));
+  return META_PERM_XP_PERCENT_PER_LEVEL * L;
 }
 
 /**

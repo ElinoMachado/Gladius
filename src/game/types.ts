@@ -160,9 +160,13 @@ export interface Unit extends CoreStats {
   flamingSwordPos?: { q: number; r: number };
   /** Invocação aliada (sombra, Mega Golem): não é inimigo nem herói da party. */
   isAllySummon?: boolean;
-  summonKind?: "shadow" | "mega_golem";
+  summonKind?: "shadow" | "mega_golem" | "ancestral_mage";
+  /** Mago ancestral (`o_proibido`): 1–3 conforme acúmulos do artefato. */
+  ancestralMageTier?: 1 | 2 | 3;
   /** Id do herói dono (party). */
   summonOwnerHeroId?: string;
+  /** Mago ancestral: herói cuja build conta para meteoros (maior `o_proibido` na party). */
+  ancestralMageSkillSourceHeroId?: string;
   /**
    * **Instâncias de dano** (DoT): veneno, queimadura, sangramento — filas de ticks de dano;
    * Amplicador de onda / Dobra temporal alteram quantas entram ou saem por turno.
@@ -279,12 +283,13 @@ export interface WaveConfig {
 
 export interface MetaProgress {
   crystals: number;
-  /** 0–10 por trilho: +20% por nível em stats que usam `permPercent` (dano, vida, defesa, XP, ouro). Cura/escudo usa soma direta (+10/nível). */
+  /** 0–10 por trilho: +20% por nível em stats que usam `permPercent` (dano, vida, defesa, ouro). Cura/escudo usa soma direta (+10/nível). XP: ver `META_PERM_XP_PERCENT_PER_LEVEL`. */
   permDamage: number;
   permHp: number;
   permDef: number;
   /** 0–10: +10 pontos percentuais de potencial cura/escudo por nível (soma direta, ver `metaPotencialCuraEscudoAdditivePoints`). */
   permHealShield: number;
+  /** 0–10: bônus de XP em combate; `META_PERM_XP_PERCENT_PER_LEVEL` pontos percentuais por nível. */
   permXp: number;
   permGold: number;
   /** 0–10: contribuição ao drop de cristal (ver `crystalDropChanceForKill`). */
@@ -313,6 +318,9 @@ export interface MetaProgress {
 
 /** Nível máximo por trilho de meta na loja de cristais (dano, vida, etc.). */
 export const META_TRACK_MAX_LEVEL = 10;
+
+/** Pontos percentuais de XP por nível do trilho `permXp` (loja de cristais). */
+export const META_PERM_XP_PERCENT_PER_LEVEL = 5;
 
 export const CRYSTAL_SHOP_EXTRA_BASIC_COST = 25;
 export const CRYSTAL_SHOP_EXTRA_BASIC_MAX = 2;
