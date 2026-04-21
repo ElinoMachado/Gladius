@@ -3659,7 +3659,7 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     )
     .join("");
   const panel = el(`<aside class="combat-sandbox-panel" id="combat-sandbox-panel" aria-label="Ferramentas de teste sandbox">
-    <div class="combat-sandbox-panel__head combat-sandbox-panel__drag-handle" title="Arrastar · tecla A mostrar/ocultar">Sandbox</div>
+    <div class="combat-sandbox-panel__head combat-sandbox-panel__drag-handle" title="Arrastar · F ou A mostrar/ocultar">Sandbox</div>
     <p class="combat-sandbox-panel__pill">Ouro/cristais/essências amplos</p>
     <label class="combat-sandbox-panel__toggle" title="Persiste entre sessões (localStorage)">
       <input type="checkbox" id="combat-sandbox-no-cd-ult" />
@@ -3798,7 +3798,15 @@ function mountCombatSandboxDevtools(signal: AbortSignal): void {
     "keydown",
     (ev) => {
       if (ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey) return;
-      if (ev.key !== "a" && ev.key !== "A") return;
+      const sk = ev.key;
+      if (
+        sk !== "a" &&
+        sk !== "A" &&
+        sk !== "f" &&
+        sk !== "F"
+      ) {
+        return;
+      }
       const t = ev.target as HTMLElement | null;
       if (
         t &&
@@ -7324,7 +7332,7 @@ function showCombatHUD(): void {
   removeEquipmentModal();
   uiRoot.innerHTML = "";
   const sandboxHudHtml = model.devSandboxMode
-    ? `<div class="hud-block hud-sandbox-pill" role="note">Sandbox — painel ao centro (arrastar pelo título) · <kbd class="hud-sandbox-kbd">A</kbd> mostrar/ocultar · artefatos esq./dir.</div>`
+    ? `<div class="hud-block hud-sandbox-pill" role="note">Sandbox — painel ao centro (arrastar pelo título) · <kbd class="hud-sandbox-kbd">F</kbd> ou <kbd class="hud-sandbox-kbd">A</kbd> mostrar/ocultar · artefatos esq./dir.</div>`
     : "";
   const hud = el(`
     <div class="hud">
