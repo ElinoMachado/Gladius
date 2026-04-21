@@ -29,7 +29,10 @@ import {
   type HexCell,
 } from "./grid";
 import { findPath, reachableHexes } from "./pathfinding";
-import { getSkipCombatAnimations } from "./combatPrefs";
+import {
+  getSkipAlliedCombatAnimations,
+  getSkipEnemyCombatAnimations,
+} from "./combatPrefs";
 import {
   enemyMeleeAttackWindupMs,
   heroBasicMagicDamageDelayMs,
@@ -66,6 +69,7 @@ import {
 import { artifactAffectsInvocationSync } from "./invocationArtifacts";
 import {
   createAllyShadowSummon,
+  createAncestralMageSummon,
   createEnemyUnit,
   createHeroUnit,
   createMegaGolemSummon,
@@ -270,7 +274,7 @@ export type CombatVfxHint =
       summonId: string;
       targetId: string;
       /** Mesmo papel que a espada flamejante: escolhe o traço no render. */
-      summonKind?: "shadow" | "mega_golem";
+      summonKind?: "shadow" | "mega_golem" | "ancestral_mage";
     }
   | {
       kind: "weapon_ult_furacao";
@@ -1638,7 +1642,7 @@ export class GameModel {
     if (this.anelDragaoStacks(h) <= 0) return;
     const rawPer = this.anelDragaoDamagePerOrb(h);
     if (rawPer <= 0) return;
-    const skipFx = getSkipCombatAnimations();
+    const skipFx = getSkipAlliedCombatAnimations();
     const stagger = skipFx ? 0 : ANEL_DRAGAO_ORB_STAGGER_MS;
     for (let i = 0; i < n; i++) {
       const delay = i * stagger;
@@ -2494,21 +2498,22 @@ export class GameModel {
     }
     const hereBio = biomeAt(this.grid, e.q, e.r) as BiomeId;
     if (hereBio !== "hub") {
-      const golems: Unit[] = [];
+      const summonPriority: Unit[] = [];
       for (const u of this.units) {
         if (
           u.hp > 0 &&
           u.isAllySummon &&
-          u.summonKind === "mega_golem" &&
+          (u.summonKind === "mega_golem" ||
+            u.summonKind === "ancestral_mage") &&
           (biomeAt(this.grid, u.q, u.r) as BiomeId) === hereBio
         ) {
           const owner = party.find((h) => h.id === u.summonOwnerHeroId);
-          if (owner) golems.push(u);
+          if (owner) summonPriority.push(u);
         }
       }
-      if (golems.length > 0) {
-        golems.sort((a, b) => a.hp - b.hp || a.defesa - b.defesa);
-        return golems[0]!;
+      if (summonPriority.length > 0) {
+        summonPriority.sort((a, b) => a.hp - b.hp || a.defesa - b.defesa);
+        return summonPriority[0]!;
       }
     }
     const bio =
@@ -2978,7 +2983,7 @@ export class GameModel {
       const cells = this.buildFlamingSwordMoveCells(hero, pos, best);
       hero.flamingSwordPos = { q: best.q, r: best.r };
 
-      const skipAnim = getSkipCombatAnimations();
+      const skipAnim = getSkipAlliedCombatAnimations();
       const moveSegs = Math.max(0, cells.length - 1);
       const segMs = UNIT_MOVE_SEGMENT_MS;
       if (moveSegs > 0 && !skipAnim) {
@@ -3053,7 +3058,7 @@ export class GameModel {
           hero.lifesteal = prev.lifesteal;
         }
         this.emit();
-        const gap = getSkipCombatAnimations()
+        const gap = getSkipAlliedCombatAnimations()
           ? 0
           : FLAMING_SWORD_STRIKE_GAP_MS;
         this.queueCombat(gap, () => runAttack(attackIndex + 1));
@@ -3078,7 +3083,16 @@ export class GameModel {
     const hasGolems = this.units.some(
       (u) => u.isAllySummon && u.summonKind === "mega_golem" && u.hp > 0,
     );
-    if (swordOwners.length === 0 && !hasShadows && !hasGolems) {
+    const hasAncestralMages = this.units.some(
+      (u) =>
+        u.isAllySummon && u.summonKind === "ancestral_mage" && u.hp > 0,
+    );
+    if (
+      swordOwners.length === 0 &&
+      !hasShadows &&
+      !hasGolems &&
+      !hasAncestralMages
+    ) {
       onComplete();
       return;
     }
@@ -3100,7 +3114,9 @@ export class GameModel {
       onComplete();
     };
     const afterGolems = (): void => {
-      this.runMegaGolemSummonChain(afterAll);
+      this.runMegaGolemSummonChain(() => {
+        this.runAncestralMageMeteorChain(afterAll);
+      });
     };
     const afterShadows = (): void => {
       this.runResidualShadowSummonChain(afterGolems);
@@ -3186,7 +3202,7 @@ export class GameModel {
 
   private countLivingGridSummons(
     hero: Unit,
-    kind: "shadow" | "mega_golem",
+    kind: "shadow" | "mega_golem" | "ancestral_mage",
   ): number {
     return this.units.filter(
       (u) =>
@@ -3199,7 +3215,7 @@ export class GameModel {
 
   private pruneExcessGridSummonsOfKind(
     hero: Unit,
-    kind: "shadow" | "mega_golem",
+    kind: "shadow" | "mega_golem" | "ancestral_mage",
     maxKeep: number,
   ): void {
     const list = this.units.filter(
@@ -3216,7 +3232,7 @@ export class GameModel {
   }
 
   /**
-   * Garante que o tabuleiro reflete `imagem_residual` / `martelo_juiz` / `potencializar_invocacao` deste herói.
+   * Garante que o tabuleiro reflete `imagem_residual` / `martelo_juiz` / `o_proibido` / `potencializar_invocacao` deste herói.
    * Usado no início da wave e ao ganhar acúmulos no combate.
    */
   private reconcileGridInvocationsForHero(hero: Unit): void {
@@ -3256,6 +3272,36 @@ export class GameModel {
           const h = hexes[i]!;
           this.units.push(
             createMegaGolemSummon(hero, h.q, h.r, mj, potMult),
+          );
+        }
+      }
+    }
+
+    const op = Math.min(3, Math.max(0, hero.artifacts["o_proibido"] ?? 0));
+    const needAncestral = op <= 0 ? 0 : 1 + extra;
+    if (op > 0) {
+      for (const u of [...this.units]) {
+        if (
+          u.isAllySummon &&
+          u.summonKind === "ancestral_mage" &&
+          u.summonOwnerHeroId === hero.id &&
+          u.hp > 0 &&
+          (u.ancestralMageTier ?? 1) !== op
+        ) {
+          this.removeAllySummonUnit(u.id);
+        }
+      }
+    }
+    this.pruneExcessGridSummonsOfKind(hero, "ancestral_mage", needAncestral);
+    if (op > 0) {
+      const haveA = this.countLivingGridSummons(hero, "ancestral_mage");
+      const addA = needAncestral - haveA;
+      if (addA > 0) {
+        const hexes = this.collectSpawnHexesNearHero(hero, addA);
+        for (let i = 0; i < addA && i < hexes.length; i++) {
+          const cell = hexes[i]!;
+          this.units.push(
+            createAncestralMageSummon(hero, cell.q, cell.r, op, 1, hero),
           );
         }
       }
@@ -3348,7 +3394,7 @@ export class GameModel {
     sh.q = best.q;
     sh.r = best.r;
 
-    const skipAnim = getSkipCombatAnimations();
+    const skipAnim = getSkipAlliedCombatAnimations();
     const moveSegs = Math.max(0, cells.length - 1);
     const segMs = UNIT_MOVE_SEGMENT_MS;
     if (moveSegs > 0 && !skipAnim) {
@@ -3430,7 +3476,7 @@ export class GameModel {
         this.removeAllySummonUnit(sh.id);
         this.emit();
         this.queueCombat(
-          getSkipCombatAnimations() ? 0 : FLAMING_SWORD_STRIKE_GAP_MS,
+          getSkipAlliedCombatAnimations() ? 0 : FLAMING_SWORD_STRIKE_GAP_MS,
           () => step(),
         );
       });
@@ -3467,7 +3513,7 @@ export class GameModel {
     golem.q = best.q;
     golem.r = best.r;
 
-    const skipAnim = getSkipCombatAnimations();
+    const skipAnim = getSkipAlliedCombatAnimations();
     const moveSegs = Math.max(0, cells.length - 1);
     const segMs = UNIT_MOVE_SEGMENT_MS;
     if (moveSegs > 0 && !skipAnim) {
@@ -3507,7 +3553,7 @@ export class GameModel {
         return;
       }
       let i = 0;
-      const gap = getSkipCombatAnimations()
+      const gap = getSkipAlliedCombatAnimations()
         ? 0
         : FLAMING_SWORD_STRIKE_GAP_MS;
       const hitNext = (): void => {
@@ -3584,12 +3630,124 @@ export class GameModel {
       this.scheduleMegaGolemTurn(g, owner, () => {
         actedThisSummonPhase.add(g.id);
         this.queueCombat(
-          getSkipCombatAnimations() ? 0 : FLAMING_SWORD_STRIKE_GAP_MS,
+          getSkipAlliedCombatAnimations() ? 0 : FLAMING_SWORD_STRIKE_GAP_MS,
           () => step(),
         );
       });
     };
     step();
+  }
+
+  /**
+   * Meteoros do Mago ancestral (O proibido): até 5 golpes por mago, inimigos no mesmo bioma
+   * (mais próximos primeiro), repartidos em round-robin.
+   */
+  private runAncestralMageMeteorChain(onDone: () => void): void {
+    const mageIds = this.units
+      .filter(
+        (u) =>
+          u.isAllySummon &&
+          u.summonKind === "ancestral_mage" &&
+          u.hp > 0,
+      )
+      .map((u) => u.id);
+    if (mageIds.length === 0) {
+      onDone();
+      return;
+    }
+    let mi = 0;
+    const gap = getSkipAlliedCombatAnimations()
+      ? 0
+      : FLAMING_SWORD_STRIKE_GAP_MS;
+    const stepMage = (): void => {
+      if (this.phase !== "combat" || this.duel) {
+        onDone();
+        return;
+      }
+      if (mi >= mageIds.length) {
+        onDone();
+        return;
+      }
+      const mageId = mageIds[mi]!;
+      mi++;
+      const mage = this.units.find((u) => u.id === mageId);
+      if (!mage || mage.hp <= 0 || mage.summonKind !== "ancestral_mage") {
+        this.queueCombat(0, () => stepMage());
+        return;
+      }
+      const owner = this.units.find((h) => h.id === mage.summonOwnerHeroId);
+      if (!owner || !owner.isPlayer || owner.hp <= 0) {
+        this.removeAllySummonUnit(mage.id);
+        this.emit();
+        this.queueCombat(0, () => stepMage());
+        return;
+      }
+      const skillSrcId = mage.ancestralMageSkillSourceHeroId ?? owner.id;
+      const skillSrc = this.units.find((h) => h.id === skillSrcId) ?? owner;
+      const mageBio = biomeAt(this.grid, mage.q, mage.r) as BiomeId;
+      const inBiome = this.enemies()
+        .filter((e) => {
+          if (e.hp <= 0) return false;
+          return (biomeAt(this.grid, e.q, e.r) as BiomeId) === mageBio;
+        })
+        .sort(
+          (a, b) =>
+            hexDistance({ q: mage.q, r: mage.r }, { q: a.q, r: a.r }) -
+            hexDistance({ q: mage.q, r: mage.r }, { q: b.q, r: b.r }),
+        );
+      const top = inBiome.slice(0, 5);
+      if (top.length === 0) {
+        this.queueCombat(0, () => stepMage());
+        return;
+      }
+      this.currentSummonOwnerId = owner.id;
+      this.currentSummonActorId = mage.id;
+      this.emit();
+      const meteorDmg = mage.dano;
+      const total = 5;
+      let hi = 0;
+      const hitNext = (): void => {
+        if (this.phase !== "combat" || this.duel) {
+          this.queueCombat(gap, () => stepMage());
+          return;
+        }
+        if (hi >= total) {
+          this.queueCombat(gap, () => stepMage());
+          return;
+        }
+        const mg = this.units.find((u) => u.id === mage.id);
+        if (!mg || mg.hp <= 0) {
+          this.queueCombat(gap, () => stepMage());
+          return;
+        }
+        const t0 = top[hi % top.length]!;
+        hi++;
+        const tg = this.units.find((u) => u.id === t0.id);
+        if (!tg || tg.hp <= 0 || tg.isPlayer) {
+          this.queueCombat(0, hitNext);
+          return;
+        }
+        this.pendingCombatVfxQueue.push({
+          kind: "ally_summon_strike",
+          summonId: mg.id,
+          targetId: tg.id,
+          summonKind: "ancestral_mage",
+        });
+        this.dealSummonSkillDamage(
+          skillSrc,
+          { q: mg.q, r: mg.r },
+          meteorDmg,
+          tg,
+        );
+        if (this.phase === "combat") {
+          this.tryResolveWaveClearAfterCombatResume();
+        }
+        this.emit();
+        this.queueCombat(gap, hitNext);
+      };
+      hitNext();
+    };
+    stepMage();
   }
 
   advanceHeroOrRound(): void {
@@ -4290,7 +4448,7 @@ export class GameModel {
       blocked,
       panSwamp,
     );
-    if (path && path.length > 1 && !getSkipCombatAnimations()) {
+    if (path && path.length > 1 && !getSkipAlliedCombatAnimations()) {
       this.pendingMoveAnim = {
         kind: "unit",
         unitId: h.id,
@@ -4470,7 +4628,7 @@ export class GameModel {
       this.emit();
     };
 
-    const skipFx = getSkipCombatAnimations();
+    const skipFx = getSkipAlliedCombatAnimations();
 
     if (h.heroClass === "pistoleiro") {
       const dmgDelay = skipFx ? 0 : heroBasicShootDamageDelayMs();
@@ -5640,7 +5798,7 @@ export class GameModel {
     const inBunker = bkHere && bkHere.occupantId === killer.id;
     if (inBunker) {
       const bonusPct = 10 * motor;
-      const delayBeforeStrike = getSkipCombatAnimations()
+      const delayBeforeStrike = getSkipAlliedCombatAnimations()
         ? 0
         : GOLPE_RELAMPAGO_WINDUP_MS;
       this.pendingCombatVfxQueue.push({
@@ -5676,7 +5834,7 @@ export class GameModel {
     if (distToTarget > alc) {
       killer.motorMorteNextBasicPct = bonusPct;
       if (movedOnMap) {
-        if (!getSkipCombatAnimations()) {
+        if (!getSkipAlliedCombatAnimations()) {
           this.pendingMoveAnim = {
             kind: "unit",
             unitId: killer.id,
@@ -5701,11 +5859,11 @@ export class GameModel {
       return;
     }
 
-    let delayBeforeStrike = getSkipCombatAnimations()
+    let delayBeforeStrike = getSkipAlliedCombatAnimations()
       ? 0
       : GOLPE_RELAMPAGO_WINDUP_MS;
     if (movedOnMap) {
-      if (!getSkipCombatAnimations()) {
+      if (!getSkipAlliedCombatAnimations()) {
         this.pendingMoveAnim = {
           kind: "unit",
           unitId: killer.id,
@@ -5783,7 +5941,7 @@ export class GameModel {
       this.emit();
     };
 
-    const skipFx = getSkipCombatAnimations();
+    const skipFx = getSkipAlliedCombatAnimations();
     if (att.heroClass === "pistoleiro") {
       const dly = skipFx ? 0 : heroBasicShootDamageDelayMs();
       const fl = skipFx ? BASIC_PISTOL_FLIGHT_MS : dly;
@@ -6631,7 +6789,7 @@ export class GameModel {
     const fromR = hero.r;
     hero.q = dest.q;
     hero.r = dest.r;
-    if (!getSkipCombatAnimations()) {
+    if (!getSkipAlliedCombatAnimations()) {
       this.pendingMoveAnim = {
         kind: "unit",
         unitId: hero.id,
@@ -6758,8 +6916,8 @@ export class GameModel {
     const moveSegs = Math.max(0, cells.length - 1);
     const mult = this.enemyPhaseTimingMult;
     const segMs = UNIT_MOVE_SEGMENT_MS * mult;
-    const skipAnim = getSkipCombatAnimations();
-    if (cells.length > 1 && !skipAnim) {
+    const skipEnemyAnim = getSkipEnemyCombatAnimations();
+    if (cells.length > 1 && !skipEnemyAnim) {
       this.pendingMoveAnim = {
         kind: "unit",
         unitId: e.id,
@@ -6767,10 +6925,10 @@ export class GameModel {
         segmentMs: segMs,
       };
     }
-    const moveMs = skipAnim ? 0 : moveSegs * segMs;
-    const atkWind = skipAnim ? 0 : enemyMeleeAttackWindupMs();
+    const moveMs = skipEnemyAnim ? 0 : moveSegs * segMs;
+    const atkWind = skipEnemyAnim ? 0 : enemyMeleeAttackWindupMs();
     const hitReact =
-      skipAnim || !tgt.isPlayer ? 0 : heroHitReactAnimMs();
+      skipEnemyAnim || !tgt.isPlayer ? 0 : heroHitReactAnimMs();
     const enemyId = e.id;
     const targetId = tgt.id;
     this.queueCombat(moveMs + atkWind, () => {

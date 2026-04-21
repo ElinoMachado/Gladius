@@ -222,8 +222,10 @@ import {
 import { setArenaCombatMusicFromWave, stopArenaAmbient } from "./audio/arenaAmbient";
 import { ensureMenuThemePlaying, pauseMenuTheme } from "./audio/menuAmbient";
 import {
-  getSkipCombatAnimations,
-  setSkipCombatAnimations,
+  getSkipAlliedCombatAnimations,
+  getSkipEnemyCombatAnimations,
+  setSkipAlliedCombatAnimations,
+  setSkipEnemyCombatAnimations,
 } from "./game/combatPrefs";
 import {
   getSandboxNoCdUltReady,
@@ -509,7 +511,7 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
         style: h.style,
         durationSec: flightMs / 1000,
       });
-      if (!getSkipCombatAnimations()) {
+      if (!getSkipAlliedCombatAnimations()) {
         if (h.style === "bullet") {
           view.playHeroCombatClip(h.fromId, [
             heroAttackClipName("pistoleiro"),
@@ -532,7 +534,7 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
       break;
     }
     case "hero_basic_melee":
-      if (!getSkipCombatAnimations()) {
+      if (!getSkipAlliedCombatAnimations()) {
         view.playHeroCombatClip(h.heroId, [
           heroAttackClipName("gladiador"),
           "box01",
@@ -591,7 +593,7 @@ function applyCombatVfxHint(h: CombatVfxHint): void {
       if (h.archetypeId === "escravo") playEscravoChainSlash();
       else playSwordHit();
       view.triggerMeleeSlashBetween(h.attackerId, h.targetId);
-      if (!getSkipCombatAnimations()) {
+      if (!getSkipEnemyCombatAnimations()) {
         view.playHeroHitReact(h.targetId);
       }
       break;
@@ -7368,10 +7370,16 @@ function showCombatHUD(): void {
         <div class="combat-above-rarity combat-rarity-hint" id="combat-rarity-hint" aria-live="polite"></div>
       </div>
       <div class="combat-above-bar-right">
-        <label class="combat-skip-enemy-label" for="chk-skip-enemy-move">
-          <input type="checkbox" id="chk-skip-enemy-move" />
-          <span>Pular animações</span>
-        </label>
+        <div class="combat-skip-toggles" role="group" aria-label="Animações de combate">
+          <label class="combat-skip-toggle-label" for="chk-skip-enemy-anim">
+            <input type="checkbox" id="chk-skip-enemy-anim" />
+            <span>Pular animações inimigas</span>
+          </label>
+          <label class="combat-skip-toggle-label" for="chk-skip-allied-anim">
+            <input type="checkbox" id="chk-skip-allied-anim" />
+            <span>Pular animações aliadas</span>
+          </label>
+        </div>
         <div class="combat-above-bar-right-btns">
           <button type="button" class="btn btn-combat-above combat-btn--hidden" id="btn-cancel-sel">Cancelar seleção</button>
           <button type="button" class="btn btn-combat-above" id="btn-end">Encerrar turno</button>
@@ -7995,11 +8003,18 @@ function showCombatHUD(): void {
         heroSplashDataUrl(own.heroClass),
       );
       const isGolem = su.summonKind === "mega_golem";
+      const isAncestral = su.summonKind === "ancestral_mage";
       const disp = isGolem
         ? `Mega golem (${own.name})`
-        : `Sombra (${own.name})`;
-      const badge = isGolem ? "Gol" : "Som";
-      const badgeAria = isGolem ? "Mega golem" : "Sombra";
+        : isAncestral
+          ? `Mago ancestral (${own.name})`
+          : `Sombra (${own.name})`;
+      const badge = isGolem ? "Gol" : isAncestral ? "Mag" : "Som";
+      const badgeAria = isGolem
+        ? "Mega golem"
+        : isAncestral
+          ? "Mago ancestral"
+          : "Sombra";
       const uid = su.id;
       turnEntries.push({
         unitId: uid,
@@ -8820,12 +8835,21 @@ function showCombatHUD(): void {
   }
 
   const chkSkipEnemy = combatAboveBar.querySelector(
-    "#chk-skip-enemy-move",
+    "#chk-skip-enemy-anim",
   ) as HTMLInputElement | null;
   if (chkSkipEnemy) {
-    chkSkipEnemy.checked = getSkipCombatAnimations();
+    chkSkipEnemy.checked = getSkipEnemyCombatAnimations();
     chkSkipEnemy.addEventListener("change", () => {
-      setSkipCombatAnimations(chkSkipEnemy.checked);
+      setSkipEnemyCombatAnimations(chkSkipEnemy.checked);
+    });
+  }
+  const chkSkipAllied = combatAboveBar.querySelector(
+    "#chk-skip-allied-anim",
+  ) as HTMLInputElement | null;
+  if (chkSkipAllied) {
+    chkSkipAllied.checked = getSkipAlliedCombatAnimations();
+    chkSkipAllied.addEventListener("change", () => {
+      setSkipAlliedCombatAnimations(chkSkipAllied.checked);
     });
   }
   combatAboveBar.querySelector("#btn-cancel-sel")!.addEventListener("click", () => {

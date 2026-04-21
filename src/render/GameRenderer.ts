@@ -1147,7 +1147,7 @@ export class GameRenderer {
   triggerGridSummonSlash(
     summonId: string,
     targetId: string,
-    summonKind: "shadow" | "mega_golem",
+    summonKind: "shadow" | "mega_golem" | "ancestral_mage",
   ): void {
     const a = this.unitMeshes.get(summonId);
     const b = this.unitMeshes.get(targetId);
@@ -1163,21 +1163,23 @@ export class GameRenderer {
     const midZ = (az + bz) * 0.5;
     const py = this.playSurfaceYOffset();
     const isGolem = summonKind === "mega_golem";
-    const depth = isGolem ? 0.52 : 0.44;
-    const thick = isGolem ? 0.1 : 0.085;
-    const color = isGolem ? 0xff4400 : 0xaa66ff;
+    const isAncestral = summonKind === "ancestral_mage";
+    const depth = isGolem ? 0.52 : isAncestral ? 0.48 : 0.44;
+    const thick = isGolem ? 0.1 : isAncestral ? 0.09 : 0.085;
+    const color = isGolem ? 0xff4400 : isAncestral ? 0xe8f4ff : 0xaa66ff;
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(Math.min(2.8, len * 0.92), thick, depth),
       new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: isGolem ? 0.9 : 0.88,
+        opacity: isGolem ? 0.9 : isAncestral ? 0.88 : 0.88,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
       }),
     );
-    mesh.position.set(midX, py + (isGolem ? 0.78 : 0.76), midZ);
-    mesh.lookAt(bx, py + (isGolem ? 0.78 : 0.76), bz);
+    const pySlash = isGolem ? 0.78 : isAncestral ? 0.92 : 0.76;
+    mesh.position.set(midX, py + pySlash, midZ);
+    mesh.lookAt(bx, py + pySlash, bz);
     this.arenaRoot.add(mesh);
     this.meleeSlashFx.push({ mesh, until: performance.now() + 168 });
   }
@@ -2838,7 +2840,9 @@ export class GameRenderer {
           ? 1.22
           : u.isAllySummon && u.summonKind === "shadow"
             ? 0.9
-            : 1;
+            : u.isAllySummon && u.summonKind === "ancestral_mage"
+              ? 1.05
+              : 1;
       const unitSc =
         u.id.startsWith("layout-")
           ? furyScale * layoutSc
