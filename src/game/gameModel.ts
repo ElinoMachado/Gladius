@@ -6963,6 +6963,24 @@ export class GameModel {
   }
 
   /**
+   * Terrestres não golpeiam alvos voadores, exceto Mago ancestral (O proibido), que conta
+   * como “no hex” para alcance corpo a corpo.
+   */
+  private enemyGroundCanMeleeFlyingTarget(
+    enemy: Unit,
+    target: Unit,
+    bypassBunkerOccupant: boolean,
+  ): boolean {
+    if (!target.flying || enemy.flying) return true;
+    if (bypassBunkerOccupant) return true;
+    return (
+      !!target.isAllySummon &&
+      target.summonKind === "ancestral_mage" &&
+      target.hp > 0
+    );
+  }
+
+  /**
    * Move o inimigo até ter alcance (se precisar) e agenda ataque + vulcânico
    * só após a animação de movimento no canvas.
    * @returns ms até o fim do movimento (0 se não andou).
@@ -6980,7 +6998,7 @@ export class GameModel {
       );
       const eAlcNow = this.effectiveAlcanceForEnemy(e);
       if (
-        !(tgt.flying && !e.flying && !bypassFly) &&
+        this.enemyGroundCanMeleeFlyingTarget(e, tgt, bypassFly) &&
         distNow >= 1 &&
         distNow <= eAlcNow
       ) {
@@ -7029,7 +7047,7 @@ export class GameModel {
         { q: ex.q, r: ex.r },
         { q: tgx.q, r: tgx.r },
       );
-      if (tgx.flying && !ex.flying && !bypassFly) {
+      if (!this.enemyGroundCanMeleeFlyingTarget(ex, tgx, bypassFly)) {
         this.applyVolcanicAtEndOfTurn(ex);
         this.emit();
         return;
